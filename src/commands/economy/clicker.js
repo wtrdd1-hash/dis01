@@ -24,7 +24,8 @@ module.exports = {
 
     const clickerLevel = userData.clicker_level || 1;
     const autoLevel = userData.auto_miner_level || 0;
-    const power = clickerLevel * 100;
+    const power = clickerLevel * 10;
+    const upgradeCost = clickerLevel * 4500;
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -34,7 +35,7 @@ module.exports = {
         .setEmoji('💎'),
       new ButtonBuilder()
         .setCustomId(`click_upgrade_${userId}`)
-        .setLabel(`🔨 곡괭이 강화 (${formatMoney(clickerLevel * 10000)})`)
+        .setLabel(`🔨 곡괭이 강화 (${formatMoney(upgradeCost)})`)
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setLabel('🌐 웹 클리커 바로가기')
@@ -50,9 +51,9 @@ module.exports = {
         { name: '💵 보유 현금', value: formatMoney(userData.cash), inline: true },
         { name: '⚡ 남은 도박 턴', value: `\`${turns} / 50\` (30초당 +1턴)`, inline: true },
         { name: '🔨 채굴 파워', value: `Lv.${clickerLevel} (클릭당 +${formatMoney(power)})`, inline: true },
-        { name: '🤖 자동 채굴', value: `Lv.${autoLevel} (초당 +${formatMoney(autoLevel * 300)})`, inline: true },
+        { name: '🤖 자동 채굴', value: `Lv.${autoLevel} (초당 +${formatMoney(autoLevel * 15)})`, inline: true },
         { name: '📊 누적 클릭 수', value: `${formatNumber(userData.total_clicks || 0)}회`, inline: true },
-        { name: '🎁 보너스 혜택', value: `클릭 시 15% 확률 5배 크리티컬 및 도박 턴 드랍!`, inline: true }
+        { name: '🎁 보너스 혜택', value: `클릭 시 10% 확률 3배 크리티컬 및 도박 턴 드랍!`, inline: true }
       )
       .setFooter({ text: '월덕 가상 경제 클리커 시스템' })
       .setTimestamp();

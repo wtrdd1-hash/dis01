@@ -54,12 +54,12 @@ module.exports = {
     let multiplier = 0;
     let resultTitle = '';
 
-    if (roll >= 90) {
-      multiplier = 4;
-      resultTitle = `🔥 주사위 \`${roll}\` | **대박 4배 당첨!!** 🎯`;
+    if (roll >= 95) {
+      multiplier = 3.5;
+      resultTitle = `🔥 주사위 \`${roll}\` | **대박 3.5배 잭팟 당첨!!** 🎯`;
     } else if (roll >= 60) {
-      multiplier = 2;
-      resultTitle = `✨ 주사위 \`${roll}\` | **승리! 2배 획득!** 🎲`;
+      multiplier = 1.85;
+      resultTitle = `✨ 주사위 \`${roll}\` | **승리! 1.85배 획득!** 🎲`;
     } else {
       multiplier = 0;
       resultTitle = `💀 주사위 \`${roll}\` | **패배... 60 미만입니다.**`;

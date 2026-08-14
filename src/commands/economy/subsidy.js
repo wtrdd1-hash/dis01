@@ -39,7 +39,7 @@ module.exports = {
       }
     }
 
-    const reward = config.subsidyAmount || 5000;
+    const reward = isBroke ? 3000 : (config.subsidyAmount || 2000);
     const newCash = userCash + BigInt(reward);
 
     await pool.query(
@@ -47,13 +47,13 @@ module.exports = {
       [newCash.toString(), userId]
     );
 
-    const title = isBroke ? '🚨 무일푼 긴급 구제 지원금 즉시 수령! 💸' : '정부 지원금 수령 완료! 💸';
+    const title = isBroke ? '🚨 무일푼 긴급 구제 지원금 즉시 수령! 💸' : '정부 긴급 기본소득 수령 완료! 💸';
     const desc = isBroke 
       ? `🎉 **잔고 부족(파산) 상태로 쿨타임 없이 긴급 지원금이 지급되었습니다!**\n\n` +
         `💰 **지급된 지원금:** **+${formatMoney(reward)}**\n` +
         `💳 **현재 보유 현금:** **${formatMoney(newCash)}**\n\n` +
         `💡 *돈이 없을 때마다 언제든 클릭/명령어로 지원금을 계속 충전하세요!*`
-      : `🎉 **정기 긴급 생활 지원금 ₩5,000 지급 완료!**\n\n` +
+      : `🎉 **정기 긴급 생활 기본소득 +${formatMoney(reward)} 지급 완료!**\n\n` +
         `💰 **획득한 지원금:** **${formatMoney(reward)}**\n` +
         `💳 **현재 보유 현금:** **${formatMoney(newCash)}**\n\n` +
         `⏱️ *다음 정기 지원금은 10분 후에 다시 받으실 수 있습니다.*`;

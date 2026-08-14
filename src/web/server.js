@@ -233,7 +233,7 @@ function startWebServer(client) {
     }
   });
 
-  // 2. ⛏️ 클리커 클릭 액션 API
+  // 2. ⛏️ 클리커 클릭 액션 API (경제 밸런스 조정: 클릭당 레벨*10원, 10% 확률 3배 크리티컬)
   app.post('/api/clicker/click', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -244,14 +244,14 @@ function startWebServer(client) {
     try {
       const userData = await getOrCreateUser(session.id);
       const level = userData.clicker_level || 1;
-      const basePerClick = level * 100;
+      const basePerClick = level * 10;
       
       let earnedCash = 0;
       let critCount = 0;
 
       for (let i = 0; i < clicks; i++) {
-        const isCrit = Math.random() < 0.15;
-        const clickReward = isCrit ? (basePerClick * 5) : basePerClick;
+        const isCrit = Math.random() < 0.10;
+        const clickReward = isCrit ? (basePerClick * 3) : basePerClick;
         if (isCrit) critCount++;
         earnedCash += clickReward;
       }
@@ -276,7 +276,7 @@ function startWebServer(client) {
     }
   });
 
-  // 3. 🔨 클리커 업그레이드 상점 API
+  // 3. 🔨 클리커 업그레이드 상점 API (경제 밸런스 조정)
   app.post('/api/clicker/upgrade', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -289,7 +289,7 @@ function startWebServer(client) {
       let autoLevel = userData.auto_miner_level || 0;
 
       if (type === 'power') {
-        const cost = BigInt(clickerLevel * 10000);
+        const cost = BigInt(clickerLevel * 4500);
         if (userCash < cost) return res.status(400).json({ success: false, error: `현금이 부족합니다! (필요: ${formatMoney(cost)})` });
 
         userCash -= cost;
@@ -297,12 +297,12 @@ function startWebServer(client) {
         await pool.query('UPDATE users SET cash = ?, clicker_level = ? WHERE discord_id = ?', [userCash.toString(), clickerLevel, session.id]);
         return res.json({
           success: true,
-          message: `🔨 클릭 파워 Lv.${clickerLevel} 강화 완료! (클릭당 +${formatMoney(clickerLevel * 100)})`,
+          message: `🔨 클릭 파워 Lv.${clickerLevel} 강화 완료! (클릭당 +${formatMoney(clickerLevel * 10)})`,
           newCash: userCash.toString(),
           clickerLevel
         });
       } else if (type === 'auto') {
-        const cost = BigInt((autoLevel + 1) * 30000);
+        const cost = BigInt((autoLevel + 1) * 12000);
         if (userCash < cost) return res.status(400).json({ success: false, error: `현금이 부족합니다! (필요: ${formatMoney(cost)})` });
 
         userCash -= cost;
@@ -310,7 +310,7 @@ function startWebServer(client) {
         await pool.query('UPDATE users SET cash = ?, auto_miner_level = ? WHERE discord_id = ?', [userCash.toString(), autoLevel, session.id]);
         return res.json({
           success: true,
-          message: `🤖 자동 채굴 봇 Lv.${autoLevel} 가동! (초당 +${formatMoney(autoLevel * 300)})`,
+          message: `🤖 자동 채굴 봇 Lv.${autoLevel} 가동! (초당 +${formatMoney(autoLevel * 15)})`,
           newCash: userCash.toString(),
           autoLevel
         });
@@ -322,7 +322,7 @@ function startWebServer(client) {
     }
   });
 
-  // 4. 🎰 웹 슬롯머신 게임 API
+  // 4. 🎰 웹 슬롯머신 게임 API (경제 밸런스 및 현실적 카지노 승률 적용)
   app.post('/api/game/slot', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -360,21 +360,21 @@ function startWebServer(client) {
       let resultText = '';
 
       if (reel1 === '💎' && reel2 === '💎' && reel3 === '💎') {
-        multiplier = 50; resultText = '🎉 대박! 다이아몬드 잭팟 (50배)!';
+        multiplier = 25; resultText = '🎉 초호화 다이아몬드 잭팟 (25배 당첨)!';
       } else if (reel1 === '7️⃣' && reel2 === '7️⃣' && reel3 === '7️⃣') {
-        multiplier = 20; resultText = '🔥 럭키 세븐 잭팟 (20배)!';
+        multiplier = 15; resultText = '🔥 럭키 세븐 잭팟 (15배 당첨)!';
       } else if (reel1 === '🔔' && reel2 === '🔔' && reel3 === '🔔') {
-        multiplier = 10; resultText = '🔔 골든벨 당첨 (10배)!';
+        multiplier = 8; resultText = '🔔 골든벨 3개 일치 (8배 당첨)!';
       } else if (reel1 === '🍇' && reel2 === '🍇' && reel3 === '🍇') {
-        multiplier = 5; resultText = '🍇 포도 3개 일치 (5배)!';
+        multiplier = 4; resultText = '🍇 포도 3개 일치 (4배 당첨)!';
       } else if (reel1 === '🍋' && reel2 === '🍋' && reel3 === '🍋') {
-        multiplier = 3; resultText = '🍋 레몬 3개 일치 (3배)!';
+        multiplier = 2.5; resultText = '🍋 레몬 3개 일치 (2.5배 획득)!';
       } else if (reel1 === '🍒' && reel2 === '🍒' && reel3 === '🍒') {
-        multiplier = 2; resultText = '🍒 체리 3개 일치 (2배)!';
-      } else if (reel1 === reel2 || reel2 === reel3 || reel1 === reel3) {
-        multiplier = 1.5; resultText = '✨ 2개 일치! 본전 이상 (1.5배)!';
+        multiplier = 2; resultText = '🍒 체리 3개 일치 (2배 획득)!';
+      } else if ([reel1, reel2, reel3].filter(r => r === '🍒').length >= 2) {
+        multiplier = 1.2; resultText = '🍒 체리 2개 적중! (1.2배 본전 보존)!';
       } else {
-        multiplier = 0; resultText = '😢 아쉽게도 빗나갔습니다.';
+        multiplier = 0; resultText = '😢 아쉽게도 빗나갔습니다. 다음 기회에!';
       }
 
       const isWin = multiplier > 0;
@@ -521,11 +521,11 @@ function startWebServer(client) {
       let multiplier = 0;
       let resultText = '';
       if (userTotal > botTotal) {
-        multiplier = 2.0; resultText = `🎉 승리! 나(${userTotal}) vs 딜러(${botTotal})`;
+        multiplier = 1.95; resultText = `🎉 승리! 나(${userTotal}) vs 딜러(${botTotal}) (+${formatMoney(BigInt(Math.floor(Number(betAmount) * 0.95)))})`;
       } else if (userTotal === botTotal) {
-        multiplier = 1.0; resultText = `🤝 무승부! 나(${userTotal}) vs 딜러(${botTotal}) (배팅금 환불)`;
+        multiplier = 1.0; resultText = `🤝 무승부! 나(${userTotal}) vs 딜러(${botTotal}) (배팅금 전액 환불)`;
       } else {
-        multiplier = 0; resultText = `💀 패배! 나(${userTotal}) vs 딜러(${botTotal})`;
+        multiplier = 0; resultText = `💀 패배! 나(${userTotal}) vs 딜러(${botTotal}) (-${formatMoney(betAmount)})`;
       }
 
       const payout = BigInt(Math.floor(Number(betAmount) * multiplier));
@@ -596,9 +596,9 @@ function startWebServer(client) {
         return res.status(400).json({ success: false, error: `보유 현금이 부족합니다! (필요: ${formatMoney(betAmount)}, 보유: ${formatMoney(userCash)})` });
       }
 
-      // 복권 심볼 풀: 💎 다이아몬드(100x), 7️⃣ 럭키세븐(20x), 🔔 골든벨(10x), 🍇 포도(5x), 🍋 레몬(3x), 🍒 체리(2x), 💀 꽝
+      // 복권 심볼 풀: 💎 다이아몬드(50x), 7️⃣ 럭키세븐(15x), 🔔 골든벨(8x), 🍇 포도(4x), 🍋 레몬(2.5x), 🍒 체리(1.5x), 💀 꽝
       const symbols = ['💎', '7️⃣', '🔔', '🍇', '🍋', '🍒', '💀'];
-      const weights = [0.01, 0.04, 0.08, 0.15, 0.22, 0.25, 0.25];
+      const weights = [0.01, 0.03, 0.07, 0.14, 0.20, 0.25, 0.30];
 
       function pickRandomSymbol() {
         const r = Math.random();
@@ -618,17 +618,17 @@ function startWebServer(client) {
       let winDesc = '';
 
       if (s1 === '💎' && s2 === '💎' && s3 === '💎') {
-        multiplier = 100.0; winDesc = '💎💎💎 초호화 다이아몬드 잭팟! 100배 대박!';
+        multiplier = 50.0; winDesc = '💎💎💎 초호화 다이아몬드 잭팟! 50배 대박!';
       } else if (s1 === '7️⃣' && s2 === '7️⃣' && s3 === '7️⃣') {
-        multiplier = 20.0; winDesc = '7️⃣7️⃣7️⃣ 럭키세븐 잭팟! 20배 당첨!';
+        multiplier = 15.0; winDesc = '7️⃣7️⃣7️⃣ 럭키세븐 잭팟! 15배 당첨!';
       } else if (s1 === '🔔' && s2 === '🔔' && s3 === '🔔') {
-        multiplier = 10.0; winDesc = '🔔🔔🔔 골든벨 3개 일치! 10배 당첨!';
+        multiplier = 8.0; winDesc = '🔔🔔🔔 골든벨 3개 일치! 8배 당첨!';
       } else if (s1 === '🍇' && s2 === '🍇' && s3 === '🍇') {
-        multiplier = 5.0; winDesc = '🍇🍇🍇 달콤한 포도 3개! 5배 당첨!';
+        multiplier = 4.0; winDesc = '🍇🍇🍇 달콤한 포도 3개! 4배 당첨!';
       } else if (s1 === '🍋' && s2 === '🍋' && s3 === '🍋') {
-        multiplier = 3.0; winDesc = '🍋🍋🍋 상큼한 레몬 3개! 3배 당첨!';
+        multiplier = 2.5; winDesc = '🍋🍋🍋 상큼한 레몬 3개! 2.5배 당첨!';
       } else if ([s1, s2, s3].filter(s => s === '🍒').length >= 2) {
-        multiplier = 2.0; winDesc = '🍒🍒 체리 2개 이상 일치! 2배 당첨!';
+        multiplier = 1.5; winDesc = '🍒🍒 체리 2개 이상 일치! 1.5배 당첨!';
       } else {
         multiplier = 0; winDesc = '💀 아쉽게도 꽝입니다! 다음 복권에 도전하세요.';
       }
@@ -654,6 +654,7 @@ function startWebServer(client) {
         logId: insertRes.insertId,
         symbols: [s1, s2, s3],
         multiplier,
+        bet: betAmount.toString(),
         payout: payout.toString(),
         profit: profit.toString(),
         newCash: balanceAfter.toString(),
@@ -690,8 +691,8 @@ function startWebServer(client) {
       streak += 1;
 
       const cappedStreak = Math.min(streak, 10);
-      const streakBonus = (cappedStreak - 1) * config.dailyStreakBonus;
-      const totalReward = config.dailyReward + streakBonus;
+      const streakBonus = (cappedStreak - 1) * (config.dailyStreakBonus || 500);
+      const totalReward = (config.dailyReward || 3000) + streakBonus;
 
       const beforeCash = BigInt(userData.cash || 0);
       const newCash = beforeCash + BigInt(totalReward);
@@ -721,7 +722,7 @@ function startWebServer(client) {
     }
   });
 
-  // 8. 💸 정부 기본소득 지원금 API (돈이 없을 때는 쿨타임 없이 무제한 즉시 지급)
+  // 8. 💸 정부 기본소득 지원금 API (돈이 없을 때는 쿨타임 없이 무제한 즉시 지급, 경제 밸런스 조정)
   app.post('/api/economy/subsidy', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -756,7 +757,7 @@ function startWebServer(client) {
         }
       }
 
-      const subsidyAmount = 50000;
+      const subsidyAmount = isBroke ? 3000 : (config.subsidyAmount || 2000);
       const newCash = userCash + BigInt(subsidyAmount);
 
       await pool.query('UPDATE users SET cash = ?, last_subsidy = NOW() WHERE discord_id = ?', [newCash.toString(), session.id]);
@@ -1766,6 +1767,11 @@ function startWebServer(client) {
         `
         : `<a href="${discordLoginUrl}" class="btn-discord">🎮 Discord OAuth 로그인</a>`;
 
+      const totalAssetNum = userAssets ? (Number(userAssets.netWorth) || 1) : 1;
+      const cashPct = userAssets ? Math.min(100, Math.max(0, Math.round((Number(userAssets.cash) / totalAssetNum) * 100))) : 0;
+      const bankPct = userAssets ? Math.min(100 - cashPct, Math.max(0, Math.round((Number(userAssets.bank) / totalAssetNum) * 100))) : 0;
+      const stockPct = userAssets ? Math.max(0, 100 - cashPct - bankPct) : 0;
+
       const heroSectionHtml = currentUser && userAssets
         ? `
           <div class="hero logged-in-hero">
@@ -1789,6 +1795,19 @@ function startWebServer(client) {
               <div class="asset-card highlight">
                 <span class="asset-lbl">💎 총 순자산</span>
                 <span class="asset-val" id="my-net-worth">${formatMoney(userAssets.netWorth)}</span>
+              </div>
+            </div>
+
+            <!-- 📊 포트폴리오 자산 배분 비중 바 -->
+            <div class="asset-ratio-container">
+              <div class="asset-ratio-header">
+                <span>📊 내 포트폴리오 자산 배분 비중</span>
+                <span>💵 현금 <b style="color:#34d399;">${cashPct}%</b> | 🏦 예금 <b style="color:#818cf8;">${bankPct}%</b> | 📈 주식 <b style="color:#38bdf8;">${stockPct}%</b></span>
+              </div>
+              <div class="asset-ratio-bar">
+                <div class="ratio-segment ratio-cash" style="width: ${cashPct}%;" title="현금 ${cashPct}%"></div>
+                <div class="ratio-segment ratio-bank" style="width: ${bankPct}%;" title="예금 ${bankPct}%"></div>
+                <div class="ratio-segment ratio-stock" style="width: ${stockPct}%;" title="주식 ${stockPct}%"></div>
               </div>
             </div>
             
@@ -1818,10 +1837,10 @@ function startWebServer(client) {
 
       const currentClickerLevel = userAssets ? userAssets.clickerLevel : 1;
       const currentAutoLevel = userAssets ? userAssets.autoLevel : 0;
-      const powerCost = currentClickerLevel * 10000;
-      const autoCost = (currentAutoLevel + 1) * 30000;
-      const powerVal = currentClickerLevel * 100;
-      const autoVal = currentAutoLevel * 300;
+      const powerCost = currentClickerLevel * 4500;
+      const autoCost = (currentAutoLevel + 1) * 12000;
+      const powerVal = currentClickerLevel * 10;
+      const autoVal = currentAutoLevel * 15;
 
       res.send(`
         <!DOCTYPE html>
@@ -2217,6 +2236,42 @@ function startWebServer(client) {
             .feed-time-text { font-size: 0.75rem; color: #64748b; font-family: 'Outfit', monospace; }
             .feed-actor-tag { font-size: 0.78rem; font-weight: 700; color: #a5b4fc; display: block; margin-top: 2px; }
 
+            /* 📊 자산 포트폴리오 비중 바 */
+            .asset-ratio-container {
+              background: rgba(255, 255, 255, 0.03);
+              border: 1px solid var(--card-border);
+              border-radius: 14px;
+              padding: 12px 18px;
+              margin-top: 16px;
+              margin-bottom: 6px;
+            }
+            .asset-ratio-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              font-size: 0.82rem;
+              color: var(--text-muted);
+              margin-bottom: 8px;
+              font-weight: 600;
+              flex-wrap: wrap;
+              gap: 8px;
+            }
+            .asset-ratio-bar {
+              width: 100%;
+              height: 10px;
+              background: rgba(255, 255, 255, 0.08);
+              border-radius: 6px;
+              overflow: hidden;
+              display: flex;
+            }
+            .ratio-segment {
+              height: 100%;
+              transition: width 0.4s ease;
+            }
+            .ratio-cash { background: #10b981; }
+            .ratio-bank { background: #6366f1; }
+            .ratio-stock { background: #38bdf8; }
+
             /* ⛏️ 클리커 채굴기 전용 스타일 */
             .clicker-container {
               display: grid;
@@ -2236,34 +2291,42 @@ function startWebServer(client) {
               overflow: hidden;
             }
             .big-click-gem {
-              width: 140px;
-              height: 140px;
+              width: 150px;
+              height: 150px;
               margin: 20px auto;
-              background: radial-gradient(circle, #818cf8 30%, #4f46e5 100%);
+              background: radial-gradient(circle at 35% 35%, #a5b4fc 15%, #6366f1 55%, #312e81 100%);
+              border: 3px solid rgba(255, 255, 255, 0.25);
               border-radius: 50%;
               display: flex;
               align-items: center;
               justify-content: center;
-              font-size: 4.5rem;
+              font-size: 4.8rem;
               cursor: pointer;
               user-select: none;
-              box-shadow: 0 10px 35px rgba(99, 102, 241, 0.5);
-              transition: transform 0.05s ease;
+              box-shadow: 0 10px 40px rgba(99, 102, 241, 0.5), inset 0 0 20px rgba(255, 255, 255, 0.3);
+              transition: transform 0.08s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             }
-            .big-click-gem:active { transform: scale(0.92); }
+            .big-click-gem:hover { transform: scale(1.05); }
+            .big-click-gem:active, .big-click-gem.gem-hit { transform: scale(0.90) rotate(-3deg); }
             
             .floating-coin {
               position: absolute;
               font-weight: 800;
               font-family: 'Outfit', sans-serif;
               color: #34d399;
-              font-size: 1.2rem;
+              font-size: 1.15rem;
               pointer-events: none;
               animation: floatUp 0.7s ease-out forwards;
+              z-index: 10;
+            }
+            .floating-coin.crit {
+              color: #fbbf24;
+              font-size: 1.35rem;
+              text-shadow: 0 0 12px rgba(245, 158, 11, 0.8);
             }
             @keyframes floatUp {
               0% { opacity: 1; transform: translateY(0) scale(1); }
-              100% { opacity: 0; transform: translateY(-60px) scale(1.3); }
+              100% { opacity: 0; transform: translateY(-60px) scale(1.25); }
             }
 
             .shop-box {
@@ -2817,7 +2880,7 @@ function startWebServer(client) {
                   <div class="big-click-gem" id="gem-clicker" onclick="handleClickMining(event)">💎</div>
                   
                   <div style="font-size: 0.85rem; font-weight: 600; color: #cbd5e1; margin-top: 10px;" id="click-feedback-msg">
-                    광석을 클릭하면 15% 확률로 5배 크리티컬 대박이 터집니다!
+                    광석을 클릭하면 10% 확률로 3배 크리티컬 대박이 터집니다!
                   </div>
                 </div>
 
@@ -2828,7 +2891,7 @@ function startWebServer(client) {
                   <div class="shop-item">
                     <div class="shop-item-info">
                       <h4>🔨 클릭 파워 강화 (Lv.<span id="shop-power-lv">${currentClickerLevel}</span>)</h4>
-                      <p>클릭당 현금 획득량 +100원 증가</p>
+                      <p>클릭당 현금 획득량 +10원 증가</p>
                     </div>
                     <button class="btn-upgrade" onclick="buyUpgrade('power')"><span id="shop-power-cost">${powerCost.toLocaleString()}원</span> 강화</button>
                   </div>
@@ -2836,7 +2899,7 @@ function startWebServer(client) {
                   <div class="shop-item">
                     <div class="shop-item-info">
                       <h4>🤖 자동 채굴 봇 (Lv.<span id="shop-auto-lv">${currentAutoLevel}</span>)</h4>
-                      <p>아무것도 안 해도 초당 현금 자동 채굴</p>
+                      <p>아무것도 안 해도 초당 현금 +15원 자동 채굴</p>
                     </div>
                     <button class="btn-upgrade" onclick="buyUpgrade('auto')"><span id="shop-auto-cost">${autoCost.toLocaleString()}원</span> 구매</button>
                   </div>
@@ -2851,9 +2914,9 @@ function startWebServer(client) {
                 
                 <!-- 슬롯머신 -->
                 <div class="casino-card">
-                  <span class="turn-cost-tag">🎰 무제한 플레이</span>
+                  <span class="turn-cost-tag">🎰 정통 카지노</span>
                   <div class="casino-title">🎰 3릴 슬롯머신</div>
-                  <p class="casino-desc">다이아몬드(50배), 7(20배), 골든벨(10배), 포도(5배), 레몬(3배), 체리(2배)</p>
+                  <p class="casino-desc">💎다이아(25배), 7️⃣세븐(15배), 🔔골든벨(8배), 🍇포도(4배), 🍋레몬(2.5배), 🍒체리(2배), 🍒🍒(1.2배)</p>
                   
                   <div class="slot-display">
                     <div class="slot-reel" id="reel-1">🍒</div>
@@ -2881,7 +2944,7 @@ function startWebServer(client) {
 
                 <!-- 동전 던지기 -->
                 <div class="casino-card">
-                  <span class="turn-cost-tag">🪙 무제한 플레이</span>
+                  <span class="turn-cost-tag">🪙 승률 50%</span>
                   <div class="casino-title">🪙 동전 던지기 (1.95배)</div>
                   <p class="casino-desc">앞면 또는 뒷면을 선택하고 동전을 던져 1.95배의 보상을 획득하세요!</p>
                   
@@ -2912,9 +2975,9 @@ function startWebServer(client) {
 
                 <!-- 주사위 대결 -->
                 <div class="casino-card">
-                  <span class="turn-cost-tag">🎲 무제한 플레이</span>
-                  <div class="casino-title">🎲 주사위 대결 (2.0배)</div>
-                  <p class="casino-desc">나와 딜러가 각각 2개의 주사위를 굴려 더 높은 숫자가 나오면 승리!</p>
+                  <span class="turn-cost-tag">🎲 1.95배 / 무승부 환불</span>
+                  <div class="casino-title">🎲 주사위 대결 (1.95배)</div>
+                  <p class="casino-desc">나와 딜러가 각각 2개의 주사위를 굴려 더 높은 숫자가 나오면 1.95배 승리!</p>
                   
                   <div class="slot-display" style="gap: 25px;">
                     <div style="text-align: center;">
@@ -2950,7 +3013,7 @@ function startWebServer(client) {
                 <div class="casino-card">
                   <span class="turn-cost-tag" style="background: rgba(168, 85, 247, 0.2); border-color: #c084fc; color: #c084fc;">🎫 럭키세븐 복권</span>
                   <div class="casino-title" style="color: #c084fc;">🎫 럭키세븐 즉석 복권</div>
-                  <p class="casino-desc">💎다이아(100배), 7️⃣럭키세븐(20배), 🔔골든벨(10배), 🍇포도(5배), 🍋레몬(3배), 🍒체리2개(2배)</p>
+                  <p class="casino-desc">💎다이아(50배), 7️⃣럭키세븐(15배), 🔔골든벨(8배), 🍇포도(4배), 🍋레몬(2.5배), 🍒체리2개(1.5배)</p>
                   
                   <div class="slot-display" style="background: #1e1035; border-color: #8b5cf6;">
                     <div class="slot-reel" id="lottery-slot-1" style="background: #2e1065; border-color: #a855f7;">🎫</div>
@@ -3471,21 +3534,27 @@ function startWebServer(client) {
             // 1. ⛏️ 클리커 채굴 클릭 핸들러
             function handleClickMining(e) {
               const gem = document.getElementById('gem-clicker');
-              gem.style.transform = 'scale(0.88)';
-              setTimeout(() => { gem.style.transform = 'scale(1)'; }, 80);
+              gem.classList.remove('gem-hit');
+              void gem.offsetWidth; // reflow
+              gem.classList.add('gem-hit');
 
-              const isCrit = Math.random() < 0.15;
-              const text = isCrit ? '✨ 5X 크리티컬!' : '+골드 채굴!';
+              const isCrit = Math.random() < 0.10;
+              const powerValStr = document.getElementById('clicker-power-val')?.innerText || '10';
+              const powerVal = parseInt(powerValStr.replace(/[^0-9]/g, ''), 10) || 10;
+              const gain = isCrit ? (powerVal * 3) : powerVal;
+              const text = isCrit ? ('🔥 3X 대박! +' + gain.toLocaleString() + '원') : ('+' + gain.toLocaleString() + '원');
+
               const floatElem = document.createElement('div');
-              floatElem.className = 'floating-coin';
+              floatElem.className = 'floating-coin' + (isCrit ? ' crit' : '');
               floatElem.innerText = text;
-              if (isCrit) floatElem.style.color = '#fbbf24';
               
-              const rect = gem.getBoundingClientRect();
-              const zoneRect = document.getElementById('clicker-zone').getBoundingClientRect();
-              floatElem.style.left = (e.clientX - zoneRect.left - 20) + 'px';
-              floatElem.style.top = (e.clientY - zoneRect.top - 20) + 'px';
-              document.getElementById('clicker-zone').appendChild(floatElem);
+              const zone = document.getElementById('clicker-zone');
+              const zoneRect = zone.getBoundingClientRect();
+              const clickX = (e && e.clientX) ? (e.clientX - zoneRect.left) : (zoneRect.width / 2);
+              const clickY = (e && e.clientY) ? (e.clientY - zoneRect.top) : (zoneRect.height / 2);
+              floatElem.style.left = Math.max(10, Math.min(zoneRect.width - 120, clickX - 30)) + 'px';
+              floatElem.style.top = Math.max(10, clickY - 20) + 'px';
+              zone.appendChild(floatElem);
               setTimeout(() => floatElem.remove(), 700);
 
               clickCountBuffer++;
@@ -3530,14 +3599,14 @@ function startWebServer(client) {
                 showToast('success', '업그레이드 완료', data.message);
                 updateUserCashDisplay(data.newCash);
                 if (data.clickerLevel !== undefined) {
-                  document.getElementById('clicker-power-val').innerText = '+' + (data.clickerLevel * 100).toLocaleString() + '원';
+                  document.getElementById('clicker-power-val').innerText = '+' + (data.clickerLevel * 10).toLocaleString() + '원';
                   document.getElementById('shop-power-lv').innerText = data.clickerLevel;
-                  document.getElementById('shop-power-cost').innerText = (data.clickerLevel * 10000).toLocaleString() + '원';
+                  document.getElementById('shop-power-cost').innerText = (data.clickerLevel * 4500).toLocaleString() + '원';
                 }
                 if (data.autoLevel !== undefined) {
-                  document.getElementById('clicker-auto-val').innerText = '+' + (data.autoLevel * 300).toLocaleString() + '원/s';
+                  document.getElementById('clicker-auto-val').innerText = '+' + (data.autoLevel * 15).toLocaleString() + '원/s';
                   document.getElementById('shop-auto-lv').innerText = data.autoLevel;
-                  document.getElementById('shop-auto-cost').innerText = ((data.autoLevel + 1) * 30000).toLocaleString() + '원';
+                  document.getElementById('shop-auto-cost').innerText = ((data.autoLevel + 1) * 12000).toLocaleString() + '원';
                 }
               } catch (e) { showToast('error', '통신 오류', '서버와 연결할 수 없습니다.'); }
             }

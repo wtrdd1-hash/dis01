@@ -21,13 +21,13 @@ module.exports = {
     return this.adminIds.includes(String(userId));
   },
 
-  initialBalance: 50000,   // 50,000원 기본 지급
-  dailyReward: 10000,      // 기본 출석 1만원
-  dailyStreakBonus: 2000,  // 연속 출석 일당 +2000원
-  workCooldownMinutes: 10,  // 일하기 쿨타임 10분
-  subsidyAmount: 5000,      // 지원금 수령액 5000원
+  initialBalance: 10000,   // 10,000원 기본 정착금 (기존 5만원에서 건전한 경제를 위해 조정)
+  dailyReward: 3000,       // 기본 출석 3,000원
+  dailyStreakBonus: 500,   // 연속 출석 1일당 +500원 (최대 10일 연속 시 +5,000원 보너스)
+  workCooldownMinutes: 10, // 일하기 쿨타임 10분
+  subsidyAmount: 2000,     // 정기 생활 지원금 2,000원
   subsidyCooldownMinutes: 10, // 지원금 쿨타임 10분
-  bankInterestRate: 0.015,  // 은행 턴당/일당 이자 1.5%
+  bankInterestRate: 0.005, // 은행 이자율 0.5% (과도한 인플레이션 방지)
   port: parseInt(process.env.PORT || '8080', 10),
   
   discord: {

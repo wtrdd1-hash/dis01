@@ -59,20 +59,29 @@ module.exports = {
     let resultMsg = '';
 
     if (reel1 === '💎' && reel2 === '💎' && reel3 === '💎') {
-      multiplier = 10;
-      resultMsg = '💎💎💎 **잭팟 폭발!! 10배 당첨!** 💎💎💎';
+      multiplier = 25;
+      resultMsg = '💎💎💎 **초호화 다이아몬드 잭팟!! 25배 대박 당첨!** 💎💎💎';
     } else if (reel1 === '7️⃣' && reel2 === '7️⃣' && reel3 === '7️⃣') {
-      multiplier = 10;
-      resultMsg = '7️⃣7️⃣7️⃣ **럭키 세븐 잭팟! 10배 당첨!** 7️⃣7️⃣7️⃣';
-    } else if (reel1 === reel2 && reel2 === reel3) {
-      multiplier = 5;
-      resultMsg = '🎉 **트리플 당첨! 5배 획득!**';
-    } else if (reel1 === reel2 || reel2 === reel3 || reel1 === reel3) {
+      multiplier = 15;
+      resultMsg = '7️⃣7️⃣7️⃣ **럭키 세븐 잭팟! 15배 당첨!** 7️⃣7️⃣7️⃣';
+    } else if (reel1 === '🔔' && reel2 === '🔔' && reel3 === '🔔') {
+      multiplier = 8;
+      resultMsg = '🔔🔔🔔 **골든벨 3개 일치! 8배 당첨!** 🔔';
+    } else if (reel1 === '🍇' && reel2 === '🍇' && reel3 === '🍇') {
+      multiplier = 4;
+      resultMsg = '🍇🍇🍇 **포도 3개 일치! 4배 당첨!**';
+    } else if (reel1 === '🍋' && reel2 === '🍋' && reel3 === '🍋') {
+      multiplier = 2.5;
+      resultMsg = '🍋🍋🍋 **레몬 3개 일치! 2.5배 획득!**';
+    } else if (reel1 === '🍒' && reel2 === '🍒' && reel3 === '🍒') {
       multiplier = 2;
-      resultMsg = '✨ **투 페어 맞춤! 2배 획득!**';
+      resultMsg = '🍒🍒🍒 **체리 3개 일치! 2배 획득!**';
+    } else if ([reel1, reel2, reel3].filter(r => r === '🍒').length >= 2) {
+      multiplier = 1.2;
+      resultMsg = '🍒🍒 **체리 2개 적중! 1.2배 획득!**';
     } else {
       multiplier = 0;
-      resultMsg = '💀 **꽝! 다음 기회에...**';
+      resultMsg = '💀 **빗나갔습니다! 다음 스핀에 도전하세요.**';
     }
 
     const payout = betAmount * BigInt(multiplier);
