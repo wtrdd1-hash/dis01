@@ -208,6 +208,36 @@ async function logCommandExecution(interaction, status = 'SUCCESS', durationMs =
 }
 
 /**
+ * 버튼 / 셀렉트 메뉴 등 컴포넌트 상호작용 로그
+ */
+function logComponentInteraction(interaction) {
+  const timestamp = getFormattedTimestamp();
+  let username = interaction.user.tag || interaction.user.username;
+  if (!username.startsWith('@')) username = `@${username}`;
+
+  const guildName = interaction.guild ? interaction.guild.name : 'DM';
+  const customId = interaction.customId || 'N/A';
+  const type = interaction.isButton() ? '🔘 버튼' : interaction.isStringSelectMenu() ? '📋 메뉴' : '🧩 상호작용';
+
+  const config = require('../config/config');
+  const isAdmin = config.isAdmin(interaction.user.id);
+
+  const logPayload = {
+    type: 'DISCORD_COMPONENT',
+    timestamp,
+    componentType: type,
+    userId: interaction.user.id,
+    username,
+    isAdmin,
+    guild: guildName,
+    customId
+  };
+
+  appendJsonLog(COMMANDS_JSONL_FILE, logPayload);
+  console.log(`[${timestamp}] ${type}${isAdmin ? ' 👑[ADMIN]' : ''} | 유저: ${username} (${interaction.user.id}) | 서버: ${guildName} | CustomId: ${customId}`);
+}
+
+/**
  * 관리자 전용 작업 감사 로그 (DB + JSONL + 콘솔)
  */
 async function logAdminAction(adminId, adminUsername, action, targetUserId = null, details = {}, ip = '127.0.0.1', country = 'LOCAL') {
