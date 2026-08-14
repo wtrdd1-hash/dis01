@@ -6,11 +6,21 @@ const { formatMoney, formatPercent, formatNumber } = require('../../utils/format
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('지갑')
-    .setDescription('내 지갑 잔액, 은행 예금, 주식 매수금액/평가금액/수익률 및 순자산을 조회합니다.'),
+    .setDescription('지갑 잔액, 은행 예금, 주식 평가금, 순자산 및 서버 내 순위(등수)를 조회합니다.')
+    .addUserOption(option =>
+      option.setName('유저')
+        .setDescription('자산을 조회할 대상 유저 (선택하지 않으면 본인)')
+        .setRequired(false)
+    ),
 
   async execute(interaction) {
-    const targetUser = interaction.user;
-    const userData = await getOrCreateUser(targetUser.id);
+    const targetUser = interaction.options.getUser('유저') || interaction.user;
+    const isSelf = targetUser.id === interaction.user.id;
+
+    const username = targetUser.globalName || targetUser.username || targetUser.tag;
+    const avatarUrl = targetUser.displayAvatarURL({ dynamic: true });
+
+    const userData = await getOrCreateUser(targetUser.id, username, avatarUrl);
 
     // 주식 상세 및 평가금액 계산
     const [stocksRows] = await pool.query(`
@@ -43,8 +53,8 @@ module.exports = {
     const totalProfitLoss = stockValue - totalSpent;
     const totalRoiPercent = totalSpent > 0n ? (Number(totalProfitLoss) / Number(totalSpent)) * 100 : 0;
 
-    const cash = BigInt(userData.cash);
-    const bank = BigInt(userData.bank);
+    const cash = BigInt(userData.cash || 0);
+    const bank = BigInt(userData.bank || 0);
     const netWorth = cash + bank + stockValue;
 
     // 전체 순위 계산 (총 순자산 기준)
@@ -58,24 +68,40 @@ module.exports = {
       GROUP BY u.discord_id, u.cash, u.bank
       ORDER BY net DESC
     `);
-    
+
+    const totalUsers = rankRows.length || 1;
     const userRankIndex = rankRows.findIndex(r => r.discord_id === targetUser.id);
-    const rankText = userRankIndex !== -1 ? `${userRankIndex + 1}위 / ${rankRows.length}명` : '순위 밖';
+    const rankNum = userRankIndex !== -1 ? userRankIndex + 1 : totalUsers;
+
+    // 랭킹 메달 및 텍스트 구성
+    let rankBadge = '';
+    if (rankNum === 1) rankBadge = '🥇 1위 (서버 최고 부자)';
+    else if (rankNum === 2) rankBadge = '🥈 2위';
+    else if (rankNum === 3) rankBadge = '🥉 3위';
+    else if (rankNum <= 10) rankBadge = `🏅 TOP 10 (${rankNum}위)`;
+    else rankBadge = `🏆 ${rankNum}위`;
+
+    const percentile = ((rankNum / totalUsers) * 100).toFixed(1);
 
     const stockSummaryText = stocksRows.length > 0
-      ? `${formatMoney(stockValue)}\n(매수: ${formatMoney(totalSpent)} | 손익: ${formatPercent(totalRoiPercent)})`
+      ? `${formatMoney(stockValue)}\n(매수원금: ${formatMoney(totalSpent)} | 총손익: ${formatPercent(totalRoiPercent)})`
       : '0원';
 
+    const embedTitle = isSelf
+      ? `💳 @${username} 님의 실시간 지갑 & 자산 보고서`
+      : `💳 @${username} 님의 자산 조회 결과`;
+
     const embed = createEconomyEmbed(
-      `💳 ${targetUser.username} 님의 자산 보고서`,
-      `**순자산 순위:** 🏆 \`${rankText}\``
+      embedTitle,
+      `🏆 **순자산 순위:** **${rankBadge}** (전체 **${totalUsers}명** 중 **${rankNum}등** | 상위 **${percentile}%**)`
     )
-      .setThumbnail(targetUser.displayAvatarURL())
+      .setThumbnail(avatarUrl)
       .addFields(
+        { name: '🏆 서버 순자산 순위', value: `**${rankBadge}**\n└ 전체 **${totalUsers}명** 중 **${rankNum}위** (상위 ${percentile}%)`, inline: false },
         { name: '💵 보유 현금', value: formatMoney(cash), inline: true },
         { name: '🏦 은행 예금', value: formatMoney(bank), inline: true },
         { name: '📊 주식 평가금액', value: stockSummaryText, inline: true },
-        { name: '💎 총 순자산', value: formatMoney(netWorth), inline: false }
+        { name: '💎 총 순자산 (현금+예금+주식)', value: `**${formatMoney(netWorth)}**`, inline: false }
       );
 
     if (stocksRows.length > 0) {

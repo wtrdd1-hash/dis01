@@ -14,7 +14,7 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    if (interaction.user.id !== config.adminId) {
+    if (!config.isAdmin(interaction.user.id)) {
       return interaction.reply({
         embeds: [createErrorEmbed('권한 없음', '이 명령어는 봇 관리자 전용입니다.')],
         flags: MessageFlags.Ephemeral

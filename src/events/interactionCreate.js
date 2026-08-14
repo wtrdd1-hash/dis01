@@ -1,16 +1,22 @@
 const { createErrorEmbed } = require('../utils/embedBuilder');
-const { logCommandExecution } = require('../utils/logger');
+const { logCommandExecution, logComponentInteraction, logWarn, logError } = require('../utils/logger');
 const { getOrCreateUser } = require('../config/database');
 const { MessageFlags } = require('discord.js');
 
 module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client, commandsMap) {
+    // 1. 버튼이나 셀렉트메뉴 등의 상호작용 로그
+    if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) {
+      logComponentInteraction(interaction);
+    }
+
+    // 2. 슬래시 명령어 처리
     if (!interaction.isChatInputCommand()) return;
 
     const command = commandsMap.get(interaction.commandName);
     if (!command) {
-      console.warn(`⚠️ 알 수 없는 명령어 수신: ${interaction.commandName}`);
+      logWarn('Interaction', `알 수 없는 명령어 수신: /${interaction.commandName} (User: ${interaction.user.tag})`);
       return;
     }
 
@@ -24,7 +30,7 @@ module.exports = {
       try {
         await getOrCreateUser(interaction.user.id, username, avatarUrl);
       } catch (dbErr) {
-        // Continue command execution even if DB sync fails
+        logWarn('Database', `유저 동기화 실패 (${interaction.user.id}): ${dbErr.message}`);
       }
 
       await command.execute(interaction, client);
@@ -39,15 +45,19 @@ module.exports = {
 
       if (error.code === 'ECONNREFUSED') {
         title = 'DB 연결 오류';
-        description = '데이터베이스(MySQL) 서버에 연결할 수 없습니다.\nMySQL 서비스가 실행 중인지 확인해 주세요. (`wsl service mysql start`)';
+        description = '데이터베이스(MySQL) 서버에 연결할 수 없습니다.\nMySQL 서비스가 실행 중인지 확인해 주세요.';
       }
 
       const embed = createErrorEmbed(title, description);
 
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ embeds: [embed], flags: MessageFlags.Ephemeral });
-      } else {
-        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      try {
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp({ embeds: [embed], flags: MessageFlags.Ephemeral });
+        } else {
+          await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+        }
+      } catch (replyErr) {
+        logError('Interaction', '에러 응답 전송 실패', replyErr);
       }
     }
   }

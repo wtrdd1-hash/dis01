@@ -87,9 +87,34 @@ async function initDatabase() {
         price BIGINT NOT NULL,
         prev_price BIGINT NOT NULL,
         volatility DECIMAL(5,4) NOT NULL DEFAULT 0.05,
+        sector VARCHAR(64) NOT NULL DEFAULT 'IT/기술',
+        description TEXT NULL,
+        high_24h BIGINT NOT NULL DEFAULT 0,
+        low_24h BIGINT NOT NULL DEFAULT 0,
+        volume_24h BIGINT NOT NULL DEFAULT 0,
+        market_cap BIGINT NOT NULL DEFAULT 0,
+        pe_ratio DECIMAL(6,2) NOT NULL DEFAULT 15.00,
+        dividend_yield DECIMAL(5,2) NOT NULL DEFAULT 2.50,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    // 주식 상세 컬럼 존재 여부 체크 및 추가 (안전 마이그레이션)
+    const [stockCols] = await connection.query("SHOW COLUMNS FROM stocks LIKE 'sector'");
+    if (stockCols.length === 0) {
+      await connection.query(`
+        ALTER TABLE stocks
+        ADD COLUMN sector VARCHAR(64) NOT NULL DEFAULT 'IT/기술',
+        ADD COLUMN description TEXT NULL,
+        ADD COLUMN high_24h BIGINT NOT NULL DEFAULT 0,
+        ADD COLUMN low_24h BIGINT NOT NULL DEFAULT 0,
+        ADD COLUMN volume_24h BIGINT NOT NULL DEFAULT 0,
+        ADD COLUMN market_cap BIGINT NOT NULL DEFAULT 0,
+        ADD COLUMN pe_ratio DECIMAL(6,2) NOT NULL DEFAULT 15.00,
+        ADD COLUMN dividend_yield DECIMAL(5,2) NOT NULL DEFAULT 2.50;
+      `);
+      console.log('✅ stocks 테이블에 종목 상세 지표 컬럼(sector, description, high_24h 등)이 추가되었습니다.');
+    }
 
     // 주식 가격 히스토리 테이블
     await connection.query(`
@@ -99,6 +124,21 @@ async function initDatabase() {
         price BIGINT NOT NULL,
         recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_stock_id_recorded (stock_id, recorded_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // 시장 실시간 뉴스 & 공시 이벤트 피드 테이블
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS market_news_feed (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        event_type VARCHAR(32) NOT NULL,
+        impact_sector VARCHAR(64) NULL,
+        related_stock VARCHAR(16) NULL,
+        impact_rate DECIMAL(6,4) NOT NULL DEFAULT 0.0000,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_created_at (created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
@@ -149,22 +189,140 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // 기본 주식 종목 초기화 시드 (가상 패러디 명칭 적용, BIO는 초보자용 저가/안정주)
+    // 웹 접속 및 관리자 접속 상세 로그 테이블 (IP, 국가, @유저명, JSON 데이터)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS web_access_logs (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        ip VARCHAR(64) NOT NULL,
+        country VARCHAR(10) NULL,
+        country_name VARCHAR(100) NULL,
+        city VARCHAR(100) NULL,
+        method VARCHAR(16) NOT NULL,
+        url VARCHAR(255) NOT NULL,
+        status_code INT NOT NULL,
+        duration_ms INT NOT NULL DEFAULT 0,
+        user_id VARCHAR(32) NULL,
+        username VARCHAR(100) NULL,
+        is_admin TINYINT(1) NOT NULL DEFAULT 0,
+        user_agent VARCHAR(500) NULL,
+        json_data JSON NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_ip (ip),
+        INDEX idx_user_id (user_id),
+        INDEX idx_is_admin (is_admin),
+        INDEX idx_created_at (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // 관리자 전용 작업 감사 로그 테이블
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS admin_logs (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        admin_id VARCHAR(32) NOT NULL,
+        admin_username VARCHAR(100) NOT NULL,
+        action VARCHAR(64) NOT NULL,
+        target_user_id VARCHAR(32) NULL,
+        details JSON NULL,
+        ip VARCHAR(64) NULL,
+        country VARCHAR(10) NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_admin_id (admin_id),
+        INDEX idx_created_at (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // 기본 주식 종목 초기화 시드 (가상 패러디 명칭 및 상세 기업 분석 데이터)
     const defaultStocks = [
-      { stock_id: 'BTC', name: '디스코인 (가상자산)', price: 82193159, prev_price: 93839069, volatility: 0.08 },
-      { stock_id: 'ETH', name: '에테르코인 (가상자산)', price: 5767959, prev_price: 5575796, volatility: 0.06 },
-      { stock_id: 'AAPL', name: '사과전자 (빅테크)', price: 248149, prev_price: 257958, volatility: 0.03 },
-      { stock_id: 'NVDA', name: '엔비칩스 (AI반도체)', price: 211105, prev_price: 211657, volatility: 0.04 },
-      { stock_id: 'SAM', name: '삼송전자 (전자/반도체)', price: 90418, prev_price: 92922, volatility: 0.03 },
-      { stock_id: 'BIO', name: '알약바이오 (초보자/안정주)', price: 1000, prev_price: 1000, volatility: 0.01 }
+      { 
+        stock_id: 'NVDA', 
+        name: '엔비칩스 (AI반도체)', 
+        price: 211105, 
+        prev_price: 211657, 
+        volatility: 0.04,
+        sector: '인공지능 & GPU 반도체',
+        description: '글로벌 초거대 생성형 AI 모델 학습용 가속기 칩 시장을 90% 이상 점유하는 최고 기술력의 빅테크 기업입니다.',
+        market_cap: 3500000000000,
+        pe_ratio: 42.50,
+        dividend_yield: 0.50
+      },
+      { 
+        stock_id: 'BTC', 
+        name: '디스코인 (가상자산)', 
+        price: 82193159, 
+        prev_price: 93839069, 
+        volatility: 0.08,
+        sector: '디지털 자산 & 블록체인',
+        description: '탈중앙화 디지털 화폐의 상징이자 가상자산 시장 전반의 유동성을 주도하는 대표 기축 코인입니다.',
+        market_cap: 1600000000000,
+        pe_ratio: 0.00,
+        dividend_yield: 0.00
+      },
+      { 
+        stock_id: 'ETH', 
+        name: '에테르코인 (가상자산)', 
+        price: 5767959, 
+        prev_price: 5575796, 
+        volatility: 0.06,
+        sector: '스마트 컨트랙트 & Web3',
+        description: '디파이(DeFi), NFT, 스마트 컨트랙트 생태계의 기반이 되는 세계 2위 블록체인 네트워크 코인입니다.',
+        market_cap: 420000000000,
+        pe_ratio: 0.00,
+        dividend_yield: 3.20
+      },
+      { 
+        stock_id: 'AAPL', 
+        name: '사과전자 (빅테크)', 
+        price: 248149, 
+        prev_price: 257958, 
+        volatility: 0.03,
+        sector: '모바일 & 온디바이스 AI',
+        description: '전 세계 수억 명의 충성 고객층을 보유한 프리미엄 스마트 디바이스 및 독자 AI 생태계 선두 기업입니다.',
+        market_cap: 3200000000000,
+        pe_ratio: 28.40,
+        dividend_yield: 1.80
+      },
+      { 
+        stock_id: 'SAM', 
+        name: '삼송전자 (전자/반도체)', 
+        price: 90418, 
+        prev_price: 92922, 
+        volatility: 0.03,
+        sector: '종합 전자 & 메모리 반도체',
+        description: 'DRAM, NAND 플래시 메모리 및 차세대 HBM 공급 역량을 보유한 아시아 대표 하드웨어 제조 기업입니다.',
+        market_cap: 580000000000,
+        pe_ratio: 14.20,
+        dividend_yield: 2.70
+      },
+      { 
+        stock_id: 'BIO', 
+        name: '알약바이오 (초보자/안정주)', 
+        price: 1000, 
+        prev_price: 1000, 
+        volatility: 0.01,
+        sector: '바이오 & 신약 파이프라인',
+        description: '난치성 질환 표적 치료제 및 글로벌 제약사 기술 수출 파이프라인을 보유한 바이오벤처 기업입니다.',
+        market_cap: 120000000000,
+        pe_ratio: 18.90,
+        dividend_yield: 4.10
+      }
     ];
 
     for (const stock of defaultStocks) {
       await connection.query(`
-        INSERT INTO stocks (stock_id, name, price, prev_price, volatility)
-        VALUES (?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE name=VALUES(name), volatility=VALUES(volatility);
-      `, [stock.stock_id, stock.name, stock.price, stock.prev_price, stock.volatility]);
+        INSERT INTO stocks (stock_id, name, price, prev_price, volatility, sector, description, market_cap, pe_ratio, dividend_yield)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE 
+          name=VALUES(name), 
+          volatility=VALUES(volatility),
+          sector=VALUES(sector),
+          description=VALUES(description),
+          market_cap=VALUES(market_cap),
+          pe_ratio=VALUES(pe_ratio),
+          dividend_yield=VALUES(dividend_yield);
+      `, [
+        stock.stock_id, stock.name, stock.price, stock.prev_price, stock.volatility,
+        stock.sector, stock.description, stock.market_cap, stock.pe_ratio, stock.dividend_yield
+      ]);
     }
 
     // 알약바이오(BIO)를 초보자가 구매하기 쉬운 저가/안정주(1,000원, 변동성 1%)로 DB 가격 갱신

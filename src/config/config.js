@@ -1,8 +1,26 @@
 require('dotenv').config();
 
+const defaultAdminIds = ['886478189520637992', '889085646768078850'];
+
+// 환경 변수에서 관리자 목록 파싱 (콤마 구분 또는 단일 ID 지원)
+const envAdminIds = (process.env.ADMIN_IDS || process.env.ADMIN_ID || '')
+  .split(',')
+  .map(id => id.trim())
+  .filter(Boolean);
+
+const combinedAdminIds = Array.from(new Set([...defaultAdminIds, ...envAdminIds]));
+
 module.exports = {
   token: process.env.DISCORD_TOKEN || process.env.t,
-  adminId: process.env.ADMIN_ID || '886478189520637992',
+  adminId: combinedAdminIds[0], // 이전 코드 호환용
+  adminIds: combinedAdminIds,  // 전체 관리자 ID 배열
+  
+  // 관리자 권한 검사 헬퍼
+  isAdmin(userId) {
+    if (!userId) return false;
+    return this.adminIds.includes(String(userId));
+  },
+
   initialBalance: 50000,   // 50,000원 기본 지급
   dailyReward: 10000,      // 기본 출석 1만원
   dailyStreakBonus: 2000,  // 연속 출석 일당 +2000원
@@ -15,7 +33,7 @@ module.exports = {
   discord: {
     clientId: process.env.DISCORD_CLIENT_ID || process.env.GITHUB_CLIENT_ID || process.env.CLIENT_ID || '',
     clientSecret: process.env.DISCORD_CLIENT_SECRET || process.env.GITHUB_CLIENT_SECRET || process.env.CLIENT_SECRET || '',
-    redirectUri: process.env.DISCORD_REDIRECT_URI || process.env.REDIRECT_URI || 'http://localhost:8080/auth/discord/callback'
+    redirectUri: process.env.DISCORD_REDIRECT_URI || process.env.REDIRECT_URI || 'https://easy-scraping.com/auth/discord/callback'
   },
 
   db: {
@@ -33,4 +51,3 @@ module.exports = {
     queueLimit: 0
   }
 };
-

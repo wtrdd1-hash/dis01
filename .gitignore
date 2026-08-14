@@ -10,6 +10,14 @@ node_modules/
 *.log
 npm-debug.log*
 
+# Sensitive keys & logs
+wtrdd_vps_key/
+id_*
+*.pem
+*.key
+logs/
+*.tar.gz
+
 # Scratch & temporary files
 scratch/
 .idea/
