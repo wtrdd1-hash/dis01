@@ -2313,11 +2313,36 @@ function startWebServer(client) {
             .admin-badge-mini { font-size: 0.75rem; background: rgba(245, 158, 11, 0.2); color: #f59e0b; padding: 2px 6px; border-radius: 6px; margin-left: 4px; }
             .net-cell { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.1rem; color: #818cf8; text-align: right; }
             
-            /* 모달 */
-            .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
-            .modal-box { background: #111827; border: 1px solid rgba(99, 102, 241, 0.4); border-radius: 24px; padding: 28px; max-width: 520px; width: 100%; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7); max-height: 90vh; overflow-y: auto; }
+            /* 🔍 모달 윈도우 & 슬라이드업 애니메이션 */
+            .modal-overlay {
+              position: fixed;
+              top: 0; left: 0; right: 0; bottom: 0;
+              background: rgba(0, 0, 0, 0.82);
+              backdrop-filter: blur(10px);
+              display: none;
+              align-items: center;
+              justify-content: center;
+              z-index: 1000;
+              padding: 20px;
+              animation: overlayFadeIn 0.25s ease;
+            }
+            @keyframes overlayFadeIn { from { opacity: 0; } to { opacity: 1; } }
+            .modal-box {
+              background: #111827;
+              border: 1px solid rgba(99, 102, 241, 0.45);
+              border-radius: 24px;
+              padding: 28px;
+              max-width: 520px;
+              width: 100%;
+              box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85);
+              max-height: 90vh;
+              overflow-y: auto;
+              animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            @keyframes modalSlideUp { from { transform: translateY(30px) scale(0.96); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
             .modal-title { font-family: 'Outfit', sans-serif; font-size: 1.35rem; font-weight: 800; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
-            .btn-close-modal { background: transparent; border: none; color: #9ca3af; font-size: 1.6rem; cursor: pointer; }
+            .btn-close-modal { background: transparent; border: none; color: #9ca3af; font-size: 1.6rem; cursor: pointer; transition: color 0.2s; }
+            .btn-close-modal:hover { color: #fff; }
             
             .chart-view-box { background: #070b14; border: 1px solid #1f2937; border-radius: 16px; padding: 18px; margin: 16px 0; text-align: center; }
             .chart-stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
@@ -2327,6 +2352,22 @@ function startWebServer(client) {
 
             .pulse-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 1.5s infinite; }
             @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
+
+            /* 📱 모바일 & 태블릿 반응형 완벽 최적화 */
+            @media (max-width: 768px) {
+              .navbar { padding: 12px 18px; }
+              .logo { font-size: 1.15rem; }
+              .container { padding: 16px 12px 60px; }
+              .hero { padding: 22px 16px; margin-bottom: 20px; }
+              .hero h1 { font-size: 1.65rem; }
+              .personal-asset-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+              .personal-asset-grid .asset-card { padding: 12px; }
+              .asset-val { font-size: 1.05rem; }
+              .tabs-nav { gap: 6px; padding-bottom: 8px; }
+              .tab-btn { font-size: 0.85rem; padding: 8px 12px; }
+              .casino-hub-grid, .stocks-grid, .gainers-grid { grid-template-columns: 1fr; }
+              .modal-box { padding: 20px 16px; border-radius: 18px; }
+            }
           </style>
         </head>
         <body>
@@ -3602,6 +3643,18 @@ function startWebServer(client) {
                 setTimeout(() => { cashElem.style.color = '#fff'; }, 1000);
               }
             }
+
+            // 🖱️ 모달 바깥 배경 클릭 및 ESC 키 입력 시 팝업 닫기
+            window.addEventListener('click', (e) => {
+              if (e.target.classList && e.target.classList.contains('modal-overlay')) {
+                e.target.style.display = 'none';
+              }
+            });
+            window.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape') {
+                document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+              }
+            });
           </script>
         </body>
         </html>
