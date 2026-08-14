@@ -5,7 +5,7 @@ const config = require('../config/config');
 const { pool, getOrCreateUser } = require('../config/database');
 const { formatMoney, formatPercent, formatNumber } = require('../utils/formatters');
 const { getCurrentMarketRegime, getLastNews, getRecentNewsFeed } = require('../utils/stockEngine');
-const { logWebAccess } = require('../utils/logger');
+const { logWebAccess, logAdminAction } = require('../utils/logger');
 
 // 스파크라인 SVG 미니 차트 생성 헬퍼
 function generateSparklineSvg(prices, isUp) {
@@ -376,33 +376,38 @@ function startWebServer(client) {
     }
   });
 
-  // 4. 🎰 웹 슬롯머신 게임 API (스팸 연타 방지 락 + 턴 차감)
+  // 4. 🎰 웹 슬롯머신 게임 API (무제한 플레이 지원 + 진행 중 방어 락 + 올인 검증 + 잔고 스냅샷)
   app.post('/api/game/slot', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
 
     if (activeGameUsers.has(session.id)) {
-      return res.status(429).json({ success: false, error: '⚠️ 이전 게임이 진행 중입니다. 결과가 나온 후 다시 시도해 주세요.' });
+      return res.status(429).json({ success: false, error: '⚠️ 슬롯머신이 이미 회전 중입니다. 결과가 나온 후 다시 시도해 주세요.' });
     }
     activeGameUsers.add(session.id);
 
     let { bet } = req.body;
     try {
       const userData = await getOrCreateUser(session.id);
-      const { turns, maxTurns } = calculateUserTurns(userData);
+      const userCash = BigInt(userData.cash || 0);
 
-      if (turns <= 0) {
-        return res.status(400).json({
-          success: false,
-          error: '⚡ 도박 턴이 모두 소진되었습니다! (30초마다 +1 충전되거나, [클리커 채굴]로 턴을 획득하세요!)'
-        });
+      // 올인 및 배팅금액 정확한 계산
+      let betAmount = 0n;
+      if (bet === 'all' || bet === '올인' || bet === '전액') {
+        betAmount = userCash;
+      } else {
+        betAmount = BigInt(parseInt(bet, 10) || 0);
       }
 
-      const userCash = BigInt(userData.cash || 0);
-      let betAmount = (bet === 'all' || bet === '올인') ? userCash : BigInt(parseInt(bet, 10) || 0);
+      if (betAmount < 1000n) {
+        return res.status(400).json({ success: false, error: `최소 배팅금액은 1,000원입니다. (현재 보유 현금: ${formatMoney(userCash)})` });
+      }
+      if (userCash < betAmount) {
+        return res.status(400).json({ success: false, error: `보유 현금이 부족합니다! (필요: ${formatMoney(betAmount)}, 보유: ${formatMoney(userCash)})` });
+      }
 
-      if (betAmount < 1000n) return res.status(400).json({ success: false, error: '최소 배팅금액은 1,000원입니다.' });
-      if (userCash < betAmount) return res.status(400).json({ success: false, error: '보유 현금이 부족합니다!' });
+      const { turns, maxTurns } = calculateUserTurns(userData);
+      const remainingTurns = Math.max(0, turns - 1);
 
       const SYMBOLS = ['🍒', '🍋', '🍇', '🔔', '7️⃣', '💎'];
       const reel1 = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
@@ -433,27 +438,35 @@ function startWebServer(client) {
       const isWin = multiplier > 0;
       const payout = BigInt(Math.floor(Number(betAmount) * multiplier));
       const profit = payout - betAmount;
-      const newCash = userCash + profit;
-      const remainingTurns = turns - 1;
+      const balanceBefore = userCash;
+      const balanceAfter = userCash + profit;
 
       await pool.query(
         'UPDATE users SET cash = ?, gamble_turns = ?, last_turn_update = NOW() WHERE discord_id = ?',
-        [newCash.toString(), remainingTurns, session.id]
+        [balanceAfter.toString(), remainingTurns, session.id]
       );
-      await pool.query(
-        'INSERT INTO gambling_logs (user_id, game, bet, payout, profit) VALUES (?, ?, ?, ?, ?)',
-        [session.id, 'WEB_SLOT', betAmount.toString(), payout.toString(), profit.toString()]
-      );
+
+      // 자산 롤백 복구용 상세 로그 저장
+      const [insertRes] = await pool.query(`
+        INSERT INTO gambling_logs (user_id, game, bet, payout, profit, balance_before, balance_after, details)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        session.id, 'WEB_SLOT', betAmount.toString(), payout.toString(), profit.toString(),
+        balanceBefore.toString(), balanceAfter.toString(),
+        JSON.stringify({ reels: [reel1, reel2, reel3], multiplier, isAllIn: (betAmount === userCash) })
+      ]);
 
       res.json({
         success: true,
+        logId: insertRes.insertId,
         reels: [reel1, reel2, reel3],
         isWin,
         multiplier,
         bet: betAmount.toString(),
         payout: payout.toString(),
         profit: profit.toString(),
-        newCash: newCash.toString(),
+        newCash: balanceAfter.toString(),
+        balanceBefore: balanceBefore.toString(),
         turns: remainingTurns,
         maxTurns,
         message: resultText
@@ -465,32 +478,33 @@ function startWebServer(client) {
     }
   });
 
-  // 5. 🪙 웹 동전 던지기 게임 API (스팸 방지 락)
+  // 5. 🪙 웹 동전 던지기 게임 API (무제한 플레이 지원 + 진행 중 방어 락 + 올인 검증 + 잔고 스냅샷)
   app.post('/api/game/coinflip', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
 
     if (activeGameUsers.has(session.id)) {
-      return res.status(429).json({ success: false, error: '⚠️ 이전 게임이 진행 중입니다. 잠시만 기다려 주세요.' });
+      return res.status(429).json({ success: false, error: '⚠️ 동전이 회전 중입니다. 잠시만 기다려 주세요.' });
     }
     activeGameUsers.add(session.id);
 
     let { bet, choice } = req.body;
     try {
       const userData = await getOrCreateUser(session.id);
-      const { turns, maxTurns } = calculateUserTurns(userData);
+      const userCash = BigInt(userData.cash || 0);
 
-      if (turns <= 0) {
-        return res.status(400).json({
-          success: false,
-          error: '⚡ 도박 턴이 모두 소진되었습니다! (30초마다 +1 충전되거나, [클리커 채굴]로 턴을 획득하세요!)'
-        });
+      let betAmount = 0n;
+      if (bet === 'all' || bet === '올인' || bet === '전액') {
+        betAmount = userCash;
+      } else {
+        betAmount = BigInt(parseInt(bet, 10) || 0);
       }
 
-      const userCash = BigInt(userData.cash || 0);
-      let betAmount = bet === 'all' ? userCash : BigInt(parseInt(bet, 10) || 0);
       if (betAmount < 1000n) return res.status(400).json({ success: false, error: '최소 배팅금액은 1,000원입니다.' });
       if (userCash < betAmount) return res.status(400).json({ success: false, error: '보유 현금이 부족합니다.' });
+
+      const { turns, maxTurns } = calculateUserTurns(userData);
+      const remainingTurns = Math.max(0, turns - 1);
 
       const outcomes = ['앞면', '뒷면'];
       const result = outcomes[Math.floor(Math.random() * outcomes.length)];
@@ -499,26 +513,33 @@ function startWebServer(client) {
       const multiplier = isWin ? 1.95 : 0;
       const payout = isWin ? BigInt(Math.floor(Number(betAmount) * multiplier)) : 0n;
       const profit = payout - betAmount;
-      const newCash = userCash + profit;
-      const remainingTurns = turns - 1;
+      const balanceBefore = userCash;
+      const balanceAfter = userCash + profit;
 
       await pool.query(
         'UPDATE users SET cash = ?, gamble_turns = ?, last_turn_update = NOW() WHERE discord_id = ?',
-        [newCash.toString(), remainingTurns, session.id]
+        [balanceAfter.toString(), remainingTurns, session.id]
       );
-      await pool.query(
-        'INSERT INTO gambling_logs (user_id, game, bet, payout, profit) VALUES (?, ?, ?, ?, ?)',
-        [session.id, 'WEB_COINFLIP', betAmount.toString(), payout.toString(), profit.toString()]
-      );
+
+      const [insertRes] = await pool.query(`
+        INSERT INTO gambling_logs (user_id, game, bet, payout, profit, balance_before, balance_after, details)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        session.id, 'WEB_COINFLIP', betAmount.toString(), payout.toString(), profit.toString(),
+        balanceBefore.toString(), balanceAfter.toString(),
+        JSON.stringify({ userChoice: choice, coinResult: result, multiplier, isAllIn: (betAmount === userCash) })
+      ]);
 
       res.json({
         success: true,
+        logId: insertRes.insertId,
         coinResult: result,
         userChoice: choice,
         isWin,
         payout: payout.toString(),
         profit: profit.toString(),
-        newCash: newCash.toString(),
+        newCash: balanceAfter.toString(),
+        balanceBefore: balanceBefore.toString(),
         turns: remainingTurns,
         maxTurns,
         message: isWin ? `🎉 적중! 동전 결과는 [${result}] 입니다 (+${formatMoney(profit)})` : `💀 실패! 동전 결과는 [${result}] 입니다 (-${formatMoney(betAmount)})`
@@ -530,7 +551,7 @@ function startWebServer(client) {
     }
   });
 
-  // 6. 🎲 웹 주사위 대결 API (스팸 방지 락)
+  // 6. 🎲 웹 주사위 대결 API (무제한 플레이 지원 + 진행 중 방어 락 + 올인 검증 + 잔고 스냅샷)
   app.post('/api/game/dice', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -543,19 +564,20 @@ function startWebServer(client) {
     let { bet } = req.body;
     try {
       const userData = await getOrCreateUser(session.id);
-      const { turns, maxTurns } = calculateUserTurns(userData);
+      const userCash = BigInt(userData.cash || 0);
 
-      if (turns <= 0) {
-        return res.status(400).json({
-          success: false,
-          error: '⚡ 도박 턴이 모두 소진되었습니다! (30초마다 +1 충전되거나, [클리커 채굴]로 턴을 획득하세요!)'
-        });
+      let betAmount = 0n;
+      if (bet === 'all' || bet === '올인' || bet === '전액') {
+        betAmount = userCash;
+      } else {
+        betAmount = BigInt(parseInt(bet, 10) || 0);
       }
 
-      const userCash = BigInt(userData.cash || 0);
-      let betAmount = bet === 'all' ? userCash : BigInt(parseInt(bet, 10) || 0);
       if (betAmount < 1000n) return res.status(400).json({ success: false, error: '최소 배팅금액은 1,000원입니다.' });
       if (userCash < betAmount) return res.status(400).json({ success: false, error: '보유 현금이 부족합니다.' });
+
+      const { turns, maxTurns } = calculateUserTurns(userData);
+      const remainingTurns = Math.max(0, turns - 1);
 
       const userDice1 = Math.floor(Math.random() * 6) + 1;
       const userDice2 = Math.floor(Math.random() * 6) + 1;
@@ -577,27 +599,34 @@ function startWebServer(client) {
 
       const payout = BigInt(Math.floor(Number(betAmount) * multiplier));
       const profit = payout - betAmount;
-      const newCash = userCash + profit;
-      const remainingTurns = turns - 1;
+      const balanceBefore = userCash;
+      const balanceAfter = userCash + profit;
 
       await pool.query(
         'UPDATE users SET cash = ?, gamble_turns = ?, last_turn_update = NOW() WHERE discord_id = ?',
-        [newCash.toString(), remainingTurns, session.id]
+        [balanceAfter.toString(), remainingTurns, session.id]
       );
-      await pool.query(
-        'INSERT INTO gambling_logs (user_id, game, bet, payout, profit) VALUES (?, ?, ?, ?, ?)',
-        [session.id, 'WEB_DICE', betAmount.toString(), payout.toString(), profit.toString()]
-      );
+
+      const [insertRes] = await pool.query(`
+        INSERT INTO gambling_logs (user_id, game, bet, payout, profit, balance_before, balance_after, details)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        session.id, 'WEB_DICE', betAmount.toString(), payout.toString(), profit.toString(),
+        balanceBefore.toString(), balanceAfter.toString(),
+        JSON.stringify({ userDice: [userDice1, userDice2, userTotal], botDice: [botDice1, botDice2, botTotal], isAllIn: (betAmount === userCash) })
+      ]);
 
       res.json({
         success: true,
+        logId: insertRes.insertId,
         userDice: [userDice1, userDice2, userTotal],
         botDice: [botDice1, botDice2, botTotal],
         isWin: userTotal > botTotal,
         isTie: userTotal === botTotal,
         payout: payout.toString(),
         profit: profit.toString(),
-        newCash: newCash.toString(),
+        newCash: balanceAfter.toString(),
+        balanceBefore: balanceBefore.toString(),
         turns: remainingTurns,
         maxTurns,
         message: resultText
@@ -857,7 +886,7 @@ function startWebServer(client) {
     }
   });
 
-  // 12. 📰 실시간 증시 뉴스 & 공시 피드 API (필터 및 검색 지원)
+  // 12. 📰 실시간 증시 뉴스 & 공시 피드 API
   app.get('/api/market/news', async (req, res) => {
     const { category, search, limit } = req.query;
     try {
@@ -885,6 +914,77 @@ function startWebServer(client) {
       res.json({ success: true, count: rows.length, news: rows });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 13. 🔄 [관리자 전용] 도박 이력 롤백 & 이전 잔고 원상 복구 API
+  app.post('/api/admin/rollback/gambling/:logId', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) {
+      return res.status(403).json({ success: false, error: '관리자 권한이 필요합니다.' });
+    }
+
+    const { logId } = req.params;
+    const connection = await pool.getConnection();
+    try {
+      const [logs] = await connection.query('SELECT * FROM gambling_logs WHERE id = ?', [logId]);
+      if (logs.length === 0) return res.status(404).json({ success: false, error: '해당 도박 이력을 찾을 수 없습니다.' });
+
+      const log = logs[0];
+      if (log.is_rolled_back) {
+        return res.status(400).json({ success: false, error: '이미 롤백/복구 처리된 도박 건입니다.' });
+      }
+
+      const targetUserId = log.user_id;
+      const balanceBefore = BigInt(log.balance_before);
+
+      await connection.beginTransaction();
+
+      // 유저 잔고를 도박 전 잔고로 복구
+      await connection.query('UPDATE users SET cash = ? WHERE discord_id = ?', [balanceBefore.toString(), targetUserId]);
+
+      // 롤백 플래그 갱신
+      await connection.query('UPDATE gambling_logs SET is_rolled_back = 1, rolled_back_at = NOW() WHERE id = ?', [logId]);
+
+      await connection.commit();
+
+      await logAdminAction(session.id, session.username, 'WEB_ROLLBACK_GAMBLE', targetUserId, {
+        logId,
+        game: log.game,
+        profit: log.profit,
+        restoredBalance: balanceBefore.toString()
+      });
+
+      res.json({
+        success: true,
+        message: `✅ 도박 이력 #${logId} (${log.game}) 롤백 완료! 유저 잔고가 ${formatMoney(balanceBefore)}로 복구되었습니다.`,
+        restoredBalance: balanceBefore.toString(),
+        targetUserId
+      });
+    } catch (err) {
+      await connection.rollback().catch(() => {});
+      res.status(500).json({ success: false, error: err.message });
+    } finally {
+      connection.release();
+    }
+  });
+
+  // API - 관리자 전용 도박 상세 기록 JSON
+  app.get('/api/admin/logs/gambling', async (req, res) => {
+    const currentUser = getSessionUser(req);
+    if (!currentUser || !config.isAdmin(currentUser.id)) {
+      return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+    }
+    try {
+      const [rows] = await pool.query(`
+        SELECT g.*, u.username 
+        FROM gambling_logs g
+        LEFT JOIN users u ON g.user_id = u.discord_id
+        ORDER BY g.id DESC LIMIT 100
+      `);
+      res.json({ success: true, count: rows.length, logs: rows });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
   });
 
@@ -1858,13 +1958,13 @@ function startWebServer(client) {
               </div>
             </div>
 
-            <!-- 탭 4: 웹 카지노 & 도박 (스팸 방지 락) -->
+            <!-- 탭 4: 웹 카지노 & 도박 (스팸 방지 락 + 올인 검증) -->
             <div id="tab-casino" class="tab-pane">
               <div class="casino-hub-grid">
                 
                 <!-- 슬롯머신 -->
                 <div class="casino-card">
-                  <span class="turn-cost-tag">⚡ 1턴 소모</span>
+                  <span class="turn-cost-tag">🎰 무제한 플레이</span>
                   <div class="casino-title">🎰 3릴 슬롯머신</div>
                   <p class="casino-desc">다이아몬드(50배), 7(20배), 골든벨(10배), 포도(5배), 레몬(3배), 체리(2배)</p>
                   
@@ -1884,7 +1984,7 @@ function startWebServer(client) {
                       <button class="btn-chip" onclick="setSlotBet(5000)">5천원</button>
                       <button class="btn-chip" onclick="setSlotBet(10000)">1만원</button>
                       <button class="btn-chip" onclick="setSlotBet(50000)">5만원</button>
-                      <button class="btn-chip" onclick="setSlotBet('all')">올인 (MAX)</button>
+                      <button class="btn-chip" style="background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #fca5a5;" onclick="setSlotBet('all')">🔥 올인 (ALL-IN)</button>
                     </div>
                   </div>
 
@@ -1894,7 +1994,7 @@ function startWebServer(client) {
 
                 <!-- 동전 던지기 -->
                 <div class="casino-card">
-                  <span class="turn-cost-tag">⚡ 1턴 소모</span>
+                  <span class="turn-cost-tag">🪙 무제한 플레이</span>
                   <div class="casino-title">🪙 동전 던지기 (1.95배)</div>
                   <p class="casino-desc">앞면 또는 뒷면을 선택하고 동전을 던져 1.95배의 보상을 획득하세요!</p>
                   
@@ -1915,7 +2015,7 @@ function startWebServer(client) {
                       <button class="btn-chip" onclick="setCoinBet(5000)">5천원</button>
                       <button class="btn-chip" onclick="setCoinBet(10000)">1만원</button>
                       <button class="btn-chip" onclick="setCoinBet(50000)">5만원</button>
-                      <button class="btn-chip" onclick="setCoinBet('all')">올인</button>
+                      <button class="btn-chip" style="background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #fca5a5;" onclick="setCoinBet('all')">🔥 올인 (ALL-IN)</button>
                     </div>
                   </div>
 
@@ -1925,7 +2025,7 @@ function startWebServer(client) {
 
                 <!-- 주사위 대결 -->
                 <div class="casino-card">
-                  <span class="turn-cost-tag">⚡ 1턴 소모</span>
+                  <span class="turn-cost-tag">🎲 무제한 플레이</span>
                   <div class="casino-title">🎲 주사위 대결 (2.0배)</div>
                   <p class="casino-desc">나와 딜러가 각각 2개의 주사위를 굴려 더 높은 숫자가 나오면 승리!</p>
                   
@@ -1951,7 +2051,7 @@ function startWebServer(client) {
                       <button class="btn-chip" onclick="setDiceBet(5000)">5천원</button>
                       <button class="btn-chip" onclick="setDiceBet(10000)">1만원</button>
                       <button class="btn-chip" onclick="setDiceBet(50000)">5만원</button>
-                      <button class="btn-chip" onclick="setDiceBet('all')">올인</button>
+                      <button class="btn-chip" style="background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #fca5a5;" onclick="setDiceBet('all')">🔥 올인 (ALL-IN)</button>
                     </div>
                   </div>
 
@@ -2108,6 +2208,11 @@ function startWebServer(client) {
             // 🛑 게임 진행 중 중복 실행/스팸 방지 락 변수
             let isGameInProgress = false;
 
+            function getCurrentUserCashNum() {
+              const text = document.getElementById('my-cash')?.innerText || '0';
+              return parseInt(text.replace(/[^0-9]/g, ''), 10) || 0;
+            }
+
             function setGameLock(inProgress) {
               isGameInProgress = inProgress;
               const buttons = [
@@ -2118,8 +2223,8 @@ function startWebServer(client) {
               buttons.forEach(btn => {
                 if (btn) {
                   btn.disabled = inProgress;
-                  if (inProgress) btn.style.opacity = '0.6';
-                  else btn.style.opacity = '1';
+                  btn.style.opacity = inProgress ? '0.6' : '1';
+                  btn.style.cursor = inProgress ? 'not-allowed' : 'pointer';
                 }
               });
             }
@@ -2143,9 +2248,36 @@ function startWebServer(client) {
               document.getElementById('choice-back').classList.toggle('selected', choice === '뒷면');
             }
 
-            function setSlotBet(val) { if (!isGameInProgress) document.getElementById('slot-bet').value = val; }
-            function setCoinBet(val) { if (!isGameInProgress) document.getElementById('coin-bet').value = val; }
-            function setDiceBet(val) { if (!isGameInProgress) document.getElementById('dice-bet').value = val; }
+            // 올인 버튼 정확한 처리
+            function setSlotBet(val) {
+              if (isGameInProgress) return;
+              if (val === 'all') {
+                const cash = getCurrentUserCashNum();
+                document.getElementById('slot-bet').value = cash > 0 ? cash : 'all';
+              } else {
+                document.getElementById('slot-bet').value = val;
+              }
+            }
+
+            function setCoinBet(val) {
+              if (isGameInProgress) return;
+              if (val === 'all') {
+                const cash = getCurrentUserCashNum();
+                document.getElementById('coin-bet').value = cash > 0 ? cash : 'all';
+              } else {
+                document.getElementById('coin-bet').value = val;
+              }
+            }
+
+            function setDiceBet(val) {
+              if (isGameInProgress) return;
+              if (val === 'all') {
+                const cash = getCurrentUserCashNum();
+                document.getElementById('dice-bet').value = cash > 0 ? cash : 'all';
+              } else {
+                document.getElementById('dice-bet').value = val;
+              }
+            }
 
             // 📰 뉴스 카테고리 필터 및 검색
             function selectNewsCategory(cat) {
@@ -2340,13 +2472,14 @@ function startWebServer(client) {
                 '</svg>';
             }
 
-            // 3. 🎰 슬롯머신 실행 (끝나기 전 재실행 불가)
+            // 3. 🎰 슬롯머신 실행 (끝나기 전 재실행 완전 차단)
             async function playSlotMachine() {
               if (isGameInProgress) return;
               setGameLock(true);
 
               const bet = document.getElementById('slot-bet').value;
               const resultBox = document.getElementById('slot-result');
+              const btn = document.getElementById('btn-spin-slot');
               const reel1 = document.getElementById('reel-1');
               const reel2 = document.getElementById('reel-2');
               const reel3 = document.getElementById('reel-3');
@@ -2354,7 +2487,8 @@ function startWebServer(client) {
               reel1.classList.add('spinning');
               reel2.classList.add('spinning');
               reel3.classList.add('spinning');
-              resultBox.innerText = '🎰 릴이 회전하고 있습니다... (1턴 소모)';
+              btn.innerText = '⏳ 슬롯머신 회전 중...';
+              resultBox.innerText = '🎰 릴이 회전하고 있습니다...';
               resultBox.style.color = '#fbbf24';
 
               try {
@@ -2370,6 +2504,7 @@ function startWebServer(client) {
                   reel2.classList.remove('spinning');
                   reel3.classList.remove('spinning');
                   setGameLock(false);
+                  btn.innerText = '🎰 슬롯머신 레버 당기기';
 
                   if (!data.success) {
                     resultBox.innerText = '❌ ' + (data.error || '오류 발생');
@@ -2388,6 +2523,7 @@ function startWebServer(client) {
                 }, 1000);
               } catch (e) {
                 setGameLock(false);
+                btn.innerText = '🎰 슬롯머신 레버 당기기';
                 reel1.classList.remove('spinning');
                 reel2.classList.remove('spinning');
                 reel3.classList.remove('spinning');
@@ -2395,7 +2531,7 @@ function startWebServer(client) {
               }
             }
 
-            // 4. 🪙 동전 던지기 실행 (끝나기 전 재실행 불가)
+            // 4. 🪙 동전 던지기 실행 (끝나기 전 재실행 완전 차단)
             async function playCoinFlip() {
               if (isGameInProgress) return;
               setGameLock(true);
@@ -2403,9 +2539,11 @@ function startWebServer(client) {
               const bet = document.getElementById('coin-bet').value;
               const coin = document.getElementById('coin-element');
               const resultBox = document.getElementById('coin-result');
+              const btn = document.getElementById('btn-flip-coin');
 
               coin.classList.add('flipping');
-              resultBox.innerText = '🪙 동전이 회전하고 있습니다... (1턴 소모)';
+              btn.innerText = '⏳ 동전 던지는 중...';
+              resultBox.innerText = '🪙 동전이 회전하고 있습니다...';
 
               try {
                 const res = await fetch('/api/game/coinflip', {
@@ -2418,6 +2556,7 @@ function startWebServer(client) {
                 setTimeout(() => {
                   coin.classList.remove('flipping');
                   setGameLock(false);
+                  btn.innerText = '🪙 동전 던지기';
 
                   if (!data.success) {
                     resultBox.innerText = '❌ ' + (data.error || '오류 발생');
@@ -2433,12 +2572,13 @@ function startWebServer(client) {
                 }, 900);
               } catch (e) {
                 setGameLock(false);
+                btn.innerText = '🪙 동전 던지기';
                 coin.classList.remove('flipping');
                 resultBox.innerText = '서버 통신 실패';
               }
             }
 
-            // 5. 🎲 주사위 대결 (끝나기 전 재실행 불가)
+            // 5. 🎲 주사위 대결 (끝나기 전 재실행 완전 차단)
             async function playDice() {
               if (isGameInProgress) return;
               setGameLock(true);
@@ -2447,10 +2587,12 @@ function startWebServer(client) {
               const userBox = document.getElementById('user-dice-box');
               const botBox = document.getElementById('bot-dice-box');
               const resultBox = document.getElementById('dice-result');
+              const btn = document.getElementById('btn-roll-dice');
 
+              btn.innerText = '⏳ 주사위 굴리는 중...';
               userBox.innerText = '🎲';
               botBox.innerText = '🎲';
-              resultBox.innerText = '🎲 주사위를 굴리고 있습니다... (1턴 소모)';
+              resultBox.innerText = '🎲 주사위를 굴리고 있습니다...';
 
               try {
                 const res = await fetch('/api/game/dice', {
@@ -2462,6 +2604,8 @@ function startWebServer(client) {
 
                 setTimeout(() => {
                   setGameLock(false);
+                  btn.innerText = '🎲 주사위 굴리기';
+
                   if (!data.success) {
                     resultBox.innerText = '❌ ' + (data.error || '오류 발생');
                     resultBox.style.color = '#ef4444';
@@ -2477,6 +2621,7 @@ function startWebServer(client) {
                 }, 800);
               } catch (e) {
                 setGameLock(false);
+                btn.innerText = '🎲 주사위 굴리기';
                 resultBox.innerText = '서버 통신 실패';
               }
             }
@@ -2618,7 +2763,7 @@ function startWebServer(client) {
     }
   });
 
-  // 👑 관리자 전용 대시보드 페이지 (/admin)
+  // 👑 관리자 전용 대시보드 페이지 (/admin) - 실시간 도박 롤백 & 복구 기능 탑재
   app.get('/admin', async (req, res) => {
     const currentUser = getSessionUser(req);
     if (!currentUser || !config.isAdmin(currentUser.id)) {
@@ -2649,8 +2794,41 @@ function startWebServer(client) {
     try {
       const [webLogs] = await pool.query('SELECT * FROM web_access_logs ORDER BY id DESC LIMIT 50');
       const [cmdLogs] = await pool.query('SELECT * FROM command_logs ORDER BY id DESC LIMIT 50');
+      const [gambleLogs] = await pool.query(`
+        SELECT g.*, u.username 
+        FROM gambling_logs g
+        LEFT JOIN users u ON g.user_id = u.discord_id
+        ORDER BY g.id DESC LIMIT 50
+      `);
       const [userCountRow] = await pool.query('SELECT COUNT(*) as count FROM users');
       const totalUsers = userCountRow[0]?.count || 0;
+
+      let gambleRowsHtml = '';
+      for (const g of gambleLogs) {
+        const profit = BigInt(g.profit);
+        const isProfit = profit >= 0n;
+        const profitClass = isProfit ? 'status-ok' : 'status-err';
+        const sign = isProfit ? '+' : '';
+        const isRolledBack = Boolean(g.is_rolled_back);
+
+        const rollbackBtn = isRolledBack
+          ? `<span style="color:#9ca3af; font-size:0.75rem; font-weight:700;">✅ 롤백완료</span>`
+          : `<button onclick="rollbackGamble(${g.id})" class="btn-rollback">⏪ 이전 잔고 복구</button>`;
+
+        gambleRowsHtml += `
+          <tr id="gamble-row-${g.id}">
+            <td>#${g.id}</td>
+            <td>${g.created_at ? new Date(g.created_at).toISOString().replace('T', ' ').slice(0, 19) : '-'}</td>
+            <td><b>${g.username || '유저'}</b> (<code>${g.user_id}</code>)</td>
+            <td><span class="cmd-tag">${g.game}</span></td>
+            <td>${formatMoney(g.bet)}</td>
+            <td class="${profitClass}"><b>${sign}${formatMoney(profit)}</b></td>
+            <td><code>${formatMoney(g.balance_before)}</code></td>
+            <td><code>${formatMoney(g.balance_after)}</code></td>
+            <td>${rollbackBtn}</td>
+          </tr>
+        `;
+      }
 
       let webRowsHtml = '';
       for (const log of webLogs) {
@@ -2693,7 +2871,7 @@ function startWebServer(client) {
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>👑 관리자 실시간 관제 대시보드</title>
+          <title>👑 관리자 실시간 관제 & 자산 롤백 대시보드</title>
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
           <style>
             :root { --bg: #090d16; --card: #111827; --border: rgba(255, 255, 255, 0.08); --primary: #6366f1; }
@@ -2717,12 +2895,14 @@ function startWebServer(client) {
             .method-tag { background: #374151; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; color: #93c5fd; }
             .cmd-tag { background: rgba(99, 102, 241, 0.2); color: #818cf8; padding: 3px 8px; border-radius: 6px; font-weight: 700; }
             .badge-admin { background: #d97706; color: #fff; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+            .btn-rollback { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; font-weight: 700; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-size: 0.75rem; }
+            .btn-rollback:hover { background: #ef4444; color: #fff; }
           </style>
         </head>
         <body>
           <div class="header">
             <div>
-              <h1>👑 관리자 실시간 시스템 & 로그 관제 대시보드</h1>
+              <h1>👑 관리자 실시간 시스템 & 자산 롤백 복구 센터</h1>
               <p style="color: #9ca3af; font-size: 0.9rem; margin-top: 4px;">총 가입자: ${totalUsers}명 | 관리자 권한: 활성화</p>
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
@@ -2732,11 +2912,33 @@ function startWebServer(client) {
           </div>
 
           <div class="api-links">
+            <a href="/api/admin/logs/gambling" target="_blank" class="btn-json">🎰 도박 이력 & 롤백 JSON API</a>
             <a href="/api/admin/logs/access" target="_blank" class="btn-json">📥 웹 접속 JSON 로그 API</a>
             <a href="/api/admin/logs/commands" target="_blank" class="btn-json">📥 디스코드 명령어 JSON 로그 API</a>
-            <a href="/api/market" target="_blank" class="btn-json">📊 주식 시세 & 상승세 JSON API</a>
-            <a href="/api/market/news" target="_blank" class="btn-json">📰 증시 뉴스 피드 JSON API</a>
-            <a href="/api/leaderboard" target="_blank" class="btn-json">🏆 순위표 JSON API</a>
+            <a href="/api/market" target="_blank" class="btn-json">📊 주식 시세 JSON API</a>
+          </div>
+
+          <!-- 도박 상세 기록 & 원클릭 잔고 롤백 센터 -->
+          <div class="card">
+            <h2>🎰 실시간 도박 상세 기록 & 원클릭 잔고 롤백 복구 센터 (최근 50건)</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>번호</th>
+                  <th>시간</th>
+                  <th>유저 (@계정)</th>
+                  <th>게임</th>
+                  <th>배팅금</th>
+                  <th>손익</th>
+                  <th>도박 전 잔고</th>
+                  <th>도박 후 잔고</th>
+                  <th>원클릭 롤백 복구</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${gambleRowsHtml || '<tr><td colspan="9" style="text-align: center; color: #6b7280;">도박 기록이 없습니다.</td></tr>'}
+              </tbody>
+            </table>
           </div>
 
           <div class="card">
@@ -2777,6 +2979,24 @@ function startWebServer(client) {
               </tbody>
             </table>
           </div>
+
+          <script>
+            async function rollbackGamble(logId) {
+              if (!confirm('이 도박 건(#' + logId + ')을 취소하고 유저의 잔고를 [도박 이전 잔고]로 복구하시겠습니까?')) return;
+              try {
+                const res = await fetch('/api/admin/rollback/gambling/' + logId, { method: 'POST' });
+                const data = await res.json();
+                if (!data.success) {
+                  alert('❌ 롤백 실패: ' + data.error);
+                  return;
+                }
+                alert(data.message);
+                location.reload();
+              } catch (e) {
+                alert('서버 통신 실패');
+              }
+            }
+          </script>
         </body>
         </html>
       `);

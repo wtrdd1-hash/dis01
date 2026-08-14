@@ -180,7 +180,7 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // 도박 및 이력 로그 테이블
+    // 도박 및 이력 로그 테이블 (자산 스냅샷 및 롤백 복구 지원)
     await connection.query(`
       CREATE TABLE IF NOT EXISTS gambling_logs (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -189,10 +189,29 @@ async function initDatabase() {
         bet BIGINT NOT NULL,
         payout BIGINT NOT NULL,
         profit BIGINT NOT NULL,
+        balance_before BIGINT NOT NULL DEFAULT 0,
+        balance_after BIGINT NOT NULL DEFAULT 0,
+        details JSON NULL,
+        is_rolled_back TINYINT(1) NOT NULL DEFAULT 0,
+        rolled_back_at DATETIME NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_user_game (user_id, game)
+        INDEX idx_user_game (user_id, game),
+        INDEX idx_created_at (created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    const [gambleSnapCols] = await connection.query("SHOW COLUMNS FROM gambling_logs LIKE 'balance_before'");
+    if (gambleSnapCols.length === 0) {
+      await connection.query(`
+        ALTER TABLE gambling_logs
+        ADD COLUMN balance_before BIGINT NOT NULL DEFAULT 0,
+        ADD COLUMN balance_after BIGINT NOT NULL DEFAULT 0,
+        ADD COLUMN details JSON NULL,
+        ADD COLUMN is_rolled_back TINYINT(1) NOT NULL DEFAULT 0,
+        ADD COLUMN rolled_back_at DATETIME NULL;
+      `);
+      console.log('✅ gambling_logs 테이블에 자산 스냅샷 및 롤백(balance_before, is_rolled_back) 컬럼이 추가되었습니다.');
+    }
 
     // 모든 슬래시 명령어 실행 로그 테이블
     await connection.query(`
