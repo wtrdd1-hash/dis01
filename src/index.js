@@ -1,0 +1,60 @@
+const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
+const config = require('./config/config');
+
+if (!config.token) {
+  console.error('❌ .env 파일에 디스코드 봇 토큰(DISCORD_TOKEN 또는 t)이 설정되어 있지 않습니다.');
+  process.exit(1);
+}
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
+});
+
+const commandsMap = new Collection();
+
+// commands 폴더 내의 모든 js 파일 재귀 로드
+function loadCommands(dir) {
+  const files = fs.readdirSync(dir);
+  for (const file of files) {
+    const fullPath = path.join(dir, file);
+    const stat = fs.statSync(fullPath);
+    if (stat.isDirectory()) {
+      loadCommands(fullPath);
+    } else if (file.endsWith('.js')) {
+      const command = require(fullPath);
+      if (command.data && command.execute) {
+        commandsMap.set(command.data.name, command);
+        console.log(`📦 명령어 로드 성공: /${command.data.name}`);
+      }
+    }
+  }
+}
+
+const commandsPath = path.join(__dirname, 'commands');
+loadCommands(commandsPath);
+
+// events 로드
+const readyEvent = require('./events/ready');
+const interactionEvent = require('./events/interactionCreate');
+
+client.once(readyEvent.name, () => readyEvent.execute(client, commandsMap));
+client.on(interactionEvent.name, (interaction) => interactionEvent.execute(interaction, client, commandsMap));
+
+// 프로세스 안정성 예외 핸들러 (서버 다운 방지)
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ [Unhandled Rejection]:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('❌ [Uncaught Exception]:', err);
+});
+
+client.login(config.token).catch(err => {
+  console.error('❌ 디스코드 로그인 실패! 토큰을 확인하세요:', err.message);
+});

@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Environment variables (Sensitive - Block all .env files)
+.env
+.env*
+*.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# Scratch & temporary files
+scratch/
+.idea/
+.vscode/
+.DS_Store
