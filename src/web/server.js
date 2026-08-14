@@ -1950,6 +1950,94 @@ function startWebServer(client) {
       const autoCost = (currentAutoLevel + 1) * 12000;
       const powerVal = currentClickerLevel * 10;
       const autoVal = currentAutoLevel * 15;
+      const userHoldingsJson = JSON.stringify(userHoldingsMap || {});
+
+      const adminFeedTabHtml = isAdminUser ? `
+        <!-- 탭: ⚡ 실시간 모든 로그 (관리자 전용) -->
+        <div id="tab-feed" class="tab-pane">
+          <div class="feed-container">
+            <div class="feed-header">
+              <div class="feed-title">
+                <span class="pulse-dot"></span>
+                ⚡ 실시간 모든 시스템 로그 & 주가 변동 스트림 (관리자 전용)
+              </div>
+              <div class="feed-status-badge">
+                <span class="pulse-dot"></span>
+                3초 자동 갱신 라이브 피드
+              </div>
+            </div>
+
+            <div class="feed-filter-bar">
+              <button class="btn-feed-filter active" onclick="setFeedFilter('ALL')">🌐 전체 로그</button>
+              <button class="btn-feed-filter" onclick="setFeedFilter('STOCK_PRICE')">📈 주가 변동 틱</button>
+              <button class="btn-feed-filter" onclick="setFeedFilter('STOCK_TRADE')">🛒 주식 매매 체결</button>
+              <button class="btn-feed-filter" onclick="setFeedFilter('GAMBLE')">🎰 카지노 도박</button>
+              <button class="btn-feed-filter" onclick="setFeedFilter('ECONOMY')">🎁 경제/지원금</button>
+              <button class="btn-feed-filter" onclick="setFeedFilter('NEWS')">📰 시장 공시/속보</button>
+              <input type="text" id="feed-search-input" class="feed-search-input" placeholder="🔍 유저명, 종목명, 키워드 검색..." oninput="filterFeedLocally()">
+            </div>
+
+            <div class="feed-stream-list" id="feed-stream-container">
+              <div style="text-align: center; color: #9ca3af; padding: 30px;">
+                <span class="pulse-dot"></span> 실시간 시스템 로그 데이터를 불러오는 중...
+              </div>
+            </div>
+          </div>
+        </div>
+      ` : '';
+
+      const profileHeaderHtml = currentUser && userAssets
+        ? `
+          <div class="profile-user-header">
+            <img src="${currentUser.avatar}" class="profile-avatar-big" alt="Avatar" onError="this.src='https://cdn.discordapp.com/embed/avatars/0.png';">
+            <div>
+              <h3 style="font-size: 1.25rem; font-weight: 800; color: #fff;">@${currentUser.username} ${isAdminUser ? '<span class="admin-tag" style="font-size:0.85rem; vertical-align:middle;">👑 관리자</span>' : ''}</h3>
+              <p style="color: #9ca3af; font-size: 0.8rem; margin-top: 2px;">Discord ID: <code>${currentUser.id}</code></p>
+            </div>
+          </div>
+        `
+        : '';
+
+      const profileStatsHtml = currentUser && userAssets
+        ? `
+          <div class="profile-stats-grid">
+            <div class="profile-stat-box">
+              <span class="profile-stat-lbl">💵 보유 현금</span>
+              <span class="profile-stat-val" style="color: #34d399;">${formatMoney(userAssets.cash)}</span>
+            </div>
+            <div class="profile-stat-box">
+              <span class="profile-stat-lbl">🏦 은행 예금</span>
+              <span class="profile-stat-val" style="color: #818cf8;">${formatMoney(userAssets.bank)}</span>
+            </div>
+            <div class="profile-stat-box">
+              <span class="profile-stat-lbl">📈 보유 주식 평가액</span>
+              <span class="profile-stat-val" style="color: #60a5fa;">${formatMoney(userAssets.stockVal)}</span>
+            </div>
+            <div class="profile-stat-box">
+              <span class="profile-stat-lbl">💎 총 순자산</span>
+              <span class="profile-stat-val" style="color: #fbbf24;">${formatMoney(userAssets.netWorth)}</span>
+            </div>
+            <div class="profile-stat-box">
+              <span class="profile-stat-lbl">🔥 출석 연속 기록</span>
+              <span class="profile-stat-val" style="color: #f43f5e;">${userAssets.streak || 0}일 연속</span>
+            </div>
+            <div class="profile-stat-box">
+              <span class="profile-stat-lbl">⛏️ 채굴기 / 자동봇 레벨</span>
+              <span class="profile-stat-val" style="color: #a855f7;">Lv.${currentClickerLevel} / Lv.${currentAutoLevel}</span>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-upgrade" style="flex: 1; padding: 10px;" onclick="closeProfileModal(); openInquiryModal();">✍️ 1:1 관리자 문의하기</button>
+            <a href="/auth/logout" class="btn-logout" style="display: flex; align-items: center; justify-content: center; padding: 10px 16px; margin: 0;">🚪 로그아웃</a>
+          </div>
+        `
+        : `
+          <div style="text-align: center; padding: 30px 10px;">
+            <p style="color: #9ca3af; margin-bottom: 16px;">로그인 후 내 정보와 1:1 문의를 확인하실 수 있습니다.</p>
+            <a href="${discordLoginUrl}" class="btn-discord">🎮 Discord 로그인</a>
+          </div>
+        `;
 
       res.send(`
         <!DOCTYPE html>
@@ -2904,39 +2992,7 @@ function startWebServer(client) {
               </div>
             </div>
 
-            ${isAdminUser ? `
-            <!-- 탭: ⚡ 실시간 모든 로그 (관리자 전용) -->
-            <div id="tab-feed" class="tab-pane">
-              <div class="feed-container">
-                <div class="feed-header">
-                  <div class="feed-title">
-                    <span class="pulse-dot"></span>
-                    ⚡ 실시간 모든 시스템 로그 & 주가 변동 스트림 (관리자 전용)
-                  </div>
-                  <div class="feed-status-badge">
-                    <span class="pulse-dot"></span>
-                    3초 자동 갱신 라이브 피드
-                  </div>
-                </div>
-
-                <div class="feed-filter-bar">
-                  <button class="btn-feed-filter active" onclick="setFeedFilter('ALL')">🌐 전체 로그</button>
-                  <button class="btn-feed-filter" onclick="setFeedFilter('STOCK_PRICE')">📈 주가 변동 틱</button>
-                  <button class="btn-feed-filter" onclick="setFeedFilter('STOCK_TRADE')">🛒 주식 매매 체결</button>
-                  <button class="btn-feed-filter" onclick="setFeedFilter('GAMBLE')">🎰 카지노 도박</button>
-                  <button class="btn-feed-filter" onclick="setFeedFilter('ECONOMY')">🎁 경제/지원금</button>
-                  <button class="btn-feed-filter" onclick="setFeedFilter('NEWS')">📰 시장 공시/속보</button>
-                  <input type="text" id="feed-search-input" class="feed-search-input" placeholder="🔍 유저명, 종목명, 키워드 검색..." oninput="filterFeedLocally()">
-                </div>
-
-                <div class="feed-stream-list" id="feed-stream-container">
-                  <div style="text-align: center; color: #9ca3af; padding: 30px;">
-                    <span class="pulse-dot"></span> 실시간 시스템 로그 데이터를 불러오는 중...
-                  </div>
-                </div>
-              </div>
-            </div>
-            ` : ''}
+            ${adminFeedTabHtml}
 
             <!-- 탭 2: 📰 시장 뉴스 & 경제 공시 허브 -->
             <div id="tab-news" class="tab-pane">
@@ -3348,15 +3404,7 @@ function startWebServer(client) {
                 <button class="btn-close-modal" onclick="closeProfileModal()">&times;</button>
               </div>
 
-              ${currentUser && userAssets ? `
-              <div class="profile-user-header">
-                <img src="${currentUser.avatar}" class="profile-avatar-big" alt="Avatar" onError="this.src='https://cdn.discordapp.com/embed/avatars/0.png';">
-                <div>
-                  <h3 style="font-size: 1.25rem; font-weight: 800; color: #fff;">@${currentUser.username} ${isAdminUser ? '<span class="admin-tag" style="font-size:0.85rem; vertical-align:middle;">👑 관리자</span>' : ''}</h3>
-                  <p style="color: #9ca3af; font-size: 0.8rem; margin-top: 2px;">Discord ID: <code>${currentUser.id}</code></p>
-                </div>
-              </div>
-              ` : ''}
+              ${profileHeaderHtml}
 
               <!-- 서브 탭 -->
               <div class="profile-subtabs-nav">
@@ -3366,44 +3414,7 @@ function startWebServer(client) {
 
               <!-- 서브 탭 1: 자산 현황 -->
               <div id="subtab-pane-profile">
-                ${currentUser && userAssets ? `
-                <div class="profile-stats-grid">
-                  <div class="profile-stat-box">
-                    <span class="profile-stat-lbl">💵 보유 현금</span>
-                    <span class="profile-stat-val" style="color: #34d399;">${formatMoney(userAssets.cash)}</span>
-                  </div>
-                  <div class="profile-stat-box">
-                    <span class="profile-stat-lbl">🏦 은행 예금</span>
-                    <span class="profile-stat-val" style="color: #818cf8;">${formatMoney(userAssets.bank)}</span>
-                  </div>
-                  <div class="profile-stat-box">
-                    <span class="profile-stat-lbl">📈 보유 주식 평가액</span>
-                    <span class="profile-stat-val" style="color: #60a5fa;">${formatMoney(userAssets.stockVal)}</span>
-                  </div>
-                  <div class="profile-stat-box">
-                    <span class="profile-stat-lbl">💎 총 순자산</span>
-                    <span class="profile-stat-val" style="color: #fbbf24;">${formatMoney(userAssets.netWorth)}</span>
-                  </div>
-                  <div class="profile-stat-box">
-                    <span class="profile-stat-lbl">🔥 출석 연속 기록</span>
-                    <span class="profile-stat-val" style="color: #f43f5e;">${userAssets.streak || 0}일 연속</span>
-                  </div>
-                  <div class="profile-stat-box">
-                    <span class="profile-stat-lbl">⛏️ 채굴기 / 자동봇 레벨</span>
-                    <span class="profile-stat-val" style="color: #a855f7;">Lv.${currentClickerLevel} / Lv.${currentAutoLevel}</span>
-                  </div>
-                </div>
-
-                <div style="display: flex; gap: 8px;">
-                  <button class="btn-upgrade" style="flex: 1; padding: 10px;" onclick="closeProfileModal(); openInquiryModal();">✍️ 1:1 관리자 문의하기</button>
-                  <a href="/auth/logout" class="btn-logout" style="display: flex; align-items: center; justify-content: center; padding: 10px 16px; margin: 0;">🚪 로그아웃</a>
-                </div>
-                ` : `
-                <div style="text-align: center; padding: 30px 10px;">
-                  <p style="color: #9ca3af; margin-bottom: 16px;">로그인 후 내 정보와 1:1 문의를 확인하실 수 있습니다.</p>
-                  <a href="${discordLoginUrl}" class="btn-discord">🎮 Discord 로그인</a>
-                </div>
-                `}
+                ${profileStatsHtml}
               </div>
 
               <!-- 서브 탭 2: 내 문의 내역 -->
@@ -3469,8 +3480,12 @@ function startWebServer(client) {
           </div>
 
           <!-- 웹 인터랙티브 & 실시간 라이브 스트림 스크립트 -->
+          <script id="user-holdings-data" type="application/json">${userHoldingsJson}</script>
           <script>
-            let userHoldings = ${JSON.stringify(userHoldingsMap || {})};
+            let userHoldings = {};
+            try {
+              userHoldings = JSON.parse(document.getElementById('user-holdings-data').textContent || '{}');
+            } catch(e) {}
             let selectedCoin = '앞면';
             let currentTrade = { stockId: '', name: '', price: 0, action: 'buy' };
             let currentDetailStock = null;
@@ -4234,12 +4249,12 @@ function startWebServer(client) {
               } else if (currentTrade.action === 'sell' && count > holding) {
                 warnBox.style.display = 'block';
                 warnBox.style.color = '#ef4444';
-                warnBox.innerText = `⚠️ 보유 수량(${holding.toLocaleString()}주)을 초과하여 매도할 수 없습니다.`;
+                warnBox.innerText = '⚠️ 보유 수량(' + holding.toLocaleString() + '주)을 초과하여 매도할 수 없습니다.';
                 if (submitBtn) submitBtn.disabled = true;
               } else if (currentTrade.action === 'buy' && Number(total) > userCash) {
                 warnBox.style.display = 'block';
                 warnBox.style.color = '#ef4444';
-                warnBox.innerText = `⚠️ 보유 현금(${userCash.toLocaleString()}원)이 부족합니다.`;
+                warnBox.innerText = '⚠️ 보유 현금(' + userCash.toLocaleString() + '원)이 부족합니다.';
                 if (submitBtn) submitBtn.disabled = true;
               } else {
                 warnBox.style.display = 'none';
@@ -4305,12 +4320,12 @@ function startWebServer(client) {
               }
 
               if (currentTrade.action === 'sell' && count > holding) {
-                showToast('error', '보유 수량 부족', `보유 주식(${holding}주)보다 많은 수량을 매도할 수 없습니다.`);
+                showToast('error', '보유 수량 부족', '보유 주식(' + holding + '주)보다 많은 수량을 매도할 수 없습니다.');
                 return;
               }
 
               if (currentTrade.action === 'buy' && total > userCash) {
-                showToast('error', '현금 부족', `보유 현금(${userCash.toLocaleString()}원)이 부족합니다.`);
+                showToast('error', '현금 부족', '보유 현금(' + userCash.toLocaleString() + '원)이 부족합니다.');
                 return;
               }
 
