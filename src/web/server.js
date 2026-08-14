@@ -720,7 +720,7 @@ function startWebServer(client) {
     }
   });
 
-  // 8. 💸 정부 기본소득 지원금 API (10분 쿨타임 & 경제 로그 기록)
+  // 8. 💸 정부 기본소득 지원금 API (돈이 없을 때는 쿨타임 없이 무제한 즉시 지급)
   app.post('/api/economy/subsidy', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -729,26 +729,30 @@ function startWebServer(client) {
       const userData = await getOrCreateUser(session.id);
       const userCash = BigInt(userData.cash || 0);
       const userBank = BigInt(userData.bank || 0);
+      const isBroke = (userCash + userBank <= 0n || userCash < 1000n);
 
       const now = new Date();
       const lastSubsidy = userData.last_subsidy ? new Date(userData.last_subsidy) : null;
       const cooldownMs = (config.subsidyCooldownMinutes || 10) * 60 * 1000; // 10분
 
-      if (lastSubsidy) {
-        const diffMs = now.getTime() - lastSubsidy.getTime();
-        if (diffMs < cooldownMs) {
-          const remainingSec = Math.ceil((cooldownMs - diffMs) / 1000);
-          const remainMin = Math.floor(remainingSec / 60);
-          const remainSec = remainingSec % 60;
-          return res.status(400).json({
-            success: false,
-            error: `지원금 신청 쿨타임 대기 중입니다! (다음 신청까지 약 ${remainMin}분 ${remainSec}초 남음)`
-          });
+      // 돈이 있을 때만 10분 쿨타임 및 상한선 체크 (돈이 없거나 파산 상태면 무제한 즉시 지급)
+      if (!isBroke) {
+        if (lastSubsidy) {
+          const diffMs = now.getTime() - lastSubsidy.getTime();
+          if (diffMs < cooldownMs) {
+            const remainingSec = Math.ceil((cooldownMs - diffMs) / 1000);
+            const remainMin = Math.floor(remainingSec / 60);
+            const remainSec = remainingSec % 60;
+            return res.status(400).json({
+              success: false,
+              error: `지원금 신청 쿨타임 대기 중입니다! (다음 신청까지 약 ${remainMin}분 ${remainSec}초 남음)\n💡 현금이 0원(무일푼)일 때는 쿨타임 없이 언제든 즉시 지원금을 받으실 수 있습니다.`
+            });
+          }
         }
-      }
 
-      if (userCash + userBank >= 50000n) {
-        return res.status(400).json({ success: false, error: '자산이 50,000원 미만일 때만 기본소득 지원금을 신청할 수 있습니다.' });
+        if (userCash + userBank >= 50000n) {
+          return res.status(400).json({ success: false, error: '자산이 50,000원 미만일 때만 정기 기본소득을 신청할 수 있습니다.' });
+        }
       }
 
       const subsidyAmount = 50000;
@@ -760,14 +764,18 @@ function startWebServer(client) {
         await pool.query(`
           INSERT INTO economy_logs (user_id, username, type, amount, balance_before, balance_after, description)
           VALUES (?, ?, 'SUBSIDY', ?, ?, ?, ?)
-        `, [session.id, session.username, subsidyAmount, userCash.toString(), newCash.toString(), '정부 긴급 기본소득 구제 지원금']);
+        `, [session.id, session.username, subsidyAmount, userCash.toString(), newCash.toString(), isBroke ? '무일푼 무제한 긴급 구제 지원금' : '정부 긴급 기본소득 구제 지원금']);
       } catch (e) {}
+
+      const msg = isBroke
+        ? `🚨 무일푼 긴급 구제 지원금 +${formatMoney(subsidyAmount)} 즉시 지급 완료! (돈이 없을 때 언제든 계속 받을 수 있습니다)`
+        : `🏛️ 정부 긴급 기본소득 +${formatMoney(subsidyAmount)} 지급 완료! (10분 후 재신청 가능)`;
 
       res.json({
         success: true,
         subsidyAmount,
         newCash: newCash.toString(),
-        message: `🏛️ 정부 긴급 기본소득 +${formatMoney(subsidyAmount)} 지급 완료! (10분 후 재신청 가능)`
+        message: msg
       });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
