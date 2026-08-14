@@ -70,13 +70,13 @@ module.exports = {
       let stockVal = 0n;
       try {
         const [holdings] = await pool.query(`
-          SELECT h.shares, s.price 
+          SELECT h.amount, s.price 
           FROM user_stocks h
           JOIN stocks s ON h.stock_id = s.stock_id
           WHERE h.user_id = ?
         `, [userId]);
         for (const h of holdings) {
-          stockVal += BigInt(h.shares) * BigInt(h.price);
+          stockVal += BigInt(h.amount) * BigInt(h.price);
         }
       } catch (e) {}
 

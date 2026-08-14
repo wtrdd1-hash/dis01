@@ -850,8 +850,7 @@ function startWebServer(client) {
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
 
     const { action, stockId, amount } = req.body;
-    const count = parseInt(amount, 10);
-    if (!count || count <= 0) return res.status(400).json({ success: false, error: '거래 수량은 1주 이상이어야 합니다.' });
+    let count = 0;
 
     try {
       const [stockRows] = await pool.query('SELECT * FROM stocks WHERE stock_id = ?', [stockId]);
@@ -859,11 +858,32 @@ function startWebServer(client) {
 
       const stock = stockRows[0];
       const stockPrice = BigInt(stock.price);
-      const tradeCount = BigInt(count);
-      const totalTradePrice = stockPrice * tradeCount;
-
       const userData = await getOrCreateUser(session.id);
       let userCash = BigInt(userData.cash || 0);
+
+      const isAll = (typeof amount === 'string') && ['all', 'max', '전량', '올인', '최대', '전체'].includes(amount.trim().toLowerCase());
+      if (isAll) {
+        if (action === 'sell') {
+          const [holdingRows] = await pool.query('SELECT amount FROM user_stocks WHERE user_id = ? AND stock_id = ?', [session.id, stockId]);
+          if (holdingRows.length === 0 || BigInt(holdingRows[0].amount) <= 0n) {
+            return res.status(400).json({ success: false, error: '매도할 수 있는 주식을 보유하고 있지 않습니다.' });
+          }
+          count = Number(holdingRows[0].amount);
+        } else if (action === 'buy') {
+          const maxCanBuy = stockPrice > 0n ? Number(userCash / stockPrice) : 0;
+          if (maxCanBuy <= 0) {
+            return res.status(400).json({ success: false, error: '현재 보유 현금으로 매수할 수 있는 수량이 없습니다.' });
+          }
+          count = maxCanBuy;
+        }
+      } else {
+        count = parseInt(amount, 10);
+      }
+
+      if (!count || count <= 0) return res.status(400).json({ success: false, error: '거래 수량은 1주 이상이어야 합니다.' });
+
+      const tradeCount = BigInt(count);
+      const totalTradePrice = stockPrice * tradeCount;
 
       if (action === 'buy') {
         if (userCash < totalTradePrice) {
@@ -1339,13 +1359,13 @@ function startWebServer(client) {
       let stockVal = 0n;
       try {
         const [holdings] = await pool.query(`
-          SELECT h.shares, s.price 
+          SELECT h.amount, s.price 
           FROM user_stocks h
           JOIN stocks s ON h.stock_id = s.stock_id
           WHERE h.user_id = ?
         `, [session.id]);
         for (const h of holdings) {
-          stockVal += BigInt(h.shares) * BigInt(h.price);
+          stockVal += BigInt(h.amount) * BigInt(h.price);
         }
       } catch (e) {}
 
@@ -1571,6 +1591,7 @@ function startWebServer(client) {
       let isAdminUser = false;
       let userTurnsInfo = { turns: 50, maxTurns: 50 };
       let portfolioSectionHtml = '';
+      let userHoldingsMap = {};
 
       if (req.cookies && req.cookies.discord_user) {
         try {
@@ -1614,6 +1635,10 @@ function startWebServer(client) {
             ORDER BY (us.amount * s.price) DESC
           `, [currentUser.id]);
 
+          for (const item of portfolioRows) {
+            userHoldingsMap[item.stock_id] = Number(item.amount);
+          }
+
           let portfolioItemsHtml = '';
           let totalPortfolioInvested = 0n;
           let totalPortfolioCurrent = 0n;
@@ -1627,6 +1652,7 @@ function startWebServer(client) {
             const profit = val - spent;
             const profitRate = spent > 0n ? ((Number(profit) / Number(spent)) * 100).toFixed(2) : '0.00';
             const isProfit = profit >= 0n;
+            const userHolding = Number(item.amount);
 
             totalPortfolioInvested += spent;
             totalPortfolioCurrent += val;
@@ -1648,8 +1674,8 @@ function startWebServer(client) {
                 </div>
                 <div class="stock-trade-actions" style="margin-top: 10px;">
                   <button class="btn-trade btn-detail" onclick="openDetailModal('${item.stock_id}')">🔍 분석</button>
-                  <button class="btn-trade btn-buy" onclick="openTradeModal('${item.stock_id}', '${item.name}', ${item.price}, 'buy')">🛒 추가 매수</button>
-                  <button class="btn-trade btn-sell" onclick="openTradeModal('${item.stock_id}', '${item.name}', ${item.price}, 'sell')">💰 전량 매도</button>
+                  <button class="btn-trade btn-buy" onclick="openTradeModal('${item.stock_id}', '${item.name}', ${item.price}, 'buy', ${userHolding})">🛒 추가 매수</button>
+                  <button class="btn-trade btn-sell" onclick="openTradeModal('${item.stock_id}', '${item.name}', ${item.price}, 'sell', ${userHolding})">💰 전량 매도</button>
                 </div>
               </div>
             `;
@@ -1725,13 +1751,14 @@ function startWebServer(client) {
         const arrow = isUp ? '▲' : '▼';
         const sign = isUp ? '+' : '';
         const sparklineSvg = generateSparklineSvg(s.history, isUp);
+        const userHolding = userHoldingsMap[s.stock_id] || 0;
 
         const tradeButtons = currentUser
           ? `
             <div class="stock-trade-actions">
               <button class="btn-trade btn-detail" onclick="openDetailModal('${s.stock_id}')">🔍 상세/차트</button>
-              <button class="btn-trade btn-buy" onclick="openTradeModal('${s.stock_id}', '${s.name}', ${s.price}, 'buy')">🛒 매수</button>
-              <button class="btn-trade btn-sell" onclick="openTradeModal('${s.stock_id}', '${s.name}', ${s.price}, 'sell')">💰 매도</button>
+              <button class="btn-trade btn-buy" onclick="openTradeModal('${s.stock_id}', '${s.name}', ${s.price}, 'buy', ${userHolding})">🛒 매수</button>
+              <button class="btn-trade btn-sell" onclick="openTradeModal('${s.stock_id}', '${s.name}', ${s.price}, 'sell', ${userHolding})">💰 매도</button>
             </div>
           `
           : `
@@ -3243,14 +3270,29 @@ function startWebServer(client) {
               </div>
               
               <div class="bet-input-group">
-                <label>주문 수량 (주)</label>
-                <input type="number" id="trade-amount-input" class="bet-input" value="1" min="1" oninput="calcTradeTotal()">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <label style="margin: 0;">주문 수량 (주)</label>
+                  <span style="font-size: 0.75rem; color: #818cf8;">비중 및 전량 선택 가능</span>
+                </div>
+                <input type="number" id="trade-amount-input" class="bet-input" value="1" min="0" oninput="calcTradeTotal()">
+                
+                <!-- 비중(퍼센트/전량) 칩 -->
                 <div class="btn-chip-grid" style="margin-top: 8px;">
-                  <button class="btn-chip" onclick="addTradeAmount(1)">+1주</button>
-                  <button class="btn-chip" onclick="addTradeAmount(5)">+5주</button>
-                  <button class="btn-chip" onclick="addTradeAmount(10)">+10주</button>
-                  <button class="btn-chip" onclick="addTradeAmount(50)">+50주</button>
-                  <button class="btn-chip" style="background: rgba(99, 102, 241, 0.25); border-color: #818cf8; color: #fff;" onclick="setTradeMax()">🔥 최대(MAX)</button>
+                  <button type="button" class="btn-chip" onclick="setTradePercent(10)">10%</button>
+                  <button type="button" class="btn-chip" onclick="setTradePercent(25)">25%</button>
+                  <button type="button" class="btn-chip" onclick="setTradePercent(50)">50%</button>
+                  <button type="button" class="btn-chip" onclick="setTradePercent(75)">75%</button>
+                  <button type="button" class="btn-chip" style="background: rgba(99, 102, 241, 0.35); border-color: #818cf8; color: #fff; font-weight: 800;" onclick="setTradePercent(100)">🔥 100% (전량)</button>
+                </div>
+
+                <!-- 수량 직접 가산 칩 -->
+                <div class="btn-chip-grid" style="margin-top: 6px;">
+                  <button type="button" class="btn-chip" onclick="addTradeAmount(1)">+1주</button>
+                  <button type="button" class="btn-chip" onclick="addTradeAmount(5)">+5주</button>
+                  <button type="button" class="btn-chip" onclick="addTradeAmount(10)">+10주</button>
+                  <button type="button" class="btn-chip" onclick="addTradeAmount(50)">+50주</button>
+                  <button type="button" class="btn-chip" onclick="addTradeAmount(100)">+100주</button>
+                  <button type="button" class="btn-chip" style="background: rgba(239, 68, 68, 0.15); border-color: #ef4444; color: #fca5a5;" onclick="resetTradeAmount()">↺ 1주</button>
                 </div>
               </div>
 
@@ -3263,6 +3305,7 @@ function startWebServer(client) {
                   <span>총 결제/정산 예정액</span>
                   <span id="modal-total-price" style="color: #818cf8;">0원</span>
                 </div>
+                <div id="trade-warning-msg" style="display: none; font-size: 0.8rem; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);"></div>
               </div>
 
               <button class="btn-play-game" id="btn-submit-trade" onclick="submitTradeOrder()">주문 실행</button>
@@ -3427,6 +3470,7 @@ function startWebServer(client) {
 
           <!-- 웹 인터랙티브 & 실시간 라이브 스트림 스크립트 -->
           <script>
+            let userHoldings = ${JSON.stringify(userHoldingsMap || {})};
             let selectedCoin = '앞면';
             let currentTrade = { stockId: '', name: '', price: 0, action: 'buy' };
             let currentDetailStock = null;
@@ -3763,7 +3807,7 @@ function startWebServer(client) {
             function openTradeFromDetail(action) {
               if (!currentDetailStock) return;
               closeDetailModal();
-              openTradeModal(currentDetailStock.stock_id, currentDetailStock.name, currentDetailStock.price, action);
+              openTradeModal(currentDetailStock.stock_id, currentDetailStock.name, currentDetailStock.price, action, currentDetailStock.userHolding);
             }
 
             function formatCap(num) {
@@ -4063,46 +4107,102 @@ function startWebServer(client) {
               } catch (e) { showToast('error', '통신 오류', '지원금 신청 서버 연결 실패'); }
             }
 
-            // 7. 주식 거래 모달 & 수량 프리셋
-            function openTradeModal(stockId, name, price, action) {
+            // 7. 주식 거래 모달 & 수량 프리셋 / 전량(MAX) 처리
+            function openTradeModal(stockId, name, price, action, directHolding) {
               currentTrade = { stockId, name, price, action };
               document.getElementById('modal-trade-title').innerText = (action === 'buy' ? '🛒 주식 매수: ' : '💰 주식 매도: ') + name;
               document.getElementById('modal-stock-info').innerText = '종목코드: [' + stockId + ']';
               document.getElementById('modal-unit-price').innerText = Number(price).toLocaleString() + '원';
               
-              const holding = currentDetailStock && currentDetailStock.stock_id === stockId ? (currentDetailStock.userHolding || 0) : 0;
+              const holding = (typeof directHolding === 'number') 
+                ? directHolding 
+                : (userHoldings[stockId] || (currentDetailStock && currentDetailStock.stock_id === stockId ? (currentDetailStock.userHolding || 0) : 0));
+
+              // userHoldings 캐시 동기화
+              userHoldings[stockId] = holding;
+
               const holdingElem = document.getElementById('modal-user-holding-info');
-              if (holdingElem) holdingElem.innerText = '내 보유: ' + holding + '주';
+              if (holdingElem) {
+                if (holding > 0) {
+                  holdingElem.innerHTML = '내 보유: <b style="color: #38bdf8;">' + holding.toLocaleString() + '주</b>';
+                } else {
+                  holdingElem.innerHTML = '내 보유: <b style="color: #9ca3af;">0주 (보유 없음)</b>';
+                }
+              }
 
               const cashElem = document.getElementById('modal-user-cash-info');
               if (cashElem) cashElem.innerText = getCurrentUserCashNum().toLocaleString() + '원';
 
-              document.getElementById('trade-amount-input').value = 1;
+              const input = document.getElementById('trade-amount-input');
+              if (action === 'sell') {
+                input.value = holding > 0 ? holding : 0; // 매도 창 열면 기본적으로 보유 전량 또는 0주로 편리하게 프리셋
+              } else {
+                input.value = 1;
+              }
+
               calcTradeTotal();
+
               const submitBtn = document.getElementById('btn-submit-trade');
               submitBtn.innerText = (action === 'buy' ? '🛒 매수 주문 체결' : '💰 매도 주문 체결');
               submitBtn.style.background = (action === 'buy' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)');
               document.getElementById('trade-modal').style.display = 'flex';
             }
 
-            function addTradeAmount(qty) {
+            function setTradePercent(pct) {
               const input = document.getElementById('trade-amount-input');
-              const current = parseInt(input.value, 10) || 0;
-              input.value = Math.max(1, current + qty);
+              const stockId = currentTrade.stockId;
+              const holding = userHoldings[stockId] || 0;
+              const price = Number(currentTrade.price) || 1;
+              const userCash = getCurrentUserCashNum();
+
+              if (currentTrade.action === 'buy') {
+                const maxCanBuy = Math.floor(userCash / price);
+                if (maxCanBuy <= 0) {
+                  input.value = 0;
+                  showToast('info', '현금 부족', '현재 보유 현금으로 1주도 매수할 수 없습니다.');
+                } else {
+                  if (pct === 100) {
+                    input.value = maxCanBuy;
+                  } else {
+                    input.value = Math.max(1, Math.floor(maxCanBuy * (pct / 100)));
+                  }
+                }
+              } else {
+                if (holding <= 0) {
+                  input.value = 0;
+                  showToast('info', '보유량 없음', '매도할 수 있는 주식을 보유하고 있지 않습니다.');
+                } else {
+                  if (pct === 100) {
+                    input.value = holding; // 🔥 100% 전량 매도
+                  } else {
+                    input.value = Math.max(1, Math.floor(holding * (pct / 100)));
+                  }
+                }
+              }
               calcTradeTotal();
             }
 
             function setTradeMax() {
+              setTradePercent(100);
+            }
+
+            function addTradeAmount(qty) {
               const input = document.getElementById('trade-amount-input');
-              if (currentTrade.action === 'buy') {
-                const userCash = getCurrentUserCashNum();
-                const price = Number(currentTrade.price) || 1;
-                const maxCanBuy = Math.floor(userCash / price);
-                input.value = Math.max(1, maxCanBuy);
-              } else {
-                const holding = currentDetailStock?.userHolding || 0;
-                input.value = Math.max(1, holding);
+              const current = parseInt(input.value, 10) || 0;
+              const stockId = currentTrade.stockId;
+              const holding = userHoldings[stockId] || 0;
+              
+              let nextVal = Math.max(1, current + qty);
+              if (currentTrade.action === 'sell' && holding > 0 && nextVal > holding) {
+                nextVal = holding; // 보유량 초과 방지
               }
+              input.value = nextVal;
+              calcTradeTotal();
+            }
+
+            function resetTradeAmount() {
+              const input = document.getElementById('trade-amount-input');
+              input.value = 1;
               calcTradeTotal();
             }
 
@@ -4111,9 +4211,40 @@ function startWebServer(client) {
             }
 
             function calcTradeTotal() {
-              const count = parseInt(document.getElementById('trade-amount-input').value, 10) || 0;
-              const total = BigInt(count) * BigInt(currentTrade.price || 0);
+              const input = document.getElementById('trade-amount-input');
+              const count = parseInt(input.value, 10) || 0;
+              const price = BigInt(currentTrade.price || 0);
+              const total = BigInt(count) * price;
+              const stockId = currentTrade.stockId;
+              const holding = userHoldings[stockId] || 0;
+              const userCash = getCurrentUserCashNum();
+
               document.getElementById('modal-total-price').innerText = Number(total).toLocaleString() + '원';
+
+              const warnBox = document.getElementById('trade-warning-msg');
+              const submitBtn = document.getElementById('btn-submit-trade');
+
+              if (!warnBox) return;
+
+              if (count <= 0) {
+                warnBox.style.display = 'block';
+                warnBox.style.color = '#fbbf24';
+                warnBox.innerText = '⚠️ 주문 수량은 최소 1주 이상이어야 합니다.';
+                if (submitBtn) submitBtn.disabled = true;
+              } else if (currentTrade.action === 'sell' && count > holding) {
+                warnBox.style.display = 'block';
+                warnBox.style.color = '#ef4444';
+                warnBox.innerText = `⚠️ 보유 수량(${holding.toLocaleString()}주)을 초과하여 매도할 수 없습니다.`;
+                if (submitBtn) submitBtn.disabled = true;
+              } else if (currentTrade.action === 'buy' && Number(total) > userCash) {
+                warnBox.style.display = 'block';
+                warnBox.style.color = '#ef4444';
+                warnBox.innerText = `⚠️ 보유 현금(${userCash.toLocaleString()}원)이 부족합니다.`;
+                if (submitBtn) submitBtn.disabled = true;
+              } else {
+                warnBox.style.display = 'none';
+                if (submitBtn) submitBtn.disabled = false;
+              }
             }
 
             // ⏱️ 3분 주기 주가 변동 카운트다운 타이머 & 라이브 갱신
@@ -4161,6 +4292,28 @@ function startWebServer(client) {
 
             async function submitTradeOrder() {
               const amount = document.getElementById('trade-amount-input').value;
+              const count = parseInt(amount, 10) || 0;
+              const stockId = currentTrade.stockId;
+              const holding = userHoldings[stockId] || 0;
+              const userCash = getCurrentUserCashNum();
+              const price = Number(currentTrade.price) || 0;
+              const total = count * price;
+
+              if (count <= 0) {
+                showToast('error', '수량 오류', '1주 이상의 수량을 입력해주세요.');
+                return;
+              }
+
+              if (currentTrade.action === 'sell' && count > holding) {
+                showToast('error', '보유 수량 부족', `보유 주식(${holding}주)보다 많은 수량을 매도할 수 없습니다.`);
+                return;
+              }
+
+              if (currentTrade.action === 'buy' && total > userCash) {
+                showToast('error', '현금 부족', `보유 현금(${userCash.toLocaleString()}원)이 부족합니다.`);
+                return;
+              }
+
               const btn = document.getElementById('btn-submit-trade');
               btn.disabled = true;
               btn.innerText = '⏳ 주문 처리 중...';
@@ -4172,7 +4325,7 @@ function startWebServer(client) {
                   body: JSON.stringify({
                     action: currentTrade.action,
                     stockId: currentTrade.stockId,
-                    amount
+                    amount: count
                   })
                 });
                 const data = await res.json();
@@ -4181,10 +4334,18 @@ function startWebServer(client) {
                   showToast('error', '거래 체결 실패', data.error);
                   return;
                 }
+
+                // 로컬 보유 수량 및 현금 즉시 동기화
+                if (data.action === 'buy') {
+                  userHoldings[stockId] = (userHoldings[stockId] || 0) + Number(data.amount);
+                } else if (data.action === 'sell') {
+                  userHoldings[stockId] = Math.max(0, (userHoldings[stockId] || 0) - Number(data.amount));
+                }
+
                 showToast('success', '주식 체결 완료', data.message);
                 closeTradeModal();
                 updateUserCashDisplay(data.newCash);
-                setTimeout(() => location.reload(), 1000);
+                setTimeout(() => location.reload(), 800);
               } catch (e) {
                 btn.disabled = false;
                 showToast('error', '통신 오류', '거래 처리 실패');

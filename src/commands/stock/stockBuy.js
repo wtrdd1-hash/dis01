@@ -38,13 +38,14 @@ module.exports = {
     const userCash = BigInt(userData.cash);
 
     let buyAmount = 0n;
-    if (amountInput === '올인' || amountInput === '전체' || amountInput === 'all') {
+    const lowerInput = amountInput.toLowerCase();
+    if (lowerInput === '올인' || lowerInput === '전량' || lowerInput === '최대' || lowerInput === '전체' || lowerInput === 'all' || lowerInput === 'max') {
       buyAmount = userCash / stockPrice;
     } else {
       const parsed = parseInt(amountInput, 10);
       if (isNaN(parsed) || parsed <= 0) {
         return interaction.reply({
-          embeds: [createErrorEmbed('입력 오류', '매수 수량은 1 이상의 정수 또는 "올인"이어야 합니다.')],
+          embeds: [createErrorEmbed('입력 오류', '매수 수량은 1 이상의 정수 또는 "전량" / "최대"이어야 합니다.')],
           flags: MessageFlags.Ephemeral
         });
       }

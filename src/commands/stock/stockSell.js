@@ -44,13 +44,14 @@ module.exports = {
     const totalSpent = BigInt(holding.total_spent);
 
     let sellAmount = 0n;
-    if (amountInput === '전량' || amountInput === '올인' || amountInput === 'all') {
+    const lowerInput = amountInput.toLowerCase();
+    if (lowerInput === '전량' || lowerInput === '올인' || lowerInput === '최대' || lowerInput === '전체' || lowerInput === 'all' || lowerInput === 'max') {
       sellAmount = currentAmount;
     } else {
       const parsed = parseInt(amountInput, 10);
       if (isNaN(parsed) || parsed <= 0) {
         return interaction.reply({
-          embeds: [createErrorEmbed('입력 오류', '매도 수량은 1 이상의 정수 또는 "전량"이어야 합니다.')],
+          embeds: [createErrorEmbed('입력 오류', '매도 수량은 1 이상의 정수 또는 "전량" / "최대"이어야 합니다.')],
           flags: MessageFlags.Ephemeral
         });
       }
