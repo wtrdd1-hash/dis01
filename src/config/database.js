@@ -330,79 +330,103 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // 기본 주식 종목 초기화 시드 (가상 패러디 명칭 및 상세 기업 분석 데이터)
+    // 우리만의 독창적인 가상 커뮤니티 기업/종목 초기화 시드
     const defaultStocks = [
       { 
-        stock_id: 'NVDA', 
-        name: '엔비칩스 (AI반도체)', 
-        price: 211105, 
-        prev_price: 211657, 
-        volatility: 0.04,
-        sector: '인공지능 & GPU 반도체',
-        description: '글로벌 초거대 생성형 AI 모델 학습용 가속기 칩 시장을 90% 이상 점유하는 최고 기술력의 빅테크 기업입니다.',
-        market_cap: 3500000000000,
-        pe_ratio: 42.50,
+        stock_id: 'WTRD', 
+        name: '월덕 인터내셔널 (지주사)', 
+        price: 50000, 
+        prev_price: 49500, 
+        volatility: 0.03,
+        sector: '커뮤니티 지주 & AI 플랫폼',
+        description: '월덕 봇과 디스코드 커뮤니티 전반의 인프라를 총괄 운영하는 핵심 지주회사입니다. 안정적인 배당과 탄탄한 수익 기반을 보유하고 있습니다.',
+        market_cap: 5000000000000,
+        pe_ratio: 18.50,
+        dividend_yield: 4.20
+      },
+      { 
+        stock_id: 'MINE', 
+        name: '월덕 광업 & 제련 (채굴/골드)', 
+        price: 12500, 
+        prev_price: 12100, 
+        volatility: 0.05,
+        sector: '자원 개발 & 골드 채굴',
+        description: '클리커 광산에서 유저들이 채굴한 원석과 다이아몬드를 제련하여 서버 경제에 공급하는 자원 개발 대표 기업입니다.',
+        market_cap: 1800000000000,
+        pe_ratio: 12.00,
+        dividend_yield: 2.80
+      },
+      { 
+        stock_id: 'CASN', 
+        name: '황금오리 카지노 & 엔터 (게이밍)', 
+        price: 35000, 
+        prev_price: 33800, 
+        volatility: 0.07,
+        sector: '카지노 게이밍 & 엔터테인먼트',
+        description: '3릴 슬롯머신, 주사위 배틀, 코인플립 등 서버 내 모든 카지노 시설을 독점 운영하는 최대 엔터테인먼트 복합 기업입니다.',
+        market_cap: 2500000000000,
+        pe_ratio: 24.00,
+        dividend_yield: 3.50
+      },
+      { 
+        stock_id: 'BANK', 
+        name: '덕스 중앙은행 & 파이낸스 (금융)', 
+        price: 85000, 
+        prev_price: 84200, 
+        volatility: 0.02,
+        sector: '서버 기축 금융 & 예금/지원금',
+        description: '커뮤니티 내 유저 예금 보관, 기본소득 구제 지원금 집행 및 이자 지급을 전담하는 초우량 국책 금융기관입니다.',
+        market_cap: 4200000000000,
+        pe_ratio: 9.80,
+        dividend_yield: 5.50
+      },
+      { 
+        stock_id: 'NEKO', 
+        name: '네코 에너지 & 냥코 랩스 (양자)', 
+        price: 8800, 
+        prev_price: 9200, 
+        volatility: 0.09,
+        sector: '초전도 양자 & 미래 에너지',
+        description: '신비한 고양이 꾹꾹이 에너지로 봇 서버 냉각 및 초전도 양자 컴퓨팅을 연구하는 최고 변동성의 미래 혁신 벤처입니다.',
+        market_cap: 680000000000,
+        pe_ratio: 65.00,
         dividend_yield: 0.50
       },
       { 
-        stock_id: 'BTC', 
-        name: '디스코인 (가상자산)', 
-        price: 82193159, 
-        prev_price: 93839069, 
-        volatility: 0.08,
-        sector: '디지털 자산 & 블록체인',
-        description: '탈중앙화 디지털 화폐의 상징이자 가상자산 시장 전반의 유동성을 주도하는 대표 기축 코인입니다.',
-        market_cap: 1600000000000,
-        pe_ratio: 0.00,
-        dividend_yield: 0.00
+        stock_id: 'CHKN', 
+        name: '황금닭 치킨 & 푸드 테크 (소비재)', 
+        price: 3500, 
+        prev_price: 3450, 
+        volatility: 0.02,
+        sector: '식음료 & 스테미나 푸드',
+        description: '밤샘 도박과 주식 투자를 즐기는 유저들에게 바삭한 치킨과 스테미나 음료를 공급하는 국민 프랜차이즈 기업입니다.',
+        market_cap: 450000000000,
+        pe_ratio: 14.50,
+        dividend_yield: 3.80
       },
       { 
-        stock_id: 'ETH', 
-        name: '에테르코인 (가상자산)', 
-        price: 5767959, 
-        prev_price: 5575796, 
-        volatility: 0.06,
-        sector: '스마트 컨트랙트 & Web3',
-        description: '디파이(DeFi), NFT, 스마트 컨트랙트 생태계의 기반이 되는 세계 2위 블록체인 네트워크 코인입니다.',
-        market_cap: 420000000000,
-        pe_ratio: 0.00,
-        dividend_yield: 3.20
-      },
-      { 
-        stock_id: 'AAPL', 
-        name: '사과전자 (빅테크)', 
-        price: 248149, 
-        prev_price: 257958, 
-        volatility: 0.03,
-        sector: '모바일 & 온디바이스 AI',
-        description: '전 세계 수억 명의 충성 고객층을 보유한 프리미엄 스마트 디바이스 및 독자 AI 생태계 선두 기업입니다.',
-        market_cap: 3200000000000,
-        pe_ratio: 28.40,
-        dividend_yield: 1.80
-      },
-      { 
-        stock_id: 'SAM', 
-        name: '삼송전자 (전자/반도체)', 
-        price: 90418, 
-        prev_price: 92922, 
-        volatility: 0.03,
-        sector: '종합 전자 & 메모리 반도체',
-        description: 'DRAM, NAND 플래시 메모리 및 차세대 HBM 공급 역량을 보유한 아시아 대표 하드웨어 제조 기업입니다.',
-        market_cap: 580000000000,
-        pe_ratio: 14.20,
-        dividend_yield: 2.70
-      },
-      { 
-        stock_id: 'BIO', 
-        name: '알약바이오 (초보자/안정주)', 
+        stock_id: 'SLOT', 
+        name: '럭키세븐 다이아 복권 (복권/테마)', 
         price: 1000, 
         prev_price: 1000, 
-        volatility: 0.01,
-        sector: '바이오 & 신약 파이프라인',
-        description: '난치성 질환 표적 치료제 및 글로벌 제약사 기술 수출 파이프라인을 보유한 바이오벤처 기업입니다.',
+        volatility: 0.08,
+        sector: '복권 & 럭키박스',
+        description: '1,000원의 저렴한 가격으로 누구나 매수할 수 있으며, 100배 잭팟 복권 발행 및 초대형 럭키박스를 유통하는 테마주입니다.',
         market_cap: 120000000000,
-        pe_ratio: 18.90,
-        dividend_yield: 4.10
+        pe_ratio: 30.00,
+        dividend_yield: 1.00
+      },
+      { 
+        stock_id: 'SCRP', 
+        name: '이지스크랩 데이터 테크 (빅데이터)', 
+        price: 120000, 
+        prev_price: 118000, 
+        volatility: 0.04,
+        sector: '빅데이터 & 고속 웹 인프라',
+        description: '초당 10만 건의 웹 데이터를 가공 분석하여 실시간 차트와 증시 정보를 제공하는 이지스크랩의 데이터 테크놀로지 기업입니다.',
+        market_cap: 3800000000000,
+        pe_ratio: 32.00,
+        dividend_yield: 1.20
       }
     ];
 
@@ -424,12 +448,8 @@ async function initDatabase() {
       ]);
     }
 
-    // 알약바이오(BIO)를 초보자가 구매하기 쉬운 저가/안정주(1,000원, 변동성 1%)로 DB 가격 갱신
-    await connection.query(`
-      UPDATE stocks
-      SET name = '알약바이오 (초보자/안정주)', price = 1000, prev_price = 1000, volatility = 0.01
-      WHERE stock_id = 'BIO';
-    `);
+    // 구버전 외래 종목(NVDA, BTC, ETH, AAPL, SAM, BIO)이 남아있을 경우 새로운 커뮤니티 주식으로 정리
+    await connection.query(`DELETE FROM stocks WHERE stock_id NOT IN ('WTRD', 'MINE', 'CASN', 'BANK', 'NEKO', 'CHKN', 'SLOT', 'SCRP')`);
 
     console.log('✅ 데이터베이스 테이블 및 주식 초기 종목 로드 완료!');
     

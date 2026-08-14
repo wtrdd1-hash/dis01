@@ -1,156 +1,136 @@
 const { pool } = require('../config/database');
 
-// 거시 경제 국면 정의 (Economic Regimes)
+// 우리 커뮤니티 가상 경제 시황 국면 (Custom Community Economic Regimes)
 const MARKET_REGIMES = [
-  { name: '📈 강세장 (Bull Market)', drift: 0.03, volatilityFactor: 1.0, desc: '전반적인 경제 호조와 위험자산 선호 심리로 시장 매수세가 우세합니다.' },
-  { name: '📉 약세장 (Bear Market)', drift: -0.03, volatilityFactor: 1.2, desc: '경기 침체 우려와 긴축 기조로 전반적 매도세가 우세합니다.' },
-  { name: '⚖️ 횡보장 (Sideways Market)', drift: 0.00, volatilityFactor: 0.8, desc: '뚜렷한 방향성 없이 좁은 박스권에서 매물 소화가 진행됩니다.' },
-  { name: '🔥 인플레이션 Shock', drift: -0.02, volatilityFactor: 1.5, desc: '원자재 가격 급등 및 금리 인상 압박으로 시장 변동성이 심화됩니다.' },
-  { name: '🚀 기술 혁신 Boom', drift: 0.04, volatilityFactor: 1.3, desc: 'AI 및 차세대 테크 산업을 중심으로 대규모 기관 자금이 유입됩니다.' },
-  { name: '⚡ 유동성 파티 (Liquidity Rush)', drift: 0.05, volatilityFactor: 1.4, desc: '시중 유동성 공급 확대로 가상자산 및 성장주에 투기적 매수세가 집중됩니다.' }
+  { name: '🦆 월덕 경제 번영기 (Duck Prosperity)', drift: 0.03, volatilityFactor: 1.0, desc: '서버 커뮤니티 활동과 채굴, 카지노 이용이 활발해지며 전 종목 매수세가 우세합니다.' },
+  { name: '📉 가상 시장 조정기 (Market Cooldown)', drift: -0.02, volatilityFactor: 1.1, desc: '차익 실현 매물 출회와 자산 보수적 운용으로 단기 조정 국면에 진입했습니다.' },
+  { name: '⚖️ 안정적 박스권 횡보 (Stable Sideways)', drift: 0.00, volatilityFactor: 0.7, desc: '예금과 실물 소비가 균형을 이루며 주가가 안정적인 가격대를 형성하고 있습니다.' },
+  { name: '🔥 카지노 & 광산 대박 랠리 (Jackpot Boom)', drift: 0.04, volatilityFactor: 1.4, desc: '광산에서 초희귀 원석이 대량 출토되고 카지노 잭팟 열풍으로 투기적 매수세가 폭발합니다.' },
+  { name: '🚀 냥코 양자 퀀텀 폭등 (Neko Quantum Surge)', drift: 0.05, volatilityFactor: 1.6, desc: '네코 랩스의 신비한 고양이 에너지 기술 발표로 첨단 테마주들이 폭등세를 주도합니다.' },
+  { name: '🏦 중앙은행 유동성 무제한 살포 (Bank Liquidity)', drift: 0.04, volatilityFactor: 1.2, desc: '덕스 중앙은행의 지원금 확대와 예금 금리 우대로 풍부한 유동성이 증시로 유입됩니다.' }
 ];
 
-// 타겟 섹터별 가상 경제 뉴스 & 공시 이벤트 풀 (30가지 이상의 풍부한 경제 시나리오)
+// 우리만의 독창적인 가상 커뮤니티 기업 뉴스 & 경제 공시 풀 (30가지 이상의 서버 경제 시나리오)
 const NEWS_EVENTS = [
   { 
-    title: '🏦 중앙은행, 기준금리 전격 0.5%p 인하 발표',
-    text: '중앙은행 금융통화위원회가 경기 부양과 물가 안정을 위해 기준금리를 파격적으로 인하했습니다. 시중 유동성이 증시와 가상자산 시장으로 대거 유입되고 있습니다.', 
-    eventType: 'MACRO_POLICY',
+    title: '🦆 월덕 인터내셔널, 월덕봇 2.0 초대형 업데이트 & 글로벌 서버 연동 공시',
+    text: '월덕 지주사가 차세대 인공지능 경제 시스템 및 초고속 인터랙티브 웹 대시보드 2.0 릴리즈를 공식 발표했습니다. 커뮤니티 사용자 유입이 사상 최대치를 돌파했습니다.', 
+    eventType: 'WTRD_UPDATE',
     sentiment: 'BULL',
     importance: 'URGENT',
-    relatedStock: 'ALL',
-    impactSector: '거시경제 & 금융',
-    impact: { ALL: 0.06, BTC: 0.12, ETH: 0.10, AAPL: 0.05, NVDA: 0.06 } 
+    relatedStock: 'WTRD',
+    impactSector: '커뮤니티 지주 & AI 플랫폼',
+    impact: { WTRD: 0.22, SCRP: 0.12, CASN: 0.08 } 
   },
   { 
-    title: '📉 글로벌 CPI 물가지수 예상치 대폭 상회 긴축 공포',
-    text: '미국 및 주요국 소비자물가지수(CPI)가 시장 예상치를 크게 상회하며 금리 인하 기대감이 후퇴했습니다. 차익 실현 및 위험자산 회피 매도세가 급증하고 있습니다.', 
-    eventType: 'MACRO_POLICY',
-    sentiment: 'BEAR',
-    importance: 'URGENT',
-    relatedStock: 'ALL',
-    impactSector: '거시경제 & 금리',
-    impact: { ALL: -0.06, BTC: -0.09, ETH: -0.08, NVDA: -0.05 } 
-  },
-  { 
-    title: '🚀 엔비칩스, 10배 빠른 차세대 초거대 AI 슈퍼칩 양산 돌입',
-    text: '엔비칩스가 기존 GPU 대비 1,000% 향상된 초저전력 차세대 AI 가속기 칩 양산에 성공했다고 발표했습니다. 글로벌 클라우드 빅테크의 독점 주문이 쇄도하고 있습니다.', 
-    eventType: 'TECH_AI',
+    title: '⛏️ 월덕 광산 지하 700m에서 전설의 에메랄드 다이아 광맥 발견!',
+    text: '클리커 채굴 유저들의 연타 작업 중 지하 암반층에서 순도 99.9%의 초대형 다이아몬드 광맥이 터졌습니다! 제련소 수출 주문이 폭주하며 광업 주가가 폭등합니다.', 
+    eventType: 'MINING_BOOM',
     sentiment: 'BULL',
     importance: 'URGENT',
-    relatedStock: 'NVDA',
-    impactSector: '인공지능 & GPU 반도체',
-    impact: { NVDA: 0.20, SAM: 0.09, AAPL: 0.05 } 
+    relatedStock: 'MINE',
+    impactSector: '자원 개발 & 골드 채굴',
+    impact: { MINE: 0.30, WTRD: 0.08, SLOT: 0.10 } 
   },
   { 
-    title: '⚡ 디스코인, 전 세계 10대 국부펀드 최초 포트폴리오 편입',
-    text: '중동 및 아시아 주요 국부펀드가 국가 비축 자산의 3%를 디스코인에 전략적으로 배분하기로 의결했습니다. 기관 자금의 대규모 시장 유입이 시작되었습니다.', 
-    eventType: 'CRYPTO',
+    title: '🎰 황금오리 카지노, 777 다이아몬드 50배 잭팟 당첨자 연속 배출!',
+    text: '황금오리 카지노 슬롯머신과 주사위 룸에서 역대 최고액 당첨금이 연달아 터지며 서버 내 관광객과 배팅 자금이 물밀듯이 쏟아져 들어오고 있습니다.', 
+    eventType: 'CASINO_JACKPOT',
     sentiment: 'BULL',
     importance: 'URGENT',
-    relatedStock: 'BTC',
-    impactSector: '디지털 자산 & 블록체인',
-    impact: { BTC: 0.22, ETH: 0.15 } 
+    relatedStock: 'CASN',
+    impactSector: '카지노 게이밍 & 엔터',
+    impact: { CASN: 0.25, SLOT: 0.15, BANK: 0.05 } 
   },
   { 
-    title: '💎 에테르코인, 초당 10만 건 처리 차세대 샤딩 메인넷 가동',
-    text: '에테르코인 네트워크의 레이어1 전송 속도가 100배 향상되고 수수료가 99% 절감되는 혁신적 샤딩 업그레이드가 성공적으로 배포되었습니다.', 
-    eventType: 'CRYPTO',
+    title: '🏦 덕스 중앙은행, 커뮤니티 기준금리 인하 및 기본소득 예산 200% 증액',
+    text: '덕스 중앙은행 총재가 시장 유동성 공급과 초보 유저 정착을 위해 긴급 지원금 규모를 파격 확대한다고 발표했습니다. 전 종목 강력한 유동성 랠리가 시작됩니다.', 
+    eventType: 'BANK_POLICY',
+    sentiment: 'BULL',
+    importance: 'URGENT',
+    relatedStock: 'BANK',
+    impactSector: '서버 기축 금융 & 은행',
+    impact: { ALL: 0.06, BANK: 0.16, WTRD: 0.09, CHKN: 0.07 } 
+  },
+  { 
+    title: '🐱 네코 랩스, 상온 초전도 고양이 방석 & 냥코 양자 칩셋 개발 성공!',
+    text: '네코 에너지가 고양이 꾹꾹이 파동을 이용해 무저항 상온 초전도체를 구현하는 획기적 양자 칩셋을 세계 최초로 공개했습니다. 매수 잔량이 수십만 주 쌓이고 있습니다.', 
+    eventType: 'NEKO_QUANTUM',
+    sentiment: 'BULL',
+    importance: 'URGENT',
+    relatedStock: 'NEKO',
+    impactSector: '초전도 양자 & 미래 에너지',
+    impact: { NEKO: 0.40, SCRP: 0.10 } 
+  },
+  { 
+    title: '🍗 황금닭 치킨, 심야 신메뉴 [마라뿌링클 콤보] 서버 전량 품절 사태',
+    text: '주식 트레이더들과 카지노 유저들의 야식 주문 폭주로 황금닭 치킨의 전 매장 원료육이 30분 만에 완판되었습니다. 분기 사상 최대 영업이익이 확실시됩니다.', 
+    eventType: 'FOOD_SURPRISE',
     sentiment: 'BULL',
     importance: 'HIGH',
-    relatedStock: 'ETH',
-    impactSector: '스마트 컨트랙트 & Web3',
-    impact: { ETH: 0.18, BTC: 0.05 } 
+    relatedStock: 'CHKN',
+    impactSector: '식음료 & 스테미나 푸드',
+    impact: { CHKN: 0.18, BANK: 0.03 } 
   },
   { 
-    title: '🎉 알약바이오, 난치성 치매 표적 신약 미국 FDA 최종 승인!',
-    text: '알약바이오의 핵심 파이프라인 신약이 미국 FDA로부터 만장일치로 신속 승인을 획득했습니다. 연간 5조원 이상의 독점 매출 창출이 기대됩니다.', 
-    eventType: 'BIO_HEALTH',
-    sentiment: 'BULL',
-    importance: 'URGENT',
-    relatedStock: 'BIO',
-    impactSector: '바이오 & 신약 개발',
-    impact: { BIO: 0.35 } 
-  },
-  { 
-    title: '⚠️ 알약바이오, 경쟁사 특허 침해 가처분 신청 및 소송 제기',
-    text: '글로벌 다국적 제약사가 알약바이오의 주력 원천 물질에 대한 특허 침해 가처분 소송을 제기하며 단기적인 불확실성이 증대되고 있습니다.', 
-    eventType: 'BIO_HEALTH',
-    sentiment: 'BEAR',
-    importance: 'HIGH',
-    relatedStock: 'BIO',
-    impactSector: '바이오 & 제약',
-    impact: { BIO: -0.15 } 
-  },
-  { 
-    title: '🍏 사과전자, 1:10 주식 액면분할 및 50조원 자사주 소각 공시',
-    text: '사과전자가 주주가치 제고를 위해 10대 1 액면분할과 함께 역대 최대 규모의 자사주 매입 및 즉시 소각 계획을 발표했습니다. 개인 투자자 매수세가 폭발하고 있습니다.', 
-    eventType: 'DIVIDEND_SPLIT',
-    sentiment: 'BULL',
-    importance: 'URGENT',
-    relatedStock: 'AAPL',
-    impactSector: '빅테크 & 모바일 AI',
-    impact: { AAPL: 0.16, SAM: 0.04 } 
-  },
-  { 
-    title: '🏛️ 삼송전자, 차세대 1.4나노 극자외선(EUV) 파운드리 수율 90% 달성',
-    text: '삼송전자가 차세대 초미세 반도체 공정에서 글로벌 경쟁사를 압도하는 수율을 달성하며 세계 유수의 팹리스 고객사들을 대거 영입했습니다.', 
-    eventType: 'TECH_AI',
+    title: '⚡ 럭키세븐 다이아 복권, 1등 당첨금 10억 누적에 복권 매진 돌풍',
+    text: '1등 당첨자가 5회 연속 이월되며 럭키세븐 복권 위원회의 잭팟 누적금이 천문학적으로 치솟았습니다. 1,000원짜리 복권 주식을 사려는 개미 투자자가 쇄도합니다.', 
+    eventType: 'LOTTERY_FEVER',
     sentiment: 'BULL',
     importance: 'HIGH',
-    relatedStock: 'SAM',
-    impactSector: '종합 전자 & 파운드리',
-    impact: { SAM: 0.14, NVDA: 0.03 } 
+    relatedStock: 'SLOT',
+    impactSector: '복권 & 럭키박스',
+    impact: { SLOT: 0.28, CASN: 0.07 } 
   },
   { 
-    title: '⚠️ 글로벌 희토류 및 반도체 핵심 원자재 공급망 일시 차질',
-    text: '주요 광산 파업 및 해상 물류 운송 지연으로 반도체 웨이퍼 제조에 필수적인 희귀 가스 공급에 일시적인 차질이 발생했습니다.', 
-    eventType: 'GEOPOLITICS',
+    title: '🌐 이지스크랩 데이터 테크, 초당 10만 건 분산 데이터 엔진 특허 취득',
+    text: '이지스크랩이 전 세계 웹 데이터를 0.01초 만에 분석하여 시세와 로그를 스트리밍하는 독점 아키텍처 특허를 등록했습니다. 글로벌 IT 기업들과의 계약이 잇따르고 있습니다.', 
+    eventType: 'TECH_INFRA',
+    sentiment: 'BULL',
+    importance: 'HIGH',
+    relatedStock: 'SCRP',
+    impactSector: '빅데이터 & 고속 웹 인프라',
+    impact: { SCRP: 0.20, WTRD: 0.08 } 
+  },
+  { 
+    title: '⚠️ 월덕 광산 제1갱도 안전 점검으로 24시간 채굴 임시 중단',
+    text: '월덕 광업이 갱도 안전 강화를 위해 정기 보수 점검에 착수하며 단기 광석 생산량이 일시 감소했습니다. 투자자들의 단기 관망세가 짙어지고 있습니다.', 
+    eventType: 'MINING_HALT',
     sentiment: 'BEAR',
     importance: 'HIGH',
-    relatedStock: 'SAM',
-    impactSector: '반도체 제조 공급망',
-    impact: { SAM: -0.08, NVDA: -0.07 } 
+    relatedStock: 'MINE',
+    impactSector: '자원 개발 & 골드 채굴',
+    impact: { MINE: -0.12 } 
   },
   { 
-    title: '🔥 공매도 세력 대규모 강제 청산: 쇼트 스퀴즈 폭등 랠리!',
-    text: '기관의 숏(공매도) 포지션이 강제 마진콜 청산되면서 시장가 매수세가 쏟아져 엔비칩스와 디스코인이 기록적인 폭등세를 기록했습니다.', 
-    eventType: 'SHORT_SQUEEZE',
-    sentiment: 'BULL',
-    importance: 'URGENT',
-    relatedStock: 'ALL',
-    impactSector: '시장 유동성 & 파생상품',
-    impact: { NVDA: 0.15, BTC: 0.16, BIO: 0.10 } 
-  },
-  { 
-    title: '🌐 글로벌 1위 신용카드사, 디스코인 & 에테르코인 1초 결제망 개방',
-    text: '비자/마스터카드 전 세계 8천만 개 가맹점에서 암호화폐 무수수료 즉시 결제를 상용화했습니다. 실물 경제 결제 수단으로의 대중화가 가속화됩니다.', 
-    eventType: 'FINTECH',
-    sentiment: 'BULL',
-    importance: 'HIGH',
-    relatedStock: 'BTC',
-    impactSector: '가상자산 & 핀테크',
-    impact: { BTC: 0.14, ETH: 0.13 } 
-  },
-  { 
-    title: '📊 삼송전자 & 사과전자, 분기 사상 최대 영업이익 어닝 서프라이즈',
-    text: '온디바이스 AI 단말기 및 고대역폭메모리(HBM)의 역대급 수요 폭증에 힘입어 양사의 분기 영업이익이 전년 동기 대비 250% 급증했습니다.', 
-    eventType: 'EARNINGS',
-    sentiment: 'BULL',
-    importance: 'HIGH',
-    relatedStock: 'SAM',
-    impactSector: '빅테크 & 전자부품',
-    impact: { SAM: 0.12, AAPL: 0.11 } 
-  },
-  { 
-    title: '🚨 국제 가상자산 규제 위원회, 불법 자금세탁 거래소 엄벌 발표',
-    text: '주요 20개국(G20) 금융 당국이 비인가 가상자산 파생상품 거래소에 대한 고강도 전수 조사에 착수하며 단기 투자 심리가 위축되었습니다.', 
-    eventType: 'CRYPTO',
+    title: '📉 네코 랩스, 고양이 낮잠 시간으로 양자 연산 가동률 일시 저하',
+    text: '연구소 내 실험 냥이들의 단체 낮잠 타임으로 초전도 양자 연산 효율이 일시적으로 둔화되며 단기 차익 실현 매물이 출회되었습니다.', 
+    eventType: 'NEKO_SLEEP',
     sentiment: 'BEAR',
     importance: 'NORMAL',
-    relatedStock: 'BTC',
-    impactSector: '가상자산 규제',
-    impact: { BTC: -0.09, ETH: -0.08 } 
+    relatedStock: 'NEKO',
+    impactSector: '초전도 양자 & 미래 에너지',
+    impact: { NEKO: -0.10 } 
+  },
+  { 
+    title: '🎉 월덕 인터내셔널, 주주환원 1:5 무상증자 및 주당 5,000원 특별 배당',
+    text: '월덕 지주사가 창립 기념 주주총회를 통해 역대급 무상증자와 고배당 지급을 결의했습니다. 장기 가치 투자자들의 매수세가 유입됩니다.', 
+    eventType: 'DIVIDEND_BONUS',
+    sentiment: 'BULL',
+    importance: 'URGENT',
+    relatedStock: 'WTRD',
+    impactSector: '커뮤니티 지주 & AI 플랫폼',
+    impact: { WTRD: 0.18, BANK: 0.06 } 
+  },
+  { 
+    title: '⚠️ 황금닭 치킨, 생닭 사료용 곡물가 상승으로 원가 부담 증가',
+    text: '국제 곡물가 변동으로 사료비 부담이 가중되었으나, 프리미엄 신메뉴 출시를 통해 수익성 방어에 나설 것으로 전망됩니다.', 
+    eventType: 'COST_PRESSURE',
+    sentiment: 'BEAR',
+    importance: 'NORMAL',
+    relatedStock: 'CHKN',
+    impactSector: '식음료 & 스테미나 푸드',
+    impact: { CHKN: -0.06 } 
   }
 ];
 
@@ -171,7 +151,7 @@ async function updateStockPrices() {
 
     const [stocks] = await connection.query('SELECT * FROM stocks');
     
-    // 35% 확률로 시장 뉴스 이벤트 발생 및 DB 저장
+    // 35% 확률로 커뮤니티 뉴스 이벤트 발생 및 DB 저장
     let eventImpactMap = {};
     lastNews = null;
     if (Math.random() < 0.35) {
@@ -181,12 +161,9 @@ async function updateStockPrices() {
         text: selectedEvent.text,
         eventType: selectedEvent.eventType,
         sentiment: selectedEvent.sentiment,
-        importance: selectedEvent.importance,
-        impactSector: selectedEvent.impactSector,
-        relatedStock: selectedEvent.relatedStock,
-        regime: currentRegime.name
+        importance: selectedEvent.importance
       };
-      eventImpactMap = selectedEvent.impact;
+      eventImpactMap = selectedEvent.impact || {};
 
       try {
         await connection.query(`
@@ -196,7 +173,7 @@ async function updateStockPrices() {
           selectedEvent.title,
           selectedEvent.text,
           selectedEvent.eventType,
-          selectedEvent.impactSector || '종합 시장',
+          selectedEvent.impactSector || null,
           selectedEvent.relatedStock || 'ALL',
           selectedEvent.impact['ALL'] || selectedEvent.impact[Object.keys(selectedEvent.impact)[0]] || 0,
           selectedEvent.sentiment || 'BULL',
@@ -260,7 +237,7 @@ async function updateStockPrices() {
     }
 
     await connection.commit();
-    console.log(`📈 [주식 엔진] 주가 변동 갱신 완료 (${currentRegime.name}) - ${stocks.length}개 종목${lastNews ? ` | 📢 뉴스: ${lastNews.title}` : ''}`);
+    console.log(`📈 [월덕 가상 경제 엔진] 주가 변동 갱신 완료 (${currentRegime.name}) - ${stocks.length}개 종목${lastNews ? ` | 📢 공시: ${lastNews.title}` : ''}`);
 
     historyCleanupCounter++;
     if (historyCleanupCounter >= 10) {
@@ -274,23 +251,29 @@ async function updateStockPrices() {
           ) t WHERE t.rn <= 50
         )
       `);
-      await connection.query('DELETE FROM market_news_feed WHERE created_at < NOW() - INTERVAL 7 DAY');
     }
-
   } catch (error) {
     await connection.rollback().catch(() => {});
-    console.error('❌ 주가 변동 엔진 에러:', error.message);
+    console.error('❌ 주식 가격 변동 업데이트 실패:', error);
   } finally {
     connection.release();
   }
 }
 
-function getLastNews() {
-  return lastNews;
+function startStockEngine(intervalMs = 60000) {
+  console.log(`🚀 [월덕 가상 경제 엔진] 가동 시작 (갱신 주기: ${intervalMs / 1000}초)`);
+  setTimeout(() => {
+    updateStockPrices();
+  }, 3000);
+  setInterval(updateStockPrices, intervalMs);
 }
 
 function getCurrentMarketRegime() {
   return MARKET_REGIMES[currentRegimeIndex];
+}
+
+function getLastNews() {
+  return lastNews;
 }
 
 async function getRecentNewsFeed(limit = 20) {
@@ -302,42 +285,12 @@ async function getRecentNewsFeed(limit = 20) {
   }
 }
 
-// 텍스트 기반 아스키 차트 생성
-function generateAsciiChart(historyPrices, height = 5) {
-  if (!historyPrices || historyPrices.length === 0) {
-    return '```차트 데이터가 없습니다.```';
-  }
-
-  const prices = historyPrices.map(p => Number(p));
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const range = max - min || 1;
-
-  const blocks = [' ', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-  let line = '';
-
-  for (const p of prices) {
-    const norm = (p - min) / range;
-    const blockIndex = Math.min(Math.floor(norm * blocks.length), blocks.length - 1);
-    line += blocks[blockIndex];
-  }
-
-  const firstPrice = prices[0];
-  const lastPrice = prices[prices.length - 1];
-  const diff = lastPrice - firstPrice;
-  const percent = ((diff / firstPrice) * 100).toFixed(2);
-  const sign = diff >= 0 ? '+' : '';
-
-  return `\`\`\`text
-최저: ${min.toLocaleString()}원 | 최고: ${max.toLocaleString()}원 (${sign}${percent}%)
-[과거] ${line} [현재]
-\`\`\``;
-}
-
 module.exports = {
   updateStockPrices,
-  getLastNews,
+  startStockEngine,
   getCurrentMarketRegime,
+  getLastNews,
   getRecentNewsFeed,
-  generateAsciiChart
+  MARKET_REGIMES,
+  NEWS_EVENTS
 };

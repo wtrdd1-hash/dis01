@@ -2192,16 +2192,18 @@ function startWebServer(client) {
             <div id="tab-news" class="tab-pane">
               <div class="news-control-bar">
                 <div class="news-search-box">
-                  <input type="text" id="news-search-input" class="news-search-input" placeholder="🔍 종목명, 키워드(AI, 금리, 바이오, ETF 등) 검색..." oninput="filterNewsList()">
+                  <input type="text" id="news-search-input" class="news-search-input" placeholder="🔍 종목명, 키워드(월덕, 광산, 카지노, 냥코, 치킨, 복권, 데이터 등) 검색..." oninput="filterNewsList()">
                 </div>
                 <div class="news-category-filters">
                   <button class="btn-filter active" onclick="selectNewsCategory('ALL')">전체</button>
-                  <button class="btn-filter" onclick="selectNewsCategory('TECH_AI')">🚀 테크/AI</button>
-                  <button class="btn-filter" onclick="selectNewsCategory('CRYPTO')">⚡ 가상자산</button>
-                  <button class="btn-filter" onclick="selectNewsCategory('BIO_HEALTH')">🎉 바이오</button>
-                  <button class="btn-filter" onclick="selectNewsCategory('MACRO_POLICY')">🏛️ 거시/금리</button>
-                  <button class="btn-filter" onclick="selectNewsCategory('EARNINGS')">📊 실적공시</button>
-                  <button class="btn-filter" onclick="selectNewsCategory('SHORT_SQUEEZE')">🔥 숏스퀴즈</button>
+                  <button class="btn-filter" onclick="selectNewsCategory('WTRD_UPDATE')">🦆 월덕 지주</button>
+                  <button class="btn-filter" onclick="selectNewsCategory('MINING_BOOM')">⛏️ 광산 채굴</button>
+                  <button class="btn-filter" onclick="selectNewsCategory('CASINO_JACKPOT')">🎰 카지노 엔터</button>
+                  <button class="btn-filter" onclick="selectNewsCategory('BANK_POLICY')">🏦 중앙은행</button>
+                  <button class="btn-filter" onclick="selectNewsCategory('NEKO_QUANTUM')">🐱 냥코 양자</button>
+                  <button class="btn-filter" onclick="selectNewsCategory('FOOD_SURPRISE')">🍗 치킨 푸드</button>
+                  <button class="btn-filter" onclick="selectNewsCategory('LOTTERY_FEVER')">⚡ 다이아 복권</button>
+                  <button class="btn-filter" onclick="selectNewsCategory('TECH_INFRA')">🌐 데이터 테크</button>
                 </div>
               </div>
 

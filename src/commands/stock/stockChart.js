@@ -10,7 +10,7 @@ module.exports = {
     .setDescription('특정 종목의 가격 변동 추이 차트를 확인합니다.')
     .addStringOption(option =>
       option.setName('종목코드')
-        .setDescription('종목 ID (예: NVDA, SAM, AAPL, BTC, ETH, BIO)')
+        .setDescription('종목 ID (예: WTRD, MINE, CASN, BANK, NEKO, CHKN, SLOT, SCRP)')
         .setRequired(true)
     ),
 

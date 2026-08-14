@@ -9,7 +9,7 @@ module.exports = {
     .setDescription('원하는 주식을 매수합니다.')
     .addStringOption(option =>
       option.setName('종목코드')
-        .setDescription('종목 ID (예: NVDA, SAM, AAPL, BTC, ETH, BIO)')
+        .setDescription('종목 ID (예: WTRD, MINE, CASN, BANK, NEKO, CHKN, SLOT, SCRP)')
         .setRequired(true)
     )
     .addStringOption(option =>
