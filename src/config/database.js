@@ -50,6 +50,7 @@ async function initDatabase() {
         last_daily DATETIME NULL,
         daily_streak INT NOT NULL DEFAULT 0,
         last_work DATETIME NULL,
+        last_subsidy DATETIME NULL,
         github_id VARCHAR(64) NULL,
         github_username VARCHAR(100) NULL,
         github_linked_at DATETIME NULL,
@@ -57,7 +58,7 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // 기존 users 테이블에 username / avatar 컬럼 추가 (안전 대처)
+    // 기존 users 테이블에 username / avatar / last_subsidy 컬럼 추가 (안전 대처)
     const [userCols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'username';`);
     if (userCols.length === 0) {
       await connection.query(`
@@ -66,6 +67,15 @@ async function initDatabase() {
         ADD COLUMN avatar VARCHAR(255) NULL;
       `);
       console.log('✅ users 테이블에 username 및 avatar 컬럼이 추가되었습니다.');
+    }
+
+    const [subsidyCols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'last_subsidy';`);
+    if (subsidyCols.length === 0) {
+      await connection.query(`
+        ALTER TABLE users 
+        ADD COLUMN last_subsidy DATETIME NULL;
+      `);
+      console.log('✅ users 테이블에 last_subsidy 컬럼이 추가되었습니다.');
     }
 
 
