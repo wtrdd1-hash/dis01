@@ -7,7 +7,7 @@ const { formatMoney, formatTimeRemaining } = require('../../utils/formatters');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('지원금')
-    .setDescription('5분마다 긴급 정부 지원금 5,000원을 수령합니다.'),
+    .setDescription('10분마다 긴급 정부 지원금 5,000원을 수령합니다.'),
 
   async execute(interaction) {
     const userId = interaction.user.id;
@@ -18,7 +18,7 @@ module.exports = {
 
     const now = new Date();
     const lastSubsidy = userData.last_subsidy ? new Date(userData.last_subsidy) : null;
-    const cooldownMs = (config.subsidyCooldownMinutes || 5) * 60 * 1000; // 5분
+    const cooldownMs = (config.subsidyCooldownMinutes || 10) * 60 * 1000; // 10분
 
     if (lastSubsidy) {
       const diffMs = now.getTime() - lastSubsidy.getTime();
@@ -47,7 +47,7 @@ module.exports = {
       `🎉 **긴급 생활 지원금 ₩5,000 지급 완료!**\n\n` +
       `💰 **획득한 지원금:** **${formatMoney(reward)}**\n` +
       `💳 **현재 보유 현금:** **${formatMoney(newCash)}**\n\n` +
-      `⏱️ *다음 지원금은 5분 후에 다시 받으실 수 있습니다.*`
+      `⏱️ *다음 지원금은 10분 후에 다시 받으실 수 있습니다.*`
     );
 
     await interaction.reply({ embeds: [embed] });

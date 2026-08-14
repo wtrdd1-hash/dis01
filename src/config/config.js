@@ -26,7 +26,7 @@ module.exports = {
   dailyStreakBonus: 2000,  // 연속 출석 일당 +2000원
   workCooldownMinutes: 10,  // 일하기 쿨타임 10분
   subsidyAmount: 5000,      // 지원금 수령액 5000원
-  subsidyCooldownMinutes: 5, // 지원금 쿨타임 5분
+  subsidyCooldownMinutes: 10, // 지원금 쿨타임 10분
   bankInterestRate: 0.015,  // 은행 턴당/일당 이자 1.5%
   port: parseInt(process.env.PORT || '8080', 10),
   

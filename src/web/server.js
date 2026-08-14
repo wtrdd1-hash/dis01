@@ -720,7 +720,7 @@ function startWebServer(client) {
     }
   });
 
-  // 8. 💸 정부 기본소득 지원금 API (경제 로그 기록)
+  // 8. 💸 정부 기본소득 지원금 API (10분 쿨타임 & 경제 로그 기록)
   app.post('/api/economy/subsidy', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -729,6 +729,23 @@ function startWebServer(client) {
       const userData = await getOrCreateUser(session.id);
       const userCash = BigInt(userData.cash || 0);
       const userBank = BigInt(userData.bank || 0);
+
+      const now = new Date();
+      const lastSubsidy = userData.last_subsidy ? new Date(userData.last_subsidy) : null;
+      const cooldownMs = (config.subsidyCooldownMinutes || 10) * 60 * 1000; // 10분
+
+      if (lastSubsidy) {
+        const diffMs = now.getTime() - lastSubsidy.getTime();
+        if (diffMs < cooldownMs) {
+          const remainingSec = Math.ceil((cooldownMs - diffMs) / 1000);
+          const remainMin = Math.floor(remainingSec / 60);
+          const remainSec = remainingSec % 60;
+          return res.status(400).json({
+            success: false,
+            error: `지원금 신청 쿨타임 대기 중입니다! (다음 신청까지 약 ${remainMin}분 ${remainSec}초 남음)`
+          });
+        }
+      }
 
       if (userCash + userBank >= 50000n) {
         return res.status(400).json({ success: false, error: '자산이 50,000원 미만일 때만 기본소득 지원금을 신청할 수 있습니다.' });
@@ -750,7 +767,7 @@ function startWebServer(client) {
         success: true,
         subsidyAmount,
         newCash: newCash.toString(),
-        message: `🏛️ 정부 긴급 기본소득 +${formatMoney(subsidyAmount)} 지급 완료!`
+        message: `🏛️ 정부 긴급 기본소득 +${formatMoney(subsidyAmount)} 지급 완료! (10분 후 재신청 가능)`
       });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
