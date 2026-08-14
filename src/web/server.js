@@ -2923,6 +2923,32 @@ function startWebServer(client) {
               .casino-hub-grid, .stocks-grid, .gainers-grid { grid-template-columns: 1fr; }
               .modal-box { padding: 20px 16px; border-radius: 18px; }
             }
+
+            /* 🌐 사이트 푸터 & 정책 링크 */
+            .app-site-footer {
+              margin-top: 50px;
+              padding-top: 30px;
+              border-top: 1px solid var(--card-border);
+              color: var(--text-muted);
+              font-size: 0.85rem;
+            }
+            .footer-content {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              flex-wrap: wrap;
+              gap: 20px;
+              margin-bottom: 20px;
+            }
+            .footer-brand { max-width: 480px; }
+            .footer-logo { font-family: 'Outfit', sans-serif; font-size: 1.1rem; font-weight: 800; color: #fff; margin-bottom: 6px; }
+            .footer-desc { font-size: 0.8rem; color: #9ca3af; line-height: 1.5; }
+            .footer-links { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+            .footer-link { color: #cbd5e1; text-decoration: none; font-weight: 600; font-size: 0.85rem; transition: color 0.2s; }
+            .footer-link:hover { color: #818cf8; }
+            .footer-link.highlight { color: #818cf8; background: rgba(99, 102, 241, 0.15); padding: 4px 10px; border-radius: 8px; border: 1px solid rgba(99, 102, 241, 0.3); }
+            .footer-link.highlight:hover { background: rgba(99, 102, 241, 0.3); color: #fff; }
+            .footer-bottom { font-size: 0.75rem; color: #64748b; line-height: 1.4; }
           </style>
         </head>
         <body>
@@ -3240,6 +3266,25 @@ function startWebServer(client) {
                 <button class="btn-support-action btn-support-view" onclick="openProfileModal('inquiries')">📋 내 문의 내역 & 답변</button>
               </div>
             </div>
+
+            <!-- 🌐 사이트 푸터 & 개인정보처리방침 링크 -->
+            <footer class="app-site-footer">
+              <div class="footer-content">
+                <div class="footer-brand">
+                  <div class="footer-logo">🦆 월덕 (Duck Economy Bot & Web)</div>
+                  <p class="footer-desc">실시간 가상 주식 거래 차트, 골드 채굴 클리커, 미니 카지노 게임 및 24시간 1:1 고객센터 지원 시스템</p>
+                </div>
+                <div class="footer-links">
+                  <a href="/privacy" class="footer-link highlight">🔒 개인정보처리방침</a>
+                  <a href="/terms" class="footer-link">📜 서비스 이용약관</a>
+                  <a href="javascript:void(0)" onclick="openInquiryModal()" class="footer-link">✍️ 1:1 고객센터</a>
+                  <a href="/auth/guide" class="footer-link">⚙️ OAuth 안내</a>
+                </div>
+              </div>
+              <div class="footer-bottom">
+                <span>© 2026 Duck Economy Project. All rights reserved. 본 웹 애플리케이션의 모든 가상 화폐 및 주식은 Discord 봇 게임용 가상 데이터입니다.</span>
+              </div>
+            </footer>
 
           </div>
 
@@ -5103,6 +5148,632 @@ function startWebServer(client) {
       </html>
     `);
   });
+
+  // 🔒 개인정보처리방침 페이지 (/privacy)
+  const renderPrivacyPolicy = (req, res) => {
+    const baseUrl = getDynamicBaseUrl(req);
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>🔒 개인정보처리방침 | 월덕 (Duck Economy)</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+        <style>
+          :root {
+            --bg: #090d16;
+            --card-bg: #111827;
+            --card-border: rgba(255, 255, 255, 0.08);
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --accent: #38bdf8;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-sub: #cbd5e1;
+            --badge-bg: rgba(99, 102, 241, 0.15);
+            --badge-border: rgba(99, 102, 241, 0.35);
+          }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.7;
+            padding-bottom: 80px;
+          }
+          a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+          a:hover { color: #818cf8; text-decoration: underline; }
+
+          /* 상단 네비게이션 */
+          .nav-header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(9, 13, 22, 0.85);
+            backdrop-filter: blur(14px);
+            border-bottom: 1px solid var(--card-border);
+            padding: 16px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .nav-brand {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none !important;
+          }
+          .nav-actions { display: flex; gap: 10px; align-items: center; }
+          .btn-nav {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--card-border);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none !important;
+          }
+          .btn-nav:hover {
+            background: var(--primary);
+            border-color: var(--primary-hover);
+            transform: translateY(-1px);
+          }
+
+          /* 본문 컨테이너 */
+          .policy-container {
+            max-width: 920px;
+            margin: 40px auto 0;
+            padding: 0 20px;
+          }
+
+          /* 히어로 헤더 */
+          .policy-hero {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(17, 24, 39, 0.9) 100%);
+            border: 1px solid var(--badge-border);
+            border-radius: 20px;
+            padding: 36px 32px;
+            margin-bottom: 30px;
+            position: relative;
+            overflow: hidden;
+          }
+          .policy-tag {
+            display: inline-block;
+            background: var(--badge-bg);
+            border: 1px solid var(--badge-border);
+            color: #c7d2fe;
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 20px;
+            margin-bottom: 14px;
+          }
+          .policy-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.1rem;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 12px;
+            letter-spacing: -0.02em;
+          }
+          .policy-subtitle {
+            color: var(--text-sub);
+            font-size: 0.95rem;
+            max-width: 720px;
+            margin-bottom: 18px;
+          }
+          .policy-meta-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            padding-top: 14px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+          }
+          .meta-item { display: flex; align-items: center; gap: 6px; }
+          .meta-item b { color: #fff; }
+
+          /* 요약 핵심 하이라이트 박스 */
+          .summary-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 35px;
+          }
+          .summary-card h3 {
+            font-size: 1.05rem;
+            color: #fbbf24;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 14px;
+          }
+          .summary-box {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 14px;
+            border-radius: 12px;
+          }
+          .summary-box-title { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 600; }
+          .summary-box-desc { font-size: 0.9rem; color: #fff; font-weight: 700; }
+
+          /* 빠른 이동 목차 (TOC) */
+          .toc-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 35px;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+          }
+          .toc-pill {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-sub);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-decoration: none !important;
+            transition: all 0.2s;
+          }
+          .toc-pill:hover {
+            background: rgba(99, 102, 241, 0.25);
+            color: #fff;
+            border-color: rgba(99, 102, 241, 0.5);
+          }
+
+          /* 본문 조항 섹션 */
+          .policy-section {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 28px 30px;
+            margin-bottom: 24px;
+            scroll-margin-top: 90px;
+          }
+          .section-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          }
+          .section-title .sec-num {
+            background: var(--primary);
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 6px;
+          }
+          .policy-section p {
+            color: var(--text-sub);
+            font-size: 0.92rem;
+            margin-bottom: 14px;
+          }
+          .policy-section ul, .policy-section ol {
+            color: var(--text-sub);
+            font-size: 0.92rem;
+            margin-left: 20px;
+            margin-bottom: 14px;
+          }
+          .policy-section li { margin-bottom: 8px; }
+          .policy-section strong { color: #fff; font-weight: 700; }
+
+          /* 정보 표 테이블 */
+          .policy-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 0.85rem;
+          }
+          .policy-table th {
+            background: rgba(0, 0, 0, 0.3);
+            color: #94a3b8;
+            font-weight: 700;
+            text-align: left;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--card-border);
+          }
+          .policy-table td {
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: var(--text-sub);
+            vertical-align: top;
+          }
+          .policy-table tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+          }
+
+          /* 하이라이트 콜아웃 */
+          .callout-box {
+            background: rgba(99, 102, 241, 0.08);
+            border-left: 4px solid var(--primary);
+            padding: 14px 18px;
+            border-radius: 8px;
+            margin: 16px 0;
+            font-size: 0.88rem;
+            color: #c7d2fe;
+          }
+          .callout-warn {
+            background: rgba(245, 158, 11, 0.08);
+            border-left: 4px solid #f59e0b;
+            color: #fde68a;
+          }
+          .callout-success {
+            background: rgba(16, 185, 129, 0.08);
+            border-left: 4px solid #10b981;
+            color: #a7f3d0;
+          }
+
+          /* 푸터 및 인쇄 */
+          .policy-footer {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 30px;
+            border-top: 1px solid var(--card-border);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+          }
+          .btn-print {
+            background: transparent;
+            border: 1px solid var(--card-border);
+            color: var(--text-muted);
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-top: 12px;
+            transition: all 0.2s;
+          }
+          .btn-print:hover { color: #fff; border-color: #fff; }
+
+          @media (max-width: 640px) {
+            .policy-hero { padding: 24px 18px; }
+            .policy-title { font-size: 1.6rem; }
+            .policy-section { padding: 20px 16px; }
+            .nav-header { padding: 12px 16px; }
+          }
+        </style>
+      </head>
+      <body>
+        <!-- 상단 네비게이션 헤더 -->
+        <header class="nav-header">
+          <a href="/" class="nav-brand">
+            <span>🦆</span>
+            <span>월덕 경제 시스템</span>
+          </a>
+          <div class="nav-actions">
+            <a href="/" class="btn-nav">🏠 메인 화면</a>
+            <a href="/terms" class="btn-nav">📜 서비스 이용약관</a>
+          </div>
+        </header>
+
+        <main class="policy-container">
+          <!-- 히어로 배너 -->
+          <div class="policy-hero">
+            <span class="policy-tag">Privacy Policy</span>
+            <h1 class="policy-title">개인정보처리방침</h1>
+            <p class="policy-subtitle">
+              '월덕(Duck Economy)' 서비스(이하 '서비스')는 정보주체의 자유와 권리 보호를 위해 「개인정보 보호법」 및 관계 법령이 정한 바를 준수하며, 이용자의 개인정보를 안전하게 처리하고 보호하기 위하여 다음과 같이 개인정보처리방침을 수립·공개합니다.
+            </p>
+            <div class="policy-meta-row">
+              <div class="meta-item">📅 <b>시행일자:</b> 2026년 8월 15일</div>
+              <div class="meta-item">🔄 <b>최종 개정일:</b> 2026년 8월 15일</div>
+              <div class="meta-item">🌐 <b>적용 대상:</b> 디스코드 봇 및 웹 애플리케이션 전 서비스</div>
+            </div>
+          </div>
+
+          <!-- 핵심 요약 카드 -->
+          <div class="summary-card">
+            <h3>📌 개인정보 처리 핵심 요약</h3>
+            <div class="summary-grid">
+              <div class="summary-box">
+                <div class="summary-box-title">수집 항목</div>
+                <div class="summary-box-desc">Discord ID, 닉네임, 아바타</div>
+              </div>
+              <div class="summary-box">
+                <div class="summary-box-title">수집 목적</div>
+                <div class="summary-box-desc">계정 식별, 게임 자산 저장, 1:1 문의</div>
+              </div>
+              <div class="summary-box">
+                <div class="summary-box-title">보유 기간</div>
+                <div class="summary-box-desc">탈퇴 시 즉시 파기 (로그 30일)</div>
+              </div>
+              <div class="summary-box">
+                <div class="summary-box-title">제3자 제공</div>
+                <div class="summary-box-desc" style="color: #34d399;">일체 없음 (None)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 빠른 목차 (TOC) -->
+          <nav class="toc-nav">
+            <a href="#sec-1" class="toc-pill">1. 수집 목적</a>
+            <a href="#sec-2" class="toc-pill">2. 수집 항목 및 방법</a>
+            <a href="#sec-3" class="toc-pill">3. 보유 및 이용기간</a>
+            <a href="#sec-4" class="toc-pill">4. 제3자 제공 및 위탁</a>
+            <a href="#sec-5" class="toc-pill">5. 이용자의 권리 및 행사</a>
+            <a href="#sec-6" class="toc-pill">6. 파기 절차 및 방법</a>
+            <a href="#sec-7" class="toc-pill">7. 안전성 확보 조치</a>
+            <a href="#sec-8" class="toc-pill">8. 쿠키(Cookie) 운영</a>
+            <a href="#sec-9" class="toc-pill">9. 보호책임자 및 문의처</a>
+            <a href="#sec-10" class="toc-pill">10. 방침의 변경 및 고지</a>
+          </nav>
+
+          <!-- 제1조 -->
+          <section id="sec-1" class="policy-section">
+            <h2 class="section-title"><span class="sec-num">제1조</span> 개인정보의 수집 및 이용 목적</h2>
+            <p>서비스는 다음의 목적을 위하여 최소한의 개인정보를 수집 및 처리합니다. 처리하고 있는 개인정보는 다음의 목적 이외의 용도로는 이용되지 않으며, 이용 목적이 변경되는 경우에는 관련 법령에 따라 별도의 동의를 받는 등 필요한 조치를 이행할 예정입니다.</p>
+            <ul>
+              <li><strong>1. 디스코드(Discord) 계정 연동 및 본인 식별:</strong> Discord OAuth2 로그인을 통한 고유 회원 식별, 중복 가입 방지, 계정 인증 관리</li>
+              <li><strong>2. 게임 및 경제 시스템 데이터 관리:</strong> 가상 현금, 은행 예금, 주식 포트폴리오, 광산 클리커 레벨, 출석체크 및 랭킹 데이터의 안전한 저장 및 유지</li>
+              <li><strong>3. 1:1 고객센터 문의 접수 및 답변 처리:</strong> 사용자의 버그 제보, 기능 건의, 계정 복구 문의 접수 및 디스코드 관리자 DM을 통한 신속한 답변 회신</li>
+              <li><strong>4. 부정 이용 방지 및 서비스 안정성 감사:</strong> 매크로/어뷰징 방지, 시스템 오류 추적, 접속 트래픽 분석 및 무단 침입 방지</li>
+            </ul>
+          </section>
+
+          <!-- 제2조 -->
+          <section id="sec-2" class="policy-section">
+            <h2 class="section-title"><span class="sec-num">제2조</span> 수집하는 개인정보의 항목 및 수집 방법</h2>
+            <p>서비스는 회원가입 및 서비스 이용 과정에서 다음과 같은 개인정보를 수집합니다.</p>
+            
+            <table class="policy-table">
+              <thead>
+                <tr>
+                  <th>구분</th>
+                  <th>수집 항목</th>
+                  <th>수집 목적 및 방법</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>필수 항목 (기본)</strong></td>
+                  <td>Discord 고유 ID (User ID), Discord 사용자명(Username), 프로필 아바타 이미지 URL</td>
+                  <td>Discord OAuth2 로그인 시 이용자 동의를 거쳐 디스코드 API를 통해 자동 연동</td>
+                </tr>
+                <tr>
+                  <td><strong>선택 항목 (고객센터)</strong></td>
+                  <td>1:1 문의 제목, 문의 내용, 첨부 이미지/스크린샷</td>
+                  <td>웹 1:1 문의 폼 또는 디스코드 <code>/문의</code> 명령어 작성 시 이용자가 직접 제출</td>
+                </tr>
+                <tr>
+                  <td><strong>자동 수집 항목</strong></td>
+                  <td>접속 IP 주소, 브라우저 User-Agent, 서비스 이용 기록(명령어 실행 및 웹 요청 로그)</td>
+                  <td>웹 서버 및 디스코드 봇 상호작용 시 시스템 로그를 통해 자동 생성 및 수집</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="callout-box">
+              💡 <strong>민감정보 수집 금지:</strong> 서비스는 이용자의 실명, 주민등록번호, 전화번호, 실제 금융 계좌번호, 결제 정보 등 일체의 민감한 개인정보를 수집하거나 요구하지 않습니다.
+            </div>
+          </section>
+
+          <!-- 제3조 -->
+          <section id="sec-3" class="policy-section">
+            <h2 class="section-title"><span class="sec-num">제3조</span> 개인정보의 보유 및 이용 기간</h2>
+            <p>서비스는 법령에 따른 개인정보 보유·이용 기간 또는 정보주체로부터 개인정보를 수집 시에 동의받은 개인정보 보유·이용 기간 내에서 개인정보를 처리·보유합니다.</p>
+            <ul>
+              <li><strong>계정 및 가상 자산 정보:</strong> 서비스 이용 계약(디스코드 봇 사용 또는 웹 연동) 유지 기간 동안 보유하며, 회원 탈퇴 또는 데이터 삭제 요청 시 지체 없이 영구 파기합니다.</li>
+              <li><strong>시스템 접속 및 명령어 감사 로그:</strong> 악의적 어뷰징 방지 및 시스템 안정성 관리를 위해 <strong>30일간</strong> 보관 후, 백그라운드 자동 스케줄러를 통해 30일이 초과된 데이터는 영구 자동 파기됩니다.</li>
+              <li><strong>1:1 고객센터 상담 내역:</strong> 고객 분쟁 해결 및 상담 이력 확인을 위해 최대 <strong>1년간</strong> 보관 후 안전하게 파기됩니다.</li>
+            </ul>
+          </section>
+
+          <!-- 제4조 -->
+          <section id="sec-4" class="policy-section">
+            <h2 class="section-title"><span class="sec-num">제4조</span> 개인정보의 제3자 제공 및 위탁</h2>
+            <p>서비스는 정보주체의 개인정보를 제1조(개인정보의 수집 및 이용 목적)에서 명시한 범위 내에서만 처리하며, 정보주체의 동의 없이 본래의 범위를 초과하여 처리하거나 <strong>제3자에게 제공 및 위탁하지 않습니다.</strong></p>
+            <div class="callout-box callout-success">
+              ✅ <strong>제3자 제공 내역 없음:</strong> 본 서비스는 영리 목적의 타사 광고 제공, 데이터 판매, 외부 마케팅 위탁을 일체 진행하지 않습니다.
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">※ 단, 법률에 특별한 규정이 있거나 법령상 의무를 준수하기 위하여 불가피하게 수사기관 등의 적법한 요청이 있는 경우에는 예외로 합니다.</p>
+          </section>
+
+          <!-- 제5조 -->
+          <section id="sec-5" class="policy-section">
+            <h2 class="section-title"><span class="sec-num">제5조</span> 정보주체 및 법정대리인의 권리·의무 및 행사 방법</h2>
+            <p>정보주체는 서비스에 대해 언제든지 다음 각 호의 개인정보 보호 관련 권리를 행사할 수 있습니다.</p>
+            <ol>
+              <li><strong>개인정보 열람 및 자산 조회:</strong> 메인 웹사이트 상단 프로필 모달 및 디스코드 <code>/지갑</code>, <code>/포트폴리오</code> 명령어를 통해 실시간 데이터 확인 가능</li>
+              <li><strong>Discord 연동 해제 (승인 취소):</strong> Discord 앱 설정 ➔ [승인된 앱(Authorized Apps)] 메뉴에서 '월덕' 애플리케이션의 권한을 언제든 직접 즉시 취소 가능</li>
+              <li><strong>계정 및 데이터 영구 삭제(탈퇴) 요청:</strong> 1:1 고객센터 문의 창구 또는 디스코드 <code>/문의</code> 명령어를 통해 본인 확인 후 모든 데이터의 즉시 파기를 요청하실 수 있습니다.</li>
+            </ol>
+          </section>
+
+          <!-- 제6조 -->
+          <section id="sec-6" class="policy-section">
+            <h2 class="section-title"><span class="sec-num">제6조</span> 개인정보의 파기 절차 및 파기 방법</h2>
+            <p>서비스는 개인정보 보유기간의 경과, 처리목적 달성 등 개인정보가 불필요하게 되었을 때에는 지체 없이 해당 개인정보를 파기합니다.</p>
+            <ul>
+              <li><strong>파기 절차:</strong> 파기 사유가 발생한 개인정보를 선정하고, 관리자의 승인을 거쳐 데이터베이스에서 즉시 삭제 조치합니다.</li>
+              <li><strong>파기 방법:</strong> 전자적 파일 형태의 정보는 기록을 재생할 수 없는 기술적 방법(SQL DELETE 및 스토리지 영구 삭제)을 사용하여 파기합니다.</li>
+            </ul>
+          </section>
+
+          <!-- 제7조 -->
+          <section id="sec-7" class="policy-section">
+            <h2 class="section-title"><span class="sec-num">제7조</span> 개인정보의 안전성 확보 조치</h2>
+            <p>서비스는 개인정보의 안전성 확보를 위해 다음과 같은 기술적·관리적 조치를 취하고 있습니다.</p>
+            <ul>
+              <li><strong>1. 통신 구간 암호화:</strong> HTTPS(SSL/TLS) 보안 프로토콜을 적용하여 데이터 송수신 시 도청 및 위변조를 방지합니다.</li>
+              <li><strong>2. 안전한 세션 쿠키 보호:</strong> 로그인 인증 토큰은 <code>HttpOnly</code> 및 보안 속성이 적용된 쿠키로 격리하여 XSS 공격 및 스크립트 탈취를 원천 차단합니다.</li>
+              <li><strong>3. 권한 관리 및 접근 통제:</strong> 데이터베이스 및 관리자 페이지에 대한 접근 권한을 관리자 Discord ID 화이트리스트로 엄격히 제한합니다.</li>
+              <li><strong>4. 첨부 파일 격리 및 정제:</strong> 1:1 문의 시 첨부되는 이미지 파일은 확장자 및 Base64 바이너리 검증을 거쳐 독립된 격리 스토리지에 안전하게 보관됩니다.</li>
+            </ul>
+          </section>
+
+          <!-- 제8조 -->
+          <section id="sec-8" class="policy-section">
+            <h2 class="section-title"><span class="sec-num">제8조</span> 개인정보 자동 수집 장치의 설치·운영 및 거부에 관한 사항</h2>
+            <p>서비스는 이용자에게 개별적인 맞춤 서비스를 제공하기 위해 이용 정보를 저장하고 수시로 불러오는 <strong>'쿠키(Cookie)'</strong>를 사용합니다.</p>
+            <ul>
+              <li><strong>쿠키의 사용 목적:</strong> Discord 로그인 상태 유지 및 세션 인증 (<code>discord_user</code> 쿠키)</li>
+              <li><strong>쿠키 설치 거부 방법:</strong> 웹 브라우저의 옵션 설정을 통해 쿠키 저장을 거부할 수 있습니다. 단, 쿠키 저장을 거부할 경우 웹 애플리케이션 로그인 및 마이페이지 이용에 제한이 있을 수 있습니다.</li>
+            </ul>
+          </section>
+
+          <!-- 제9조 -->
+          <section id="sec-9" class="policy-section">
+            <h2 class="section-title"><span class="sec-num">제9조</span> 개인정보 보호책임자 및 1:1 고객센터 창구</h2>
+            <p>서비스는 개인정보 처리에 관한 업무를 총괄해서 책임지고, 개인정보 처리와 관련한 정보주체의 불만처리 및 피해구제 등을 위하여 아래와 같이 고객 지원 창구를 운영하고 있습니다.</p>
+            
+            <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border); padding: 18px 20px; border-radius: 12px; margin-top: 12px;">
+              <p style="margin-bottom: 6px;"><strong>🛡️ 개인정보 보호 및 고객 지원팀:</strong> 월덕(Duck Economy) 운영진</p>
+              <p style="margin-bottom: 6px;"><strong>💬 디스코드 1:1 문의 명령어:</strong> <code>/문의</code></p>
+              <p style="margin-bottom: 6px;"><strong>🌐 웹 1:1 고객센터:</strong> <a href="/#support">메인 화면 하단 1:1 문의 창구</a></p>
+              <p style="margin-bottom: 0;"><strong>⚡ 관리자 다이렉트 소통:</strong> 문의 접수 시 관리자 디스코드 DM으로 실시간 전송 후 즉시 답변</p>
+            </div>
+          </section>
+
+          <!-- 제10조 -->
+          <section id="sec-10" class="policy-section">
+            <h2 class="section-title"><span class="sec-num">제10조</span> 개인정보처리방침의 변경 및 고지 의무</h2>
+            <p>본 개인정보처리방침은 <strong>2026년 8월 15일</strong>부터 적용됩니다. 법령 및 방침에 따른 변경내용의 추가, 삭제 및 정정이 있는 경우에는 변경사항의 시행 7일 전부터 웹사이트 공지사항 또는 디스코드 봇 알림을 통하여 고지할 것입니다.</p>
+          </section>
+
+          <!-- 푸터 -->
+          <footer class="policy-footer">
+            <p>© 2026 Duck Economy Project. All rights reserved.</p>
+            <p style="margin-top: 4px; font-size: 0.78rem;">공식 웹 주소: <a href="${baseUrl}/privacy">${baseUrl}/privacy</a></p>
+            <button type="button" class="btn-print" onclick="window.print()">🖨️ 개인정보처리방침 인쇄하기</button>
+          </footer>
+        </main>
+      </body>
+      </html>
+    `);
+  };
+
+  // 📜 서비스 이용약관 페이지 (/terms)
+  const renderTermsOfService = (req, res) => {
+    const baseUrl = getDynamicBaseUrl(req);
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>📜 서비스 이용약관 | 월덕 (Duck Economy)</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+        <style>
+          :root {
+            --bg: #090d16;
+            --card-bg: #111827;
+            --card-border: rgba(255, 255, 255, 0.08);
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --accent: #38bdf8;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-sub: #cbd5e1;
+          }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text-main); line-height: 1.7; padding-bottom: 80px; }
+          a { color: var(--accent); text-decoration: none; }
+          .nav-header { position: sticky; top: 0; z-index: 100; background: rgba(9, 13, 22, 0.85); backdrop-filter: blur(14px); border-bottom: 1px solid var(--card-border); padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; }
+          .nav-brand { font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 10px; }
+          .btn-nav { background: rgba(255, 255, 255, 0.06); border: 1px solid var(--card-border); color: #fff; padding: 8px 16px; border-radius: 10px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+          .btn-nav:hover { background: var(--primary); }
+          .policy-container { max-width: 920px; margin: 40px auto 0; padding: 0 20px; }
+          .policy-hero { background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(17, 24, 39, 0.9) 100%); border: 1px solid rgba(99, 102, 241, 0.35); border-radius: 20px; padding: 36px 32px; margin-bottom: 30px; }
+          .policy-title { font-family: 'Outfit', sans-serif; font-size: 2.1rem; font-weight: 800; color: #fff; margin-bottom: 12px; }
+          .policy-section { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 28px 30px; margin-bottom: 24px; }
+          .section-title { font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 800; color: #fff; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+          .policy-section p, .policy-section li { color: var(--text-sub); font-size: 0.92rem; margin-bottom: 8px; }
+          .policy-section ul { margin-left: 20px; margin-bottom: 14px; }
+          .policy-footer { text-align: center; margin-top: 50px; padding-top: 30px; border-top: 1px solid var(--card-border); color: var(--text-muted); font-size: 0.85rem; }
+        </style>
+      </head>
+      <body>
+        <header class="nav-header">
+          <a href="/" class="nav-brand"><span>🦆</span><span>월덕 경제 시스템</span></a>
+          <div style="display:flex; gap:10px;">
+            <a href="/" class="btn-nav">🏠 메인 화면</a>
+            <a href="/privacy" class="btn-nav">🔒 개인정보처리방침</a>
+          </div>
+        </header>
+
+        <main class="policy-container">
+          <div class="policy-hero">
+            <h1 class="policy-title">서비스 이용약관</h1>
+            <p style="color: var(--text-sub);">월덕(Duck Economy) 디스코드 봇 및 웹 애플리케이션 서비스를 이용해 주셔서 감사합니다. 본 약관은 서비스 이용에 관한 권리와 의무를 규정합니다.</p>
+            <p style="font-size:0.82rem; color:var(--text-muted); margin-top:10px;">📅 시행일자: 2026년 8월 15일</p>
+          </div>
+
+          <section class="policy-section">
+            <h2 class="section-title">제1조 (목적 및 서비스 정의)</h2>
+            <p>본 약관은 '월덕'(이하 '서비스')이 제공하는 디스코드 가상 경제, 주식 차트 시뮬레이션, 광산 클리커 및 카지노 미니게임 서비스의 이용조건 및 절차를 규정함을 목적으로 합니다.</p>
+            <p><strong>⚠️ 가상 데이터 고지:</strong> 본 서비스의 모든 화폐(원), 주식, 채굴 포인트는 Discord 엔터테인먼트용 가상 데이터이며, 실제 현금 가치나 환전성을 갖지 않습니다.</p>
+          </section>
+
+          <section class="policy-section">
+            <h2 class="section-title">제2조 (이용자의 의무 및 금지행위)</h2>
+            <p>이용자는 다음 각 호의 행위를 하여서는 안 됩니다.</p>
+            <ul>
+              <li>1. 버그나 시스템 취약점을 악용하여 비정상적으로 가상 화폐나 자산을 복제/증식하는 행위</li>
+              <li>2. 매크로, 불법 스크립트, 다중 봇 계정을 이용하여 비정상적인 트래픽을 유발하는 행위</li>
+              <li>3. 가상 화폐 및 주식을 실제 현금 또는 현물과 거래(현거래)하는 행위</li>
+              <li>4. 타인의 디스코드 계정 또는 개인정보를 무단 도용하는 행위</li>
+              <li>5. 1:1 고객센터 창구에 음란물, 악성코드, 욕설/비방성 내용을 전송하는 행위</li>
+            </ul>
+          </section>
+
+          <section class="policy-section">
+            <h2 class="section-title">제3조 (서비스의 변경 및 중단)</h2>
+            <p>운영진은 서버 점검, 시스템 개선, 보안 조치 등의 필요가 있는 경우 사전 공지 후 서비스의 일부 또는 전부를 변경하거나 중단할 수 있습니다. 긴급 장애 발생 시 사후 공지될 수 있습니다.</p>
+          </section>
+
+          <section class="policy-section">
+            <h2 class="section-title">제4조 (면책 조항)</h2>
+            <p>서비스는 천재지변, 디스코드(Discord) 자체 서버 장애, 통신망 장애 등 불가항력적 사유로 인한 서비스 지연이나 데이터 손실에 대해 책임을 지지 않습니다.</p>
+          </section>
+
+          <footer class="policy-footer">
+            <p>© 2026 Duck Economy Project. All rights reserved.</p>
+            <p style="margin-top: 4px; font-size: 0.78rem;">공식 웹 주소: <a href="${baseUrl}/terms">${baseUrl}/terms</a></p>
+          </footer>
+        </main>
+      </body>
+      </html>
+    `);
+  };
+
+  // 라우트 등록
+  app.get('/privacy', renderPrivacyPolicy);
+  app.get('/policy', renderPrivacyPolicy);
+  app.get('/privacy-policy', renderPrivacyPolicy);
+  app.get('/terms', renderTermsOfService);
+  app.get('/terms-of-service', renderTermsOfService);
 
   app.listen(PORT, () => {
     console.log(`🌐 디스코드 경제 & OAuth2 웹 서버가 실행되었습니다 (포트: ${PORT})`);
