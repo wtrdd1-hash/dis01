@@ -4153,12 +4153,10 @@ function startWebServer(client) {
                 if (countElem) countElem.innerText = data.inquiries.length;
 
                 if (data.inquiries.length === 0) {
-                  box.innerHTML = `
-                    <div style="text-align: center; color: #9ca3af; padding: 30px 10px;">
-                      <p style="font-size: 1.1rem; margin-bottom: 8px;">📭 아직 등록된 1:1 문의가 없습니다.</p>
-                      <p style="font-size: 0.82rem; color: #6b7280;">버그 신고나 계정 복구, 기능 건의가 있으시면 [새 문의]를 작성해보세요!</p>
-                    </div>
-                  `;
+                  box.innerHTML = '<div style="text-align: center; color: #9ca3af; padding: 30px 10px;">' +
+                    '<p style="font-size: 1.1rem; margin-bottom: 8px;">📭 아직 등록된 1:1 문의가 없습니다.</p>' +
+                    '<p style="font-size: 0.82rem; color: #6b7280;">버그 신고나 계정 복구, 기능 건의가 있으시면 [새 문의]를 작성해보세요!</p>' +
+                    '</div>';
                   return;
                 }
 
@@ -4171,28 +4169,26 @@ function startWebServer(client) {
                   const createdDate = new Date(inq.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
                   const answeredDate = inq.answered_at ? new Date(inq.answered_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '';
 
-                  const answerBlock = isAnswered && inq.answer ? `
-                    <div class="inquiry-answer-box">
-                      <div class="inquiry-answer-header">
-                        <span>💬 관리자(@${inq.answered_by || '관리자'}) 공식 답변</span>
-                        <span style="font-size: 0.72rem; color: #9ca3af;">${answeredDate}</span>
-                      </div>
-                      <div class="inquiry-answer-text">${inq.answer.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-                    </div>
-                  ` : '';
+                  const answerBlock = isAnswered && inq.answer
+                    ? '<div class="inquiry-answer-box">' +
+                        '<div class="inquiry-answer-header">' +
+                          '<span>💬 관리자(@' + (inq.answered_by || '관리자') + ') 공식 답변</span>' +
+                          '<span style="font-size: 0.72rem; color: #9ca3af;">' + answeredDate + '</span>' +
+                        '</div>' +
+                        '<div class="inquiry-answer-text">' + inq.answer.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' +
+                      '</div>'
+                    : '';
 
-                  return `
-                    <div class="inquiry-item-card">
-                      <div class="inquiry-item-top">
-                        <span class="inquiry-category-badge">${inq.category || '일반 문의'} #${inq.id}</span>
-                        ${statusHtml}
-                      </div>
-                      <div class="inquiry-title-text">${inq.title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-                      <div class="inquiry-content-text">${inq.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-                      <div style="font-size: 0.72rem; color: #64748b; text-align: right;">작성일시: ${createdDate}</div>
-                      ${answerBlock}
-                    </div>
-                  `;
+                  return '<div class="inquiry-item-card">' +
+                    '<div class="inquiry-item-top">' +
+                      '<span class="inquiry-category-badge">' + (inq.category || '일반 문의') + ' #' + inq.id + '</span>' +
+                      statusHtml +
+                    '</div>' +
+                    '<div class="inquiry-title-text">' + inq.title.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' +
+                    '<div class="inquiry-content-text">' + inq.content.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' +
+                    '<div style="font-size: 0.72rem; color: #64748b; text-align: right;">작성일시: ' + createdDate + '</div>' +
+                    answerBlock +
+                  '</div>';
                 }).join('');
               } catch (e) {
                 box.innerHTML = '<p style="color: #f87171; text-align: center; padding: 20px;">문의 내역을 불러오지 못했습니다.</p>';
