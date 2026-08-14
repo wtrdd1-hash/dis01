@@ -208,33 +208,39 @@ async function logCommandExecution(interaction, status = 'SUCCESS', durationMs =
 }
 
 /**
- * 버튼 / 셀렉트 메뉴 등 컴포넌트 상호작용 로그
+ * 관리자 전용 작업 감사 로그 (DB + JSONL + 콘솔)
  */
-function logComponentInteraction(interaction) {
+async function logAdminAction(adminId, adminUsername, action, targetUserId = null, details = {}, ip = '127.0.0.1', country = 'LOCAL') {
   const timestamp = getFormattedTimestamp();
-  let username = interaction.user.tag || interaction.user.username;
-  if (!username.startsWith('@')) username = `@${username}`;
-
-  const guildName = interaction.guild ? interaction.guild.name : 'DM';
-  const customId = interaction.customId || 'N/A';
-  const type = interaction.isButton() ? '🔘 버튼' : interaction.isStringSelectMenu() ? '📋 메뉴' : '🧩 상호작용';
-
-  const config = require('../config/config');
-  const isAdmin = config.isAdmin(interaction.user.id);
-
   const logPayload = {
-    type: 'DISCORD_COMPONENT',
+    type: 'ADMIN_AUDIT',
     timestamp,
-    componentType: type,
-    userId: interaction.user.id,
-    username,
-    isAdmin,
-    guild: guildName,
-    customId
+    adminId,
+    adminUsername,
+    action,
+    targetUserId,
+    details,
+    ip,
+    country
   };
 
-  appendJsonLog(COMMANDS_JSONL_FILE, logPayload);
-  console.log(`[${timestamp}] ${type}${isAdmin ? ' 👑[ADMIN]' : ''} | 유저: ${username} (${interaction.user.id}) | 서버: ${guildName} | CustomId: ${customId}`);
+  appendJsonLog(ADMIN_JSONL_FILE, logPayload);
+  console.log(`👑 [관리자 작업 감사] @${adminUsername}(${adminId}) -> ${action} | 대상: ${targetUserId || 'N/A'} | 상세: ${JSON.stringify(details)}`);
+
+  try {
+    await pool.query(`
+      INSERT INTO admin_logs (admin_id, admin_username, action, target_user_id, details, ip, country)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [
+      adminId,
+      adminUsername,
+      action,
+      targetUserId,
+      JSON.stringify(details),
+      ip,
+      country
+    ]);
+  } catch (err) {}
 }
 
 function logInfo(tag, message) {
