@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const cookieParser = require('cookie-parser');
+const { EmbedBuilder } = require('discord.js');
 const config = require('../config/config');
 const { pool, getOrCreateUser } = require('../config/database');
 const { formatMoney, formatPercent, formatNumber } = require('../utils/formatters');
@@ -1277,6 +1278,166 @@ function startWebServer(client) {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
+  // 📩 유저 1:1 고객센터 문의 접수 API (관리자 Discord DM 실시간 알림 발송)
+  app.post('/api/support/inquiry', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
+
+    const { category, title, content } = req.body;
+    if (!title || title.trim().length < 2) {
+      return res.status(400).json({ success: false, error: '문의 제목을 2글자 이상 입력해주세요.' });
+    }
+    if (!content || content.trim().length < 5) {
+      return res.status(400).json({ success: false, error: '문의 내용을 5글자 이상 상세히 입력해주세요.' });
+    }
+
+    try {
+      const userData = await getOrCreateUser(session.id, session.username, session.avatar);
+      const userCash = BigInt(userData.cash || 0);
+      const userBank = BigInt(userData.bank || 0);
+
+      const [result] = await pool.query(`
+        INSERT INTO inquiries (user_id, username, avatar, category, title, content, status)
+        VALUES (?, ?, ?, ?, ?, ?, 'WAITING')
+      `, [session.id, session.username, session.avatar, category || '일반 문의', title.trim(), content.trim()]);
+
+      const ticketId = result.insertId;
+
+      // 🔔 모든 봇 관리자에게 디스코드 DM으로 실시간 문의 알림 전송
+      if (client && client.users) {
+        for (const adminId of config.adminIds) {
+          try {
+            const adminUser = await client.users.fetch(adminId);
+            if (adminUser) {
+              const dmEmbed = new EmbedBuilder()
+                .setTitle(`📩 [새 1:1 고객센터 문의 접수] Ticket #${ticketId}`)
+                .setColor(0xf59e0b)
+                .setDescription(`**작성 유저:** <@${session.id}> (${session.username} / \`${session.id}\`)\n**문의 분류:** \`${category || '일반 문의'}\`\n**접수 일시:** <t:${Math.floor(Date.now() / 1000)}:F>`)
+                .addFields(
+                  { name: '📌 문의 제목', value: title.trim(), inline: false },
+                  { name: '📝 상세 문의 내용', value: content.trim().length > 1000 ? content.trim().slice(0, 1000) + '...' : content.trim(), inline: false },
+                  { name: '💳 유저 자산 현황', value: `현금: ${formatMoney(userCash)} | 은행: ${formatMoney(userBank)}`, inline: false }
+                )
+                .setFooter({ text: `답변 방법: 웹 관리자 패널(/admin) 또는 디스코드에서 /admin_reply 문의번호:${ticketId} 답변내용:...` })
+                .setTimestamp();
+
+              await adminUser.send({ embeds: [dmEmbed] });
+            }
+          } catch (dmErr) {
+            console.warn(`[Inquiry DM] 관리자(${adminId}) DM 전송 실패:`, dmErr.message);
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        ticketId,
+        message: `🎉 1:1 문의(Ticket #${ticketId})가 정상 접수되어 관리자에게 실시간 알림이 전송되었습니다!`
+      });
+    } catch (err) {
+      console.error('Inquiry Submit Error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 📋 내 1:1 문의 내역 및 답변 조회 API
+  app.get('/api/support/my-inquiries', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
+
+    try {
+      const [rows] = await pool.query(`
+        SELECT id, category, title, content, status, answer, answered_by, answered_at, created_at
+        FROM inquiries
+        WHERE user_id = ?
+        ORDER BY id DESC LIMIT 50
+      `, [session.id]);
+
+      res.json({ success: true, count: rows.length, inquiries: rows });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 💬 [관리자] 1:1 문의 답변 등록 API (유저에게 Discord DM 알림 발송)
+  app.post('/api/admin/inquiry/reply', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) {
+      return res.status(403).json({ success: false, error: '관리자 권한이 필요합니다.' });
+    }
+
+    const { ticketId, answer } = req.body;
+    if (!ticketId || !answer || answer.trim().length === 0) {
+      return res.status(400).json({ success: false, error: '문의 번호와 답변 내용을 입력해주세요.' });
+    }
+
+    try {
+      const [tickets] = await pool.query('SELECT * FROM inquiries WHERE id = ?', [ticketId]);
+      if (tickets.length === 0) {
+        return res.status(404).json({ success: false, error: '해당 문의를 찾을 수 없습니다.' });
+      }
+
+      const ticket = tickets[0];
+      await pool.query(`
+        UPDATE inquiries
+        SET status = 'ANSWERED', answer = ?, answered_by = ?, answered_at = NOW()
+        WHERE id = ?
+      `, [answer.trim(), session.username, ticketId]);
+
+      // 유저에게 Discord DM 알림 전송 시도
+      let dmNotified = false;
+      if (client && client.users) {
+        try {
+          const targetUser = await client.users.fetch(ticket.user_id);
+          if (targetUser) {
+            const userDmEmbed = new EmbedBuilder()
+              .setTitle(`📬 [1:1 고객센터 답변 도착] Ticket #${ticketId}`)
+              .setColor(0x10b981)
+              .setDescription(`안녕하세요, **${ticket.username}**님!\n접수하신 1:1 문의에 관리자 답변이 등록되었습니다.`)
+              .addFields(
+                { name: '📌 내 문의 제목', value: ticket.title, inline: false },
+                { name: '💬 관리자 공식 답변', value: `\`\`\`\n${answer.trim()}\n\`\`\``, inline: false }
+              )
+              .setFooter({ text: `답변자: @${session.username} · 웹사이트 [내 프로필]에서도 언제든 확인 가능합니다.` })
+              .setTimestamp();
+            await targetUser.send({ embeds: [userDmEmbed] });
+            dmNotified = true;
+          }
+        } catch (e) {
+          console.warn(`[Inquiry DM] 유저(${ticket.user_id}) DM 알림 실패:`, e.message);
+        }
+      }
+
+      logAdminAction(session.id, session.username, 'INQUIRY_REPLY_WEB', ticket.user_id, {
+        ticketId,
+        user: ticket.username,
+        answer: answer.trim()
+      });
+
+      res.json({
+        success: true,
+        message: `Ticket #${ticketId} 답변 등록 완료! (유저 DM 알림: ${dmNotified ? '성공' : '실패/웹에서 확인 가능'})`
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 📋 [관리자] 전체 1:1 문의 목록 조회 API
+  app.get('/api/admin/inquiries', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) {
+      return res.status(403).json({ success: false, error: '관리자 권한이 필요합니다.' });
+    }
+
+    try {
+      const [rows] = await pool.query('SELECT * FROM inquiries ORDER BY id DESC LIMIT 100');
+      res.json({ success: true, count: rows.length, inquiries: rows });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   app.get('/api/market', async (req, res) => {
     try {
       const stocks = await getCachedMarketStocks();
@@ -1592,14 +1753,15 @@ function startWebServer(client) {
         `;
       }
 
-      const adminNavButton = isAdminUser ? `<a href="/admin" class="btn-admin-nav">👑 관리자 패널</a>` : '';
+      const adminNavButton = isAdminUser ? `<a href="/admin" class="btn-admin-nav" onclick="event.stopPropagation()">👑 관리자 패널</a>` : '';
       const navbarRightHtml = currentUser
         ? `
-          <div class="nav-profile-group">
+          <div class="nav-profile-group clickable" onclick="openProfileModal()" title="👤 내 프로필 & 📩 1:1 고객센터 문의">
             ${adminNavButton}
             <img src="${currentUser.avatar}" class="nav-avatar-img" alt="Avatar" onError="this.src='https://cdn.discordapp.com/embed/avatars/0.png';">
             <span class="nav-username-text">@${currentUser.username} ${isAdminUser ? '<span class="admin-tag">👑</span>' : ''}</span>
-            <a href="/auth/logout" class="btn-logout">🚪 로그아웃</a>
+            <span class="btn-profile-badge">👤 프로필 / 📩 문의</span>
+            <a href="/auth/logout" class="btn-logout" onclick="event.stopPropagation()">🚪 로그아웃</a>
           </div>
         `
         : `<a href="${discordLoginUrl}" class="btn-discord">🎮 Discord OAuth 로그인</a>`;
@@ -2406,6 +2568,86 @@ function startWebServer(client) {
             .pulse-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 1.5s infinite; }
             @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
 
+            /* 💬 하단 24시 고객센터 문의 바 */
+            .support-footer-banner {
+              background: linear-gradient(135deg, rgba(30, 27, 75, 0.85) 0%, rgba(17, 24, 39, 0.95) 100%);
+              border: 1px solid rgba(99, 102, 241, 0.35);
+              border-radius: 20px;
+              padding: 24px 30px;
+              margin-top: 50px;
+              margin-bottom: 30px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              flex-wrap: wrap;
+              gap: 20px;
+              box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            }
+            .support-banner-left { display: flex; align-items: center; gap: 16px; }
+            .support-avatar-badge {
+              width: 50px; height: 50px; border-radius: 14px;
+              background: linear-gradient(135deg, #6366f1, #8b5cf6);
+              display: flex; align-items: center; justify-content: center;
+              font-size: 1.6rem; flex-shrink: 0;
+              box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+            }
+            .support-title { font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 800; color: #fff; margin-bottom: 4px; }
+            .support-subtitle { font-size: 0.85rem; color: #9ca3af; max-width: 550px; line-height: 1.4; }
+            .support-banner-right { display: flex; gap: 10px; flex-wrap: wrap; }
+            .btn-support-action {
+              padding: 10px 20px; border-radius: 12px; font-weight: 700; font-size: 0.9rem; cursor: pointer; transition: all 0.2s;
+            }
+            .btn-support-write {
+              background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; border: none;
+              box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+            }
+            .btn-support-write:hover { transform: translateY(-2px); filter: brightness(1.1); }
+            .btn-support-view {
+              background: rgba(255, 255, 255, 0.05); border: 1px solid var(--card-border); color: #c7d2fe;
+            }
+            .btn-support-view:hover { background: rgba(99, 102, 241, 0.2); color: #fff; }
+
+            /* 👤 프로필 & 마이페이지 모달 */
+            .nav-profile-group.clickable { cursor: pointer; transition: all 0.2s; }
+            .nav-profile-group.clickable:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--primary); transform: translateY(-1px); }
+            .btn-profile-badge { background: rgba(99, 102, 241, 0.25); border: 1px solid rgba(99, 102, 241, 0.4); color: #c7d2fe; font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 12px; }
+            
+            .profile-user-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; padding-bottom: 18px; border-bottom: 1px solid var(--card-border); }
+            .profile-avatar-big { width: 64px; height: 64px; border-radius: 50%; border: 3px solid var(--primary); box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35); }
+            .profile-subtabs-nav { display: flex; gap: 8px; margin-bottom: 18px; border-bottom: 1px solid var(--card-border); padding-bottom: 10px; }
+            .profile-subtab-btn { background: transparent; border: 1px solid transparent; color: var(--text-muted); font-size: 0.85rem; font-weight: 700; padding: 6px 14px; border-radius: 10px; cursor: pointer; transition: all 0.2s; }
+            .profile-subtab-btn.active { background: rgba(99, 102, 241, 0.25); color: #fff; border-color: rgba(99, 102, 241, 0.4); }
+            .profile-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+            .profile-stat-box { background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border); padding: 12px 14px; border-radius: 12px; }
+            .profile-stat-lbl { font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 2px; }
+            .profile-stat-val { font-family: 'Outfit', sans-serif; font-size: 1.1rem; font-weight: 700; color: #fff; }
+
+            /* 📩 1:1 문의 리스트 & 답변 박스 */
+            .inquiry-item-card { background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border); border-radius: 14px; padding: 16px; margin-bottom: 12px; transition: border-color 0.2s; }
+            .inquiry-item-card:hover { border-color: rgba(99, 102, 241, 0.4); }
+            .inquiry-item-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+            .inquiry-category-badge { font-size: 0.75rem; background: rgba(99, 102, 241, 0.2); color: #818cf8; padding: 3px 8px; border-radius: 6px; font-weight: 700; }
+            .inquiry-status-badge { font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
+            .status-waiting { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); }
+            .status-answered { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
+            .inquiry-title-text { font-weight: 700; font-size: 0.95rem; color: #fff; margin-bottom: 6px; }
+            .inquiry-content-text { font-size: 0.85rem; color: #cbd5e1; line-height: 1.5; white-space: pre-wrap; margin-bottom: 8px; background: rgba(0, 0, 0, 0.25); padding: 10px 12px; border-radius: 8px; }
+            .inquiry-answer-box { background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-left: 4px solid #10b981; padding: 12px 14px; border-radius: 8px; margin-top: 10px; }
+            .inquiry-answer-header { font-size: 0.8rem; font-weight: 700; color: #34d399; margin-bottom: 4px; display: flex; justify-content: space-between; }
+            .inquiry-answer-text { font-size: 0.85rem; color: #e2e8f0; line-height: 1.5; white-space: pre-wrap; }
+
+            /* ✍️ 새 문의 작성 폼 */
+            .inquiry-form-group { margin-bottom: 16px; }
+            .inquiry-form-group label { display: block; font-size: 0.82rem; color: var(--text-muted); margin-bottom: 6px; font-weight: 600; }
+            .inquiry-input, .inquiry-select, .inquiry-textarea {
+              width: 100%; background: #1f2937; border: 1px solid var(--card-border); color: #fff; padding: 10px 14px; border-radius: 10px; font-size: 0.9rem; font-family: inherit; box-sizing: border-box;
+            }
+            .inquiry-textarea { min-height: 110px; resize: vertical; }
+            .btn-submit-inquiry {
+              width: 100%; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; color: #fff; font-weight: 800; font-size: 1rem; padding: 12px; border-radius: 12px; cursor: pointer; transition: all 0.2s;
+            }
+            .btn-submit-inquiry:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
             /* 📱 모바일 & 태블릿 반응형 완벽 최적화 */
             @media (max-width: 768px) {
               .navbar { padding: 12px 18px; }
@@ -2756,6 +2998,21 @@ function startWebServer(client) {
               </div>
             </div>
 
+            <!-- 💬 24시간 1:1 고객센터 & 관리자 문의창구 배너 -->
+            <div class="support-footer-banner">
+              <div class="support-banner-left">
+                <div class="support-avatar-badge">🎧</div>
+                <div>
+                  <h3 class="support-title">24시간 1:1 고객센터 & 관리자 문의창구</h3>
+                  <p class="support-subtitle">이용 중 오류/버그 제보, 계정/자산 복구 문의, 건의사항이 있으시면 언제든 1:1 문의를 남겨주세요. 관리자에게 실시간 알림이 전송되며 빠른 답변을 확인하실 수 있습니다.</p>
+                </div>
+              </div>
+              <div class="support-banner-right">
+                <button class="btn-support-action btn-support-write" onclick="openInquiryModal()">✍️ 1:1 문의하기</button>
+                <button class="btn-support-action btn-support-view" onclick="openProfileModal('inquiries')">📋 내 문의 내역 & 답변</button>
+              </div>
+            </div>
+
           </div>
 
           <!-- 🔍 종목 상세 분석 & 고해상도 차트 모달 -->
@@ -2892,6 +3149,121 @@ function startWebServer(client) {
               </div>
 
               <button class="btn-play-game" onclick="submitBankTransfer()">이체 실행</button>
+            </div>
+          </div>
+
+          <!-- 👤 내 프로필 & 1:1 고객센터 문의 모달 -->
+          <div class="modal-overlay" id="profile-modal">
+            <div class="modal-box" style="max-width: 580px;">
+              <div class="modal-title">
+                <span>👤 내 정보 & 고객센터 센터</span>
+                <button class="btn-close-modal" onclick="closeProfileModal()">&times;</button>
+              </div>
+
+              ${currentUser && userAssets ? `
+              <div class="profile-user-header">
+                <img src="${currentUser.avatar}" class="profile-avatar-big" alt="Avatar" onError="this.src='https://cdn.discordapp.com/embed/avatars/0.png';">
+                <div>
+                  <h3 style="font-size: 1.25rem; font-weight: 800; color: #fff;">@${currentUser.username} ${isAdminUser ? '<span class="admin-tag" style="font-size:0.85rem; vertical-align:middle;">👑 관리자</span>' : ''}</h3>
+                  <p style="color: #9ca3af; font-size: 0.8rem; margin-top: 2px;">Discord ID: <code>${currentUser.id}</code></p>
+                </div>
+              </div>
+              ` : ''}
+
+              <!-- 서브 탭 -->
+              <div class="profile-subtabs-nav">
+                <button class="profile-subtab-btn active" id="btn-subtab-profile" onclick="switchProfileTab('profile')">👤 내 자산 현황</button>
+                <button class="profile-subtab-btn" id="btn-subtab-inquiries" onclick="switchProfileTab('inquiries')">📩 내 1:1 문의 내역 (<span id="inquiry-count-badge">0</span>)</button>
+              </div>
+
+              <!-- 서브 탭 1: 자산 현황 -->
+              <div id="subtab-pane-profile">
+                ${currentUser && userAssets ? `
+                <div class="profile-stats-grid">
+                  <div class="profile-stat-box">
+                    <span class="profile-stat-lbl">💵 보유 현금</span>
+                    <span class="profile-stat-val" style="color: #34d399;">${formatMoney(userAssets.cash)}</span>
+                  </div>
+                  <div class="profile-stat-box">
+                    <span class="profile-stat-lbl">🏦 은행 예금</span>
+                    <span class="profile-stat-val" style="color: #818cf8;">${formatMoney(userAssets.bank)}</span>
+                  </div>
+                  <div class="profile-stat-box">
+                    <span class="profile-stat-lbl">📈 보유 주식 평가액</span>
+                    <span class="profile-stat-val" style="color: #60a5fa;">${formatMoney(userAssets.stockVal)}</span>
+                  </div>
+                  <div class="profile-stat-box">
+                    <span class="profile-stat-lbl">💎 총 순자산</span>
+                    <span class="profile-stat-val" style="color: #fbbf24;">${formatMoney(userAssets.netWorth)}</span>
+                  </div>
+                  <div class="profile-stat-box">
+                    <span class="profile-stat-lbl">🔥 출석 연속 기록</span>
+                    <span class="profile-stat-val" style="color: #f43f5e;">${userAssets.streak || 0}일 연속</span>
+                  </div>
+                  <div class="profile-stat-box">
+                    <span class="profile-stat-lbl">⛏️ 채굴기 / 자동봇 레벨</span>
+                    <span class="profile-stat-val" style="color: #a855f7;">Lv.${currentClickerLevel} / Lv.${currentAutoLevel}</span>
+                  </div>
+                </div>
+
+                <div style="display: flex; gap: 8px;">
+                  <button class="btn-upgrade" style="flex: 1; padding: 10px;" onclick="closeProfileModal(); openInquiryModal();">✍️ 1:1 관리자 문의하기</button>
+                  <a href="/auth/logout" class="btn-logout" style="display: flex; align-items: center; justify-content: center; padding: 10px 16px; margin: 0;">🚪 로그아웃</a>
+                </div>
+                ` : `
+                <div style="text-align: center; padding: 30px 10px;">
+                  <p style="color: #9ca3af; margin-bottom: 16px;">로그인 후 내 정보와 1:1 문의를 확인하실 수 있습니다.</p>
+                  <a href="${discordLoginUrl}" class="btn-discord">🎮 Discord 로그인</a>
+                </div>
+                `}
+              </div>
+
+              <!-- 서브 탭 2: 내 문의 내역 -->
+              <div id="subtab-pane-inquiries" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                  <span style="font-size: 0.85rem; color: #9ca3af;">내가 접수한 문의 목록과 관리자 답변입니다.</span>
+                  <button class="btn-filter active" style="font-size: 0.75rem; padding: 4px 10px;" onclick="openInquiryModal()">✍️ 새 문의</button>
+                </div>
+
+                <div id="my-inquiries-list-box" style="max-height: 380px; overflow-y: auto;">
+                  <div style="text-align: center; color: #9ca3af; padding: 30px;">
+                    <span class="pulse-dot"></span> 문의 내역을 불러오는 중...
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ✍️ 새 1:1 고객센터 문의 작성 모달 -->
+          <div class="modal-overlay" id="inquiry-modal">
+            <div class="modal-box">
+              <div class="modal-title">
+                <span>✍️ 1:1 관리자 고객센터 문의하기</span>
+                <button class="btn-close-modal" onclick="closeInquiryModal()">&times;</button>
+              </div>
+
+              <div class="inquiry-form-group">
+                <label>문의 분류</label>
+                <select id="inquiry-category-select" class="inquiry-select">
+                  <option value="🐞 버그 / 오류 제보">🐞 버그 / 오류 제보</option>
+                  <option value="💡 기능 제안 / 아이디어">💡 기능 제안 / 아이디어</option>
+                  <option value="💰 계정 / 자산 복구 문의">💰 계정 / 자산 복구 문의</option>
+                  <option value="💬 기타 1:1 일반 문의" selected>💬 기타 1:1 일반 문의</option>
+                </select>
+              </div>
+
+              <div class="inquiry-form-group">
+                <label>문의 제목</label>
+                <input type="text" id="inquiry-title-input" class="inquiry-input" placeholder="문의 제목을 요약하여 입력해주세요 (예: 지원금 관련 문의)">
+              </div>
+
+              <div class="inquiry-form-group">
+                <label>상세 내용</label>
+                <textarea id="inquiry-content-input" class="inquiry-textarea" placeholder="발생한 상황, 시간, 요청 사항 등을 자세하게 적어주시면 관리자에게 디스코드 DM으로 전송되며 신속하게 답변해 드립니다."></textarea>
+              </div>
+
+              <button class="btn-submit-inquiry" id="btn-submit-inquiry" onclick="submitInquiryForm()">📨 관리자에게 1:1 문의 전송 (DM 알림)</button>
             </div>
           </div>
 
@@ -3688,6 +4060,145 @@ function startWebServer(client) {
               } catch (e) { showToast('error', '통신 오류', '은행 서버 연결 실패'); }
             }
 
+            // 9. 👤 프로필 & 1:1 고객센터 문의 인터랙션
+            function openProfileModal(initialTab = 'profile') {
+              document.getElementById('profile-modal').style.display = 'flex';
+              switchProfileTab(initialTab);
+              loadMyInquiries();
+            }
+
+            function closeProfileModal() {
+              document.getElementById('profile-modal').style.display = 'none';
+            }
+
+            function switchProfileTab(tabName) {
+              const isProfile = tabName === 'profile';
+              const btnProf = document.getElementById('btn-subtab-profile');
+              const btnInq = document.getElementById('btn-subtab-inquiries');
+              const paneProf = document.getElementById('subtab-pane-profile');
+              const paneInq = document.getElementById('subtab-pane-inquiries');
+              if (btnProf) btnProf.classList.toggle('active', isProfile);
+              if (btnInq) btnInq.classList.toggle('active', !isProfile);
+              if (paneProf) paneProf.style.display = isProfile ? 'block' : 'none';
+              if (paneInq) paneInq.style.display = isProfile ? 'none' : 'block';
+              if (!isProfile) loadMyInquiries();
+            }
+
+            function openInquiryModal() {
+              document.getElementById('inquiry-modal').style.display = 'flex';
+            }
+
+            function closeInquiryModal() {
+              document.getElementById('inquiry-modal').style.display = 'none';
+            }
+
+            async function submitInquiryForm() {
+              const category = document.getElementById('inquiry-category-select').value;
+              const title = document.getElementById('inquiry-title-input').value;
+              const content = document.getElementById('inquiry-content-input').value;
+              const btn = document.getElementById('btn-submit-inquiry');
+
+              if (!title || title.trim().length < 2) {
+                showToast('error', '입력 오류', '문의 제목을 2글자 이상 입력해주세요.');
+                return;
+              }
+              if (!content || content.trim().length < 5) {
+                showToast('error', '입력 오류', '문의 내용을 5글자 이상 상세히 적어주세요.');
+                return;
+              }
+
+              btn.disabled = true;
+              btn.innerText = '⏳ 관리자에게 전송 중...';
+
+              try {
+                const res = await fetch('/api/support/inquiry', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ category, title, content })
+                });
+                const data = await res.json();
+                btn.disabled = false;
+                btn.innerText = '📨 관리자에게 1:1 문의 전송 (DM 알림)';
+
+                if (!data.success) {
+                  showToast('error', '문의 접수 실패', data.error);
+                  return;
+                }
+
+                showToast('success', '문의 접수 완료', data.message);
+                document.getElementById('inquiry-title-input').value = '';
+                document.getElementById('inquiry-content-input').value = '';
+                closeInquiryModal();
+                openProfileModal('inquiries');
+              } catch (e) {
+                btn.disabled = false;
+                btn.innerText = '📨 관리자에게 1:1 문의 전송 (DM 알림)';
+                showToast('error', '통신 오류', '문의 전송 실패');
+              }
+            }
+
+            async function loadMyInquiries() {
+              const box = document.getElementById('my-inquiries-list-box');
+              if (!box) return;
+
+              try {
+                const res = await fetch('/api/support/my-inquiries');
+                const data = await res.json();
+                if (!data.success || !data.inquiries) {
+                  box.innerHTML = '<p style="color: #9ca3af; text-align: center; padding: 20px;">로그인 후 문의 내역을 확인할 수 있습니다.</p>';
+                  return;
+                }
+
+                const countElem = document.getElementById('inquiry-count-badge');
+                if (countElem) countElem.innerText = data.inquiries.length;
+
+                if (data.inquiries.length === 0) {
+                  box.innerHTML = `
+                    <div style="text-align: center; color: #9ca3af; padding: 30px 10px;">
+                      <p style="font-size: 1.1rem; margin-bottom: 8px;">📭 아직 등록된 1:1 문의가 없습니다.</p>
+                      <p style="font-size: 0.82rem; color: #6b7280;">버그 신고나 계정 복구, 기능 건의가 있으시면 [새 문의]를 작성해보세요!</p>
+                    </div>
+                  `;
+                  return;
+                }
+
+                box.innerHTML = data.inquiries.map(inq => {
+                  const isAnswered = inq.status === 'ANSWERED';
+                  const statusHtml = isAnswered
+                    ? '<span class="inquiry-status-badge status-answered">🟢 답변 완료</span>'
+                    : '<span class="inquiry-status-badge status-waiting">🟡 답변 대기 중</span>';
+                  
+                  const createdDate = new Date(inq.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+                  const answeredDate = inq.answered_at ? new Date(inq.answered_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '';
+
+                  const answerBlock = isAnswered && inq.answer ? `
+                    <div class="inquiry-answer-box">
+                      <div class="inquiry-answer-header">
+                        <span>💬 관리자(@${inq.answered_by || '관리자'}) 공식 답변</span>
+                        <span style="font-size: 0.72rem; color: #9ca3af;">${answeredDate}</span>
+                      </div>
+                      <div class="inquiry-answer-text">${inq.answer.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+                    </div>
+                  ` : '';
+
+                  return `
+                    <div class="inquiry-item-card">
+                      <div class="inquiry-item-top">
+                        <span class="inquiry-category-badge">${inq.category || '일반 문의'} #${inq.id}</span>
+                        ${statusHtml}
+                      </div>
+                      <div class="inquiry-title-text">${inq.title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+                      <div class="inquiry-content-text">${inq.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+                      <div style="font-size: 0.72rem; color: #64748b; text-align: right;">작성일시: ${createdDate}</div>
+                      ${answerBlock}
+                    </div>
+                  `;
+                }).join('');
+              } catch (e) {
+                box.innerHTML = '<p style="color: #f87171; text-align: center; padding: 20px;">문의 내역을 불러오지 못했습니다.</p>';
+              }
+            }
+
             function updateUserCashDisplay(cashVal) {
               const cashElem = document.getElementById('my-cash');
               if (cashElem && cashVal) {
@@ -3746,6 +4257,7 @@ function startWebServer(client) {
     }
 
     try {
+      const [inquiryLogs] = await pool.query('SELECT * FROM inquiries ORDER BY id DESC LIMIT 50');
       const [priceLogs] = await pool.query('SELECT * FROM stock_price_logs ORDER BY id DESC LIMIT 50');
       const [tradeLogs] = await pool.query('SELECT * FROM stock_transactions ORDER BY id DESC LIMIT 50');
       const [webLogs] = await pool.query('SELECT * FROM web_access_logs ORDER BY id DESC LIMIT 50');
@@ -3758,6 +4270,35 @@ function startWebServer(client) {
       `);
       const [userCountRow] = await pool.query('SELECT COUNT(*) as count FROM users');
       const totalUsers = userCountRow[0]?.count || 0;
+
+      let inquiryRowsHtml = '';
+      for (const inq of inquiryLogs) {
+        const isAnswered = inq.status === 'ANSWERED';
+        const statusHtml = isAnswered
+          ? `<span style="background:rgba(16,185,129,0.2); color:#34d399; padding:3px 8px; border-radius:6px; font-weight:700;">🟢 답변 완료 (@${inq.answered_by})</span>`
+          : `<span style="background:rgba(245,158,11,0.2); color:#fbbf24; padding:3px 8px; border-radius:6px; font-weight:700;">🟡 답변 대기 중</span>`;
+
+        const replyFormOrAnswer = isAnswered
+          ? `<div style="background:rgba(16,185,129,0.08); border-left:3px solid #10b981; padding:8px 12px; border-radius:6px; font-size:0.82rem; color:#e2e8f0; white-space:pre-wrap;">${inq.answer || ''}</div>`
+          : `
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <textarea id="inq-reply-${inq.id}" placeholder="유저에게 전송할 답변을 입력하세요 (제출 시 유저에게 Discord DM이 자동 전송됩니다)" style="width:100%; min-height:60px; background:#111827; border:1px solid var(--border); color:#fff; padding:6px 10px; border-radius:8px; font-size:0.8rem; font-family:inherit;"></textarea>
+              <button onclick="replyInquiry(${inq.id})" style="background:linear-gradient(135deg, #6366f1, #8b5cf6); border:none; color:#fff; font-weight:700; font-size:0.8rem; padding:6px 12px; border-radius:6px; cursor:pointer; align-self:flex-start;">💬 답변 등록 & 유저 DM 발송</button>
+            </div>
+          `;
+
+        inquiryRowsHtml += `
+          <tr id="inq-row-${inq.id}">
+            <td>#${inq.id}</td>
+            <td>${inq.created_at ? new Date(inq.created_at).toISOString().replace('T', ' ').slice(0, 19) : '-'}</td>
+            <td><b>@${inq.username}</b><br><code style="font-size:0.7rem;">${inq.user_id}</code></td>
+            <td><span class="cmd-tag">${inq.category || '일반 문의'}</span></td>
+            <td><b>${inq.title}</b><br><span style="font-size:0.8rem; color:#9ca3af; white-space:pre-wrap;">${inq.content}</span></td>
+            <td>${statusHtml}</td>
+            <td style="min-width:280px;">${replyFormOrAnswer}</td>
+          </tr>
+        `;
+      }
 
       let priceRowsHtml = '';
       for (const p of priceLogs) {
@@ -3908,6 +4449,29 @@ function startWebServer(client) {
             <a href="/api/admin/logs/gambling" target="_blank" class="btn-json">🎰 도박 이력 & 롤백 JSON</a>
             <a href="/api/admin/logs/access" target="_blank" class="btn-json">📥 웹 접속 JSON 로그</a>
             <a href="/api/admin/logs/commands" target="_blank" class="btn-json">🤖 디스코드 명령어 JSON 로그</a>
+            <a href="/api/admin/inquiries" target="_blank" class="btn-json">📩 1:1 고객센터 문의 JSON</a>
+          </div>
+
+          <!-- 📩 1:1 고객센터 문의 & 유저 답변 관리 카드 -->
+          <div class="card" style="border: 1px solid rgba(99, 102, 241, 0.4);">
+            <h2 style="color: #c7d2fe;">📩 1:1 고객센터 문의 접수 & 실시간 유저 답변 (최근 50건)</h2>
+            <p style="font-size: 0.85rem; color: #9ca3af; margin-bottom: 14px;">유저가 웹사이트에서 접수한 1:1 문의입니다. 답변을 입력하고 전송하면 유저에게 <b>Discord DM 알림</b>이 자동 전송됩니다.</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>번호</th>
+                  <th>접수시간</th>
+                  <th>작성유저</th>
+                  <th>분류</th>
+                  <th>문의제목 및 상세내용</th>
+                  <th>처리상태</th>
+                  <th>답변 작성 / 완료 답변</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${inquiryRowsHtml || '<tr><td colspan="7" style="text-align: center; color: #6b7280;">접수된 1:1 문의가 없습니다.</td></tr>'}
+              </tbody>
+            </table>
           </div>
 
           <!-- 실시간 주가 변동 틱 로그 테이블 -->
@@ -4017,6 +4581,33 @@ function startWebServer(client) {
           </div>
 
           <script>
+            async function replyInquiry(ticketId) {
+              const input = document.getElementById('inq-reply-' + ticketId);
+              if (!input || !input.value.trim()) {
+                alert('답변 내용을 입력해주세요.');
+                return;
+              }
+              const answer = input.value.trim();
+              if (!confirm('Ticket #' + ticketId + '번에 답변을 등록하고 유저에게 Discord DM 알림을 발송하시겠습니까?')) return;
+
+              try {
+                const res = await fetch('/api/admin/inquiry/reply', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ticketId, answer })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                  alert('❌ 답변 등록 실패: ' + data.error);
+                  return;
+                }
+                alert('✅ ' + data.message);
+                location.reload();
+              } catch (e) {
+                alert('서버 통신 실패');
+              }
+            }
+
             async function rollbackGamble(logId) {
               if (!confirm('이 도박 건(#' + logId + ')을 취소하고 유저의 잔고를 [도박 이전 잔고]로 복구하시겠습니까?')) return;
               try {

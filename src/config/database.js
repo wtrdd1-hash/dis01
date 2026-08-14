@@ -330,6 +330,27 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
+    // 1:1 고객센터 문의 & 관리자 답변 테이블
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS inquiries (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id VARCHAR(32) NOT NULL,
+        username VARCHAR(100) NOT NULL,
+        avatar VARCHAR(255) NULL,
+        category VARCHAR(64) NOT NULL DEFAULT '일반문의',
+        title VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'WAITING',
+        answer TEXT NULL,
+        answered_by VARCHAR(100) NULL,
+        answered_at DATETIME NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_status (status),
+        INDEX idx_created_at (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
     // 우리만의 독창적인 가상 커뮤니티 기업/종목 초기화 시드
     const defaultStocks = [
       { 
