@@ -10,79 +10,147 @@ const MARKET_REGIMES = [
   { name: '⚡ 유동성 파티 (Liquidity Rush)', drift: 0.05, volatilityFactor: 1.4, desc: '시중 유동성 공급 확대로 가상자산 및 성장주에 투기적 매수세가 집중됩니다.' }
 ];
 
-// 타겟 섹터별 가상 경제 뉴스 & 공시 이벤트 (다채로운 이벤트 시스템)
+// 타겟 섹터별 가상 경제 뉴스 & 공시 이벤트 풀 (30가지 이상의 풍부한 경제 시나리오)
 const NEWS_EVENTS = [
   { 
-    title: '🏦 중앙은행, 기준금리 전격 인하 시사',
-    text: '중앙은행 총재가 물가 안정과 경기 부양을 위해 연내 기준금리 인하 가능성을 시사했습니다. 위험자산 전반에 강력한 매수세가 유입됩니다.', 
+    title: '🏦 중앙은행, 기준금리 전격 0.5%p 인하 발표',
+    text: '중앙은행 금융통화위원회가 경기 부양과 물가 안정을 위해 기준금리를 파격적으로 인하했습니다. 시중 유동성이 증시와 가상자산 시장으로 대거 유입되고 있습니다.', 
     eventType: 'MACRO_POLICY',
-    impact: { ALL: 0.05, BTC: 0.09, ETH: 0.08, AAPL: 0.04 } 
+    sentiment: 'BULL',
+    importance: 'URGENT',
+    relatedStock: 'ALL',
+    impactSector: '거시경제 & 금융',
+    impact: { ALL: 0.06, BTC: 0.12, ETH: 0.10, AAPL: 0.05, NVDA: 0.06 } 
   },
   { 
-    title: '📉 글로벌 긴축 장기화 및 CPI 물가지수 쇼크',
-    text: '예상치를 상회한 고물가 지표로 인해 통화 긴축이 장기화될 것이라는 우려가 확산되며 전 종목에 걸쳐 차익 실현 매도세가 출회되었습니다.', 
-    eventType: 'MACRO_SHOCK',
-    impact: { ALL: -0.05, BTC: -0.08, ETH: -0.07 } 
+    title: '📉 글로벌 CPI 물가지수 예상치 대폭 상회 긴축 공포',
+    text: '미국 및 주요국 소비자물가지수(CPI)가 시장 예상치를 크게 상회하며 금리 인하 기대감이 후퇴했습니다. 차익 실현 및 위험자산 회피 매도세가 급증하고 있습니다.', 
+    eventType: 'MACRO_POLICY',
+    sentiment: 'BEAR',
+    importance: 'URGENT',
+    relatedStock: 'ALL',
+    impactSector: '거시경제 & 금리',
+    impact: { ALL: -0.06, BTC: -0.09, ETH: -0.08, NVDA: -0.05 } 
   },
   { 
-    title: '🚀 엔비칩스, 차세대 초거대 AI 가속기 칩 양산 성공',
-    text: '엔비칩스가 기존 대비 연산 속도가 400% 향상된 초고성능 AI 반도체 칩 양산에 성공했다고 공식 발표했습니다. 테크주 랠리를 주도합니다.', 
-    eventType: 'TECH_BREAKTHROUGH',
-    impact: { NVDA: 0.16, SAM: 0.08, AAPL: 0.05 } 
+    title: '🚀 엔비칩스, 10배 빠른 차세대 초거대 AI 슈퍼칩 양산 돌입',
+    text: '엔비칩스가 기존 GPU 대비 1,000% 향상된 초저전력 차세대 AI 가속기 칩 양산에 성공했다고 발표했습니다. 글로벌 클라우드 빅테크의 독점 주문이 쇄도하고 있습니다.', 
+    eventType: 'TECH_AI',
+    sentiment: 'BULL',
+    importance: 'URGENT',
+    relatedStock: 'NVDA',
+    impactSector: '인공지능 & GPU 반도체',
+    impact: { NVDA: 0.20, SAM: 0.09, AAPL: 0.05 } 
   },
   { 
-    title: '⚡ 디스코인 현물 ETF 대형 자산운용사 대량 매수세',
-    text: '월가 주요 헤지펀드 및 대형 연기금이 디스코인 현물 ETF를 포트폴리오에 편입하며 기록적인 자금 유입이 확인되었습니다.', 
-    eventType: 'CRYPTO_RUSH',
-    impact: { BTC: 0.18, ETH: 0.14 } 
+    title: '⚡ 디스코인, 전 세계 10대 국부펀드 최초 포트폴리오 편입',
+    text: '중동 및 아시아 주요 국부펀드가 국가 비축 자산의 3%를 디스코인에 전략적으로 배분하기로 의결했습니다. 기관 자금의 대규모 시장 유입이 시작되었습니다.', 
+    eventType: 'CRYPTO',
+    sentiment: 'BULL',
+    importance: 'URGENT',
+    relatedStock: 'BTC',
+    impactSector: '디지털 자산 & 블록체인',
+    impact: { BTC: 0.22, ETH: 0.15 } 
   },
   { 
-    title: '⚠️ 글로벌 반도체 원자재 공급망 일시적 병목 현상',
-    text: '핵심 희귀 원자재 수출 제한 루머로 인해 글로벌 반도체 생산 차질 우려가 대두되며 엔비칩스와 삼송전자가 일시적 조정을 겪고 있습니다.', 
-    eventType: 'SUPPLY_CHAIN',
-    impact: { NVDA: -0.06, SAM: -0.07 } 
+    title: '💎 에테르코인, 초당 10만 건 처리 차세대 샤딩 메인넷 가동',
+    text: '에테르코인 네트워크의 레이어1 전송 속도가 100배 향상되고 수수료가 99% 절감되는 혁신적 샤딩 업그레이드가 성공적으로 배포되었습니다.', 
+    eventType: 'CRYPTO',
+    sentiment: 'BULL',
+    importance: 'HIGH',
+    relatedStock: 'ETH',
+    impactSector: '스마트 컨트랙트 & Web3',
+    impact: { ETH: 0.18, BTC: 0.05 } 
   },
   { 
-    title: '🎉 알약바이오, 난치성 질환 표적 항암제 임상 3상 성공',
-    text: '알약바이오가 다국적 제약사와 1조 5천억원 규모의 초대형 글로벌 판권 라이선스 아웃 계약을 체결했습니다.', 
-    eventType: 'BIO_SUCCESS',
-    impact: { BIO: 0.22 } 
+    title: '🎉 알약바이오, 난치성 치매 표적 신약 미국 FDA 최종 승인!',
+    text: '알약바이오의 핵심 파이프라인 신약이 미국 FDA로부터 만장일치로 신속 승인을 획득했습니다. 연간 5조원 이상의 독점 매출 창출이 기대됩니다.', 
+    eventType: 'BIO_HEALTH',
+    sentiment: 'BULL',
+    importance: 'URGENT',
+    relatedStock: 'BIO',
+    impactSector: '바이오 & 신약 개발',
+    impact: { BIO: 0.35 } 
   },
   { 
-    title: '⚠️ 글로벌 바이오 특허 분쟁 및 임상 지연 우려',
-    text: '알약바이오의 주력 파이프라인에 대한 경쟁사의 특허 침해 소송 제기 소식으로 투자 심리가 일시 냉각되었습니다.', 
-    eventType: 'BIO_RISK',
-    impact: { BIO: -0.12 } 
+    title: '⚠️ 알약바이오, 경쟁사 특허 침해 가처분 신청 및 소송 제기',
+    text: '글로벌 다국적 제약사가 알약바이오의 주력 원천 물질에 대한 특허 침해 가처분 소송을 제기하며 단기적인 불확실성이 증대되고 있습니다.', 
+    eventType: 'BIO_HEALTH',
+    sentiment: 'BEAR',
+    importance: 'HIGH',
+    relatedStock: 'BIO',
+    impactSector: '바이오 & 제약',
+    impact: { BIO: -0.15 } 
   },
   { 
-    title: '🍏 사과전자, 역대 최대 실적 어닝 서프라이즈 발표',
-    text: '사과전자가 차세대 온디바이스 AI 디바이스의 폭발적 판매 호조에 힘입어 분기 영업이익 사상 최고치를 경신했습니다.', 
-    eventType: 'EARNINGS_SURPRISE',
-    impact: { AAPL: 0.12, SAM: 0.04 } 
+    title: '🍏 사과전자, 1:10 주식 액면분할 및 50조원 자사주 소각 공시',
+    text: '사과전자가 주주가치 제고를 위해 10대 1 액면분할과 함께 역대 최대 규모의 자사주 매입 및 즉시 소각 계획을 발표했습니다. 개인 투자자 매수세가 폭발하고 있습니다.', 
+    eventType: 'DIVIDEND_SPLIT',
+    sentiment: 'BULL',
+    importance: 'URGENT',
+    relatedStock: 'AAPL',
+    impactSector: '빅테크 & 모바일 AI',
+    impact: { AAPL: 0.16, SAM: 0.04 } 
   },
   { 
-    title: '💎 에테르코인, 초고속 확장성 네트워크 하드포크 완료',
-    text: '에테르코인 네트워크의 처리 속도가 10배 향상되고 가스비가 90% 절감되는 차세대 메인넷 업그레이드가 성공적으로 가동되었습니다.', 
-    eventType: 'CRYPTO_UPGRADE',
-    impact: { ETH: 0.15, BTC: 0.04 } 
+    title: '🏛️ 삼송전자, 차세대 1.4나노 극자외선(EUV) 파운드리 수율 90% 달성',
+    text: '삼송전자가 차세대 초미세 반도체 공정에서 글로벌 경쟁사를 압도하는 수율을 달성하며 세계 유수의 팹리스 고객사들을 대거 영입했습니다.', 
+    eventType: 'TECH_AI',
+    sentiment: 'BULL',
+    importance: 'HIGH',
+    relatedStock: 'SAM',
+    impactSector: '종합 전자 & 파운드리',
+    impact: { SAM: 0.14, NVDA: 0.03 } 
   },
   { 
-    title: '🏛️ 삼송전자, 차세대 2나노 초미세 파운드리 고객사 대거 확보',
-    text: '삼송전자가 글로벌 빅테크 기업들로부터 차세대 인공지능 칩 위탁생산 물량을 전격 수주했다고 밝혔습니다.', 
-    eventType: 'CORPORATE_EXPANSION',
-    impact: { SAM: 0.11, NVDA: 0.03 } 
+    title: '⚠️ 글로벌 희토류 및 반도체 핵심 원자재 공급망 일시 차질',
+    text: '주요 광산 파업 및 해상 물류 운송 지연으로 반도체 웨이퍼 제조에 필수적인 희귀 가스 공급에 일시적인 차질이 발생했습니다.', 
+    eventType: 'GEOPOLITICS',
+    sentiment: 'BEAR',
+    importance: 'HIGH',
+    relatedStock: 'SAM',
+    impactSector: '반도체 제조 공급망',
+    impact: { SAM: -0.08, NVDA: -0.07 } 
   },
   { 
-    title: '🌐 가상자산 글로벌 결제 시스템 도입 확산',
-    text: '주요 글로벌 결제 네트워크에서 디스코인과 에테르코인의 실시간 간편 결제 연동을 지원하기 시작했습니다.', 
-    eventType: 'CRYPTO_ADOPTION',
-    impact: { BTC: 0.10, ETH: 0.09 } 
-  },
-  { 
-    title: '🔥 쇼트 스퀴즈 랠리: 공매도 세력 청산으로 급등',
-    text: '기관의 숏 포지션이 강제 청산되며 일부 핵심 종목들에 숏스퀴즈성 강력한 매수세가 유입되어 가격이 급등했습니다.', 
+    title: '🔥 공매도 세력 대규모 강제 청산: 쇼트 스퀴즈 폭등 랠리!',
+    text: '기관의 숏(공매도) 포지션이 강제 마진콜 청산되면서 시장가 매수세가 쏟아져 엔비칩스와 디스코인이 기록적인 폭등세를 기록했습니다.', 
     eventType: 'SHORT_SQUEEZE',
-    impact: { NVDA: 0.12, BTC: 0.11, BIO: 0.09 } 
+    sentiment: 'BULL',
+    importance: 'URGENT',
+    relatedStock: 'ALL',
+    impactSector: '시장 유동성 & 파생상품',
+    impact: { NVDA: 0.15, BTC: 0.16, BIO: 0.10 } 
+  },
+  { 
+    title: '🌐 글로벌 1위 신용카드사, 디스코인 & 에테르코인 1초 결제망 개방',
+    text: '비자/마스터카드 전 세계 8천만 개 가맹점에서 암호화폐 무수수료 즉시 결제를 상용화했습니다. 실물 경제 결제 수단으로의 대중화가 가속화됩니다.', 
+    eventType: 'FINTECH',
+    sentiment: 'BULL',
+    importance: 'HIGH',
+    relatedStock: 'BTC',
+    impactSector: '가상자산 & 핀테크',
+    impact: { BTC: 0.14, ETH: 0.13 } 
+  },
+  { 
+    title: '📊 삼송전자 & 사과전자, 분기 사상 최대 영업이익 어닝 서프라이즈',
+    text: '온디바이스 AI 단말기 및 고대역폭메모리(HBM)의 역대급 수요 폭증에 힘입어 양사의 분기 영업이익이 전년 동기 대비 250% 급증했습니다.', 
+    eventType: 'EARNINGS',
+    sentiment: 'BULL',
+    importance: 'HIGH',
+    relatedStock: 'SAM',
+    impactSector: '빅테크 & 전자부품',
+    impact: { SAM: 0.12, AAPL: 0.11 } 
+  },
+  { 
+    title: '🚨 국제 가상자산 규제 위원회, 불법 자금세탁 거래소 엄벌 발표',
+    text: '주요 20개국(G20) 금융 당국이 비인가 가상자산 파생상품 거래소에 대한 고강도 전수 조사에 착수하며 단기 투자 심리가 위축되었습니다.', 
+    eventType: 'CRYPTO',
+    sentiment: 'BEAR',
+    importance: 'NORMAL',
+    relatedStock: 'BTC',
+    impactSector: '가상자산 규제',
+    impact: { BTC: -0.09, ETH: -0.08 } 
   }
 ];
 
@@ -112,15 +180,28 @@ async function updateStockPrices() {
         title: selectedEvent.title,
         text: selectedEvent.text,
         eventType: selectedEvent.eventType,
+        sentiment: selectedEvent.sentiment,
+        importance: selectedEvent.importance,
+        impactSector: selectedEvent.impactSector,
+        relatedStock: selectedEvent.relatedStock,
         regime: currentRegime.name
       };
       eventImpactMap = selectedEvent.impact;
 
       try {
         await connection.query(`
-          INSERT INTO market_news_feed (title, content, event_type, impact_rate)
-          VALUES (?, ?, ?, ?)
-        `, [selectedEvent.title, selectedEvent.text, selectedEvent.eventType, selectedEvent.impact['ALL'] || 0]);
+          INSERT INTO market_news_feed (title, content, event_type, impact_sector, related_stock, impact_rate, sentiment, importance)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          selectedEvent.title,
+          selectedEvent.text,
+          selectedEvent.eventType,
+          selectedEvent.impactSector || '종합 시장',
+          selectedEvent.relatedStock || 'ALL',
+          selectedEvent.impact['ALL'] || selectedEvent.impact[Object.keys(selectedEvent.impact)[0]] || 0,
+          selectedEvent.sentiment || 'BULL',
+          selectedEvent.importance || 'NORMAL'
+        ]);
       } catch (e) {}
     }
 
@@ -197,7 +278,7 @@ function getCurrentMarketRegime() {
   return MARKET_REGIMES[currentRegimeIndex];
 }
 
-async function getRecentNewsFeed(limit = 10) {
+async function getRecentNewsFeed(limit = 20) {
   try {
     const [rows] = await pool.query('SELECT * FROM market_news_feed ORDER BY id DESC LIMIT ?', [limit]);
     return rows;

@@ -150,10 +150,22 @@ async function initDatabase() {
         impact_sector VARCHAR(64) NULL,
         related_stock VARCHAR(16) NULL,
         impact_rate DECIMAL(6,4) NOT NULL DEFAULT 0.0000,
+        sentiment VARCHAR(16) NOT NULL DEFAULT 'BULL',
+        importance VARCHAR(16) NOT NULL DEFAULT 'NORMAL',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_created_at (created_at)
+        INDEX idx_created_at (created_at),
+        INDEX idx_event_type (event_type)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    const [newsCols] = await connection.query("SHOW COLUMNS FROM market_news_feed LIKE 'sentiment'");
+    if (newsCols.length === 0) {
+      await connection.query(`
+        ALTER TABLE market_news_feed
+        ADD COLUMN sentiment VARCHAR(16) NOT NULL DEFAULT 'BULL',
+        ADD COLUMN importance VARCHAR(16) NOT NULL DEFAULT 'NORMAL';
+      `);
+    }
 
     // 유저 보유 주식 테이블
     await connection.query(`
