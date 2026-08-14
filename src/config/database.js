@@ -149,14 +149,14 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // 기본 주식 종목 초기화 시드 (가상 패러디 명칭 적용)
+    // 기본 주식 종목 초기화 시드 (가상 패러디 명칭 적용, BIO는 초보자용 저가/안정주)
     const defaultStocks = [
       { stock_id: 'BTC', name: '디스코인 (가상자산)', price: 82193159, prev_price: 93839069, volatility: 0.08 },
       { stock_id: 'ETH', name: '에테르코인 (가상자산)', price: 5767959, prev_price: 5575796, volatility: 0.06 },
       { stock_id: 'AAPL', name: '사과전자 (빅테크)', price: 248149, prev_price: 257958, volatility: 0.03 },
       { stock_id: 'NVDA', name: '엔비칩스 (AI반도체)', price: 211105, prev_price: 211657, volatility: 0.04 },
       { stock_id: 'SAM', name: '삼송전자 (전자/반도체)', price: 90418, prev_price: 92922, volatility: 0.03 },
-      { stock_id: 'BIO', name: '알약바이오 (제약/바이오)', price: 36354, prev_price: 39427, volatility: 0.05 }
+      { stock_id: 'BIO', name: '알약바이오 (초보자/안정주)', price: 1000, prev_price: 1000, volatility: 0.01 }
     ];
 
     for (const stock of defaultStocks) {
@@ -166,6 +166,13 @@ async function initDatabase() {
         ON DUPLICATE KEY UPDATE name=VALUES(name), volatility=VALUES(volatility);
       `, [stock.stock_id, stock.name, stock.price, stock.prev_price, stock.volatility]);
     }
+
+    // 알약바이오(BIO)를 초보자가 구매하기 쉬운 저가/안정주(1,000원, 변동성 1%)로 DB 가격 갱신
+    await connection.query(`
+      UPDATE stocks
+      SET name = '알약바이오 (초보자/안정주)', price = 1000, prev_price = 1000, volatility = 0.01
+      WHERE stock_id = 'BIO';
+    `);
 
     console.log('✅ 데이터베이스 테이블 및 주식 초기 종목 로드 완료!');
     
