@@ -340,6 +340,7 @@ async function initDatabase() {
         category VARCHAR(64) NOT NULL DEFAULT '일반문의',
         title VARCHAR(255) NOT NULL,
         content TEXT NOT NULL,
+        image_url TEXT NULL,
         status VARCHAR(20) NOT NULL DEFAULT 'WAITING',
         answer TEXT NULL,
         answered_by VARCHAR(100) NULL,
@@ -350,6 +351,15 @@ async function initDatabase() {
         INDEX idx_created_at (created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    const [inquiryImgCols] = await connection.query("SHOW COLUMNS FROM inquiries LIKE 'image_url'");
+    if (inquiryImgCols.length === 0) {
+      await connection.query(`
+        ALTER TABLE inquiries
+        ADD COLUMN image_url TEXT NULL;
+      `);
+      console.log('✅ inquiries 테이블에 image_url 컬럼이 추가되었습니다.');
+    }
 
     // 우리만의 독창적인 가상 커뮤니티 기업/종목 초기화 시드
     const defaultStocks = [

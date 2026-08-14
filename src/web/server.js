@@ -1,12 +1,20 @@
 const express = require('express');
 const axios = require('axios');
 const cookieParser = require('cookie-parser');
-const { EmbedBuilder } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
+const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const config = require('../config/config');
 const { pool, getOrCreateUser } = require('../config/database');
 const { formatMoney, formatPercent, formatNumber } = require('../utils/formatters');
 const { getCurrentMarketRegime, getLastNews, getRecentNewsFeed } = require('../utils/stockEngine');
 const { logWebAccess, logAdminAction } = require('../utils/logger');
+
+// 📁 문의 첨부 이미지 업로드 저장 디렉토리
+const UPLOAD_DIR = path.join(__dirname, '../../uploads/inquiries');
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
 // 스파크라인 SVG 미니 차트 생성 헬퍼
 function generateSparklineSvg(prices, isUp) {
@@ -50,9 +58,10 @@ function startWebServer(client) {
 
   app.set('trust proxy', true);
 
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: '15mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '15mb' }));
   app.use(cookieParser());
+  app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
 
   function getDynamicBaseUrl(req) {
     const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
@@ -1284,7 +1293,7 @@ function startWebServer(client) {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
 
-    const { category, title, content } = req.body;
+    const { category, title, content, image } = req.body;
     if (!title || title.trim().length < 2) {
       return res.status(400).json({ success: false, error: '문의 제목을 2글자 이상 입력해주세요.' });
     }
@@ -1296,6 +1305,35 @@ function startWebServer(client) {
       const userData = await getOrCreateUser(session.id, session.username, session.avatar);
       const userCash = BigInt(userData.cash || 0);
       const userBank = BigInt(userData.bank || 0);
+
+      // 📷 첨부 이미지 처리 (Base64 파일 저장 또는 URL)
+      let finalImageUrl = null;
+      let localAttachmentPath = null;
+      let localAttachmentFilename = null;
+
+      if (image && typeof image === 'string') {
+        const trimmedImg = image.trim();
+        if (trimmedImg.startsWith('data:image/')) {
+          try {
+            const matches = trimmedImg.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+            if (matches) {
+              const rawExt = matches[1].toLowerCase();
+              const ext = (rawExt === 'jpeg' || rawExt === 'jpg') ? 'jpg' : (rawExt === 'png' ? 'png' : 'jpg');
+              const base64Data = matches[2];
+              const filename = `inquiry_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
+              const filePath = path.join(UPLOAD_DIR, filename);
+              fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
+              finalImageUrl = `${getDynamicBaseUrl(req)}/uploads/inquiries/${filename}`;
+              localAttachmentPath = filePath;
+              localAttachmentFilename = filename;
+            }
+          } catch (imgErr) {
+            console.error('Image Save Error:', imgErr);
+          }
+        } else if (trimmedImg.startsWith('http://') || trimmedImg.startsWith('https://')) {
+          finalImageUrl = trimmedImg;
+        }
+      }
 
       // 주식 평가액 계산
       let stockVal = 0n;
@@ -1314,9 +1352,9 @@ function startWebServer(client) {
       const netWorth = userCash + userBank + stockVal;
 
       const [result] = await pool.query(`
-        INSERT INTO inquiries (user_id, username, avatar, category, title, content, status)
-        VALUES (?, ?, ?, ?, ?, ?, 'WAITING')
-      `, [session.id, session.username, session.avatar, category || '일반 문의', title.trim(), content.trim()]);
+        INSERT INTO inquiries (user_id, username, avatar, category, title, content, image_url, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'WAITING')
+      `, [session.id, session.username, session.avatar, category || '일반 문의', title.trim(), content.trim(), finalImageUrl]);
 
       const ticketId = result.insertId;
 
@@ -1342,17 +1380,31 @@ function startWebServer(client) {
                     name: '💳 유저 자산 현황', 
                     value: `💵 현금: **${formatMoney(userCash)}** | 🏦 예금: **${formatMoney(userBank)}** | 💎 순자산: **${formatMoney(netWorth)}**`, 
                     inline: false 
-                  },
-                  {
-                    name: '⚡ 빠른 관리자 답장 명령어',
-                    value: `\`/admin_reply 문의번호:${ticketId} 답변내용:답변할내용\`\n또는 웹 관리자 패널([easy-scraping.com/admin](https://easy-scraping.com/admin))에서 즉시 답장 가능`,
-                    inline: false
                   }
-                )
-                .setFooter({ text: `월덕 1:1 고객센터 관제 시스템 (Ticket #${ticketId})` })
-                .setTimestamp();
+                );
 
-              await adminUser.send({ embeds: [dmEmbed] });
+              if (finalImageUrl) {
+                dmEmbed.setImage(finalImageUrl);
+                dmEmbed.addFields({ name: '🖼️ 첨부 이미지/스크린샷', value: `[클릭하여 첨부 사진 원본 보기](${finalImageUrl})`, inline: false });
+              }
+
+              dmEmbed.addFields({
+                name: '⚡ 빠른 관리자 답장 명령어',
+                value: `\`/admin_reply 문의번호:${ticketId} 답변내용:답변할내용\`\n또는 웹 관리자 패널([easy-scraping.com/admin](https://easy-scraping.com/admin))에서 즉시 답장 가능`,
+                inline: false
+              });
+
+              dmEmbed.setFooter({ text: `월덕 1:1 고객센터 관제 시스템 (Ticket #${ticketId})` });
+              dmEmbed.setTimestamp();
+
+              if (localAttachmentPath && fs.existsSync(localAttachmentPath)) {
+                await adminUser.send({
+                  embeds: [dmEmbed],
+                  files: [new AttachmentBuilder(localAttachmentPath, { name: localAttachmentFilename })]
+                });
+              } else {
+                await adminUser.send({ embeds: [dmEmbed] });
+              }
             }
           } catch (dmErr) {
             console.warn(`[Inquiry DM] 관리자(${adminId}) DM 전송 실패:`, dmErr.message);
@@ -3356,6 +3408,19 @@ function startWebServer(client) {
                 <textarea id="inquiry-content-input" class="inquiry-textarea" placeholder="발생한 상황, 시간, 요청 사항 등을 자세하게 적어주시면 관리자에게 디스코드 DM으로 전송되며 신속하게 답변해 드립니다."></textarea>
               </div>
 
+              <!-- 📷 스크린샷 / 이미지 첨부 영역 -->
+              <div class="inquiry-form-group">
+                <label>📷 스크린샷 / 이미지 첨부 (선택)</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <input type="file" id="inquiry-image-file" accept="image/*" class="inquiry-input" style="padding: 6px 10px; font-size: 0.82rem;" onchange="handleInquiryImageSelect(event)">
+                  <button type="button" class="btn-filter" id="btn-clear-img" style="display: none; padding: 6px 12px; font-size: 0.8rem; border-color: #ef4444; color: #f87171;" onclick="clearInquiryImage()">✕ 제거</button>
+                </div>
+                <div id="inquiry-img-preview-box" style="display: none; margin-top: 10px; text-align: center; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 10px; border: 1px solid var(--card-border);">
+                  <img id="inquiry-img-preview" src="" style="max-height: 140px; max-width: 100%; border-radius: 8px; object-fit: contain;" alt="첨부 미리보기">
+                  <div style="font-size: 0.72rem; color: #34d399; margin-top: 4px;">✅ 첨부 이미지가 등록되었습니다.</div>
+                </div>
+              </div>
+
               <button class="btn-submit-inquiry" id="btn-submit-inquiry" onclick="submitInquiryForm()">📨 관리자에게 1:1 문의 전송 (DM 알림)</button>
             </div>
           </div>
@@ -4191,6 +4256,39 @@ function startWebServer(client) {
               document.getElementById('inquiry-modal').style.display = 'none';
             }
 
+            let inquirySelectedImageBase64 = null;
+
+            function handleInquiryImageSelect(e) {
+              const file = e.target.files && e.target.files[0];
+              if (!file) return;
+              if (file.size > 8 * 1024 * 1024) {
+                showToast('error', '용량 초과', '이미지 파일 크기는 최대 8MB까지 업로드 가능합니다.');
+                clearInquiryImage();
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = function(evt) {
+                inquirySelectedImageBase64 = evt.target.result;
+                const previewImg = document.getElementById('inquiry-img-preview');
+                const previewBox = document.getElementById('inquiry-img-preview-box');
+                const clearBtn = document.getElementById('btn-clear-img');
+                if (previewImg) previewImg.src = inquirySelectedImageBase64;
+                if (previewBox) previewBox.style.display = 'block';
+                if (clearBtn) clearBtn.style.display = 'inline-block';
+              };
+              reader.readAsDataURL(file);
+            }
+
+            function clearInquiryImage() {
+              inquirySelectedImageBase64 = null;
+              const fileInput = document.getElementById('inquiry-image-file');
+              if (fileInput) fileInput.value = '';
+              const previewBox = document.getElementById('inquiry-img-preview-box');
+              const clearBtn = document.getElementById('btn-clear-img');
+              if (previewBox) previewBox.style.display = 'none';
+              if (clearBtn) clearBtn.style.display = 'none';
+            }
+
             async function submitInquiryForm() {
               const category = document.getElementById('inquiry-category-select').value;
               const title = document.getElementById('inquiry-title-input').value;
@@ -4213,7 +4311,7 @@ function startWebServer(client) {
                 const res = await fetch('/api/support/inquiry', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ category, title, content })
+                  body: JSON.stringify({ category, title, content, image: inquirySelectedImageBase64 })
                 });
                 const data = await res.json();
                 btn.disabled = false;
@@ -4227,6 +4325,7 @@ function startWebServer(client) {
                 showToast('success', '문의 접수 완료', data.message);
                 document.getElementById('inquiry-title-input').value = '';
                 document.getElementById('inquiry-content-input').value = '';
+                clearInquiryImage();
                 closeInquiryModal();
                 openProfileModal('inquiries');
               } catch (e) {
@@ -4268,6 +4367,15 @@ function startWebServer(client) {
                   const createdDate = new Date(inq.created_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
                   const answeredDate = inq.answered_at ? new Date(inq.answered_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '';
 
+                  const imageBlock = inq.image_url
+                    ? '<div style="margin: 10px 0;">' +
+                        '<a href="' + inq.image_url + '" target="_blank" style="display:inline-block; text-decoration:none;">' +
+                          '<img src="' + inq.image_url + '" style="max-height: 140px; max-width: 100%; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); object-fit: cover;" alt="첨부 사진">' +
+                          '<span style="display:block; font-size:0.72rem; color:#818cf8; margin-top:3px;">🖼️ 첨부 이미지 원본 확대 보기</span>' +
+                        '</a>' +
+                      '</div>'
+                    : '';
+
                   const answerBlock = isAnswered && inq.answer
                     ? '<div class="inquiry-answer-box">' +
                         '<div class="inquiry-answer-header">' +
@@ -4285,6 +4393,7 @@ function startWebServer(client) {
                     '</div>' +
                     '<div class="inquiry-title-text">' + inq.title.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' +
                     '<div class="inquiry-content-text">' + inq.content.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' +
+                    imageBlock +
                     '<div style="font-size: 0.72rem; color: #64748b; text-align: right;">작성일시: ' + createdDate + '</div>' +
                     answerBlock +
                   '</div>';
@@ -4387,8 +4496,18 @@ function startWebServer(client) {
             <td>#${inq.id}</td>
             <td>${inq.created_at ? new Date(inq.created_at).toISOString().replace('T', ' ').slice(0, 19) : '-'}</td>
             <td><b>@${inq.username}</b><br><code style="font-size:0.7rem;">${inq.user_id}</code></td>
-            <td><span class="cmd-tag">${inq.category || '일반 문의'}</span></td>
-            <td><b>${inq.title}</b><br><span style="font-size:0.8rem; color:#9ca3af; white-space:pre-wrap;">${inq.content}</span></td>
+            <td>
+              <b>${inq.title}</b><br>
+              <span style="font-size:0.8rem; color:#9ca3af; white-space:pre-wrap;">${inq.content}</span>
+              ${inq.image_url ? `
+                <div style="margin-top:6px;">
+                  <a href="${inq.image_url}" target="_blank" style="display:inline-block; text-decoration:none;">
+                    <img src="${inq.image_url}" style="max-width:120px; max-height:80px; border-radius:6px; border:1px solid rgba(255,255,255,0.2); object-fit:cover;" alt="첨부 사진">
+                  </a>
+                  <br><a href="${inq.image_url}" target="_blank" style="font-size:0.7rem; color:#818cf8;">🖼️ 첨부 이미지 원본 확대</a>
+                </div>
+              ` : ''}
+            </td>
             <td>${statusHtml}</td>
             <td style="min-width:280px;">${replyFormOrAnswer}</td>
           </tr>

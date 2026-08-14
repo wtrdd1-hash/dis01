@@ -62,9 +62,15 @@ module.exports = {
               { name: '📌 내 문의 제목', value: ticket.title, inline: false },
               { name: '📝 내 문의 내용', value: ticket.content.length > 500 ? ticket.content.slice(0, 500) + '...' : ticket.content, inline: false },
               { name: '💬 관리자 공식 답변', value: `\`\`\`\n${answer}\n\`\`\``, inline: false }
-            )
-            .setFooter({ text: `답변자: @${adminUsername} · 웹사이트 [내 프로필]에서도 언제든 확인하실 수 있습니다.` })
-            .setTimestamp();
+            );
+
+          if (ticket.image_url) {
+            userDmEmbed.setImage(ticket.image_url);
+            userDmEmbed.addFields({ name: '🖼️ 첨부하셨던 사진', value: `[사진 다시보기](${ticket.image_url})`, inline: false });
+          }
+
+          userDmEmbed.setFooter({ text: `답변자: @${adminUsername} · 웹사이트 [내 프로필]에서도 언제든 확인하실 수 있습니다.` });
+          userDmEmbed.setTimestamp();
 
           await targetUser.send({ embeds: [userDmEmbed] });
           dmSuccess = true;

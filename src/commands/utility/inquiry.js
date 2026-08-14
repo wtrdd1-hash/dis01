@@ -29,12 +29,19 @@ module.exports = {
           { name: '💡 기능 건의 및 제안', value: '기능 건의' },
           { name: '기타 문의', value: '기타' }
         )
+    )
+    .addAttachmentOption(option =>
+      option.setName('사진')
+        .setDescription('문의와 함께 첨부할 스크린샷 또는 이미지 파일 (선택)')
+        .setRequired(false)
     ),
 
   async execute(interaction) {
     const title = interaction.options.getString('제목').trim();
     const content = interaction.options.getString('내용').trim();
     const category = interaction.options.getString('분류') || '일반 문의';
+    const attachment = interaction.options.getAttachment('사진');
+    const imageUrl = attachment ? attachment.url : null;
 
     const userId = interaction.user.id;
     const username = interaction.user.username;
@@ -76,9 +83,9 @@ module.exports = {
       const netWorth = userCash + userBank + stockVal;
 
       const [result] = await pool.query(`
-        INSERT INTO inquiries (user_id, username, avatar, category, title, content, status)
-        VALUES (?, ?, ?, ?, ?, ?, 'WAITING')
-      `, [userId, username, avatar, category, title, content]);
+        INSERT INTO inquiries (user_id, username, avatar, category, title, content, image_url, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'WAITING')
+      `, [userId, username, avatar, category, title, content, imageUrl]);
 
       const ticketId = result.insertId;
 
@@ -107,15 +114,22 @@ module.exports = {
                     name: '💳 유저 자산 현황', 
                     value: `💵 현금: **${formatMoney(userCash)}** | 🏦 예금: **${formatMoney(userBank)}** | 💎 순자산: **${formatMoney(netWorth)}**`, 
                     inline: false 
-                  },
-                  {
-                    name: '⚡ 빠른 관리자 답장 명령어',
-                    value: `\`/admin_reply 문의번호:${ticketId} 답변내용:답변할내용\`\n또는 웹 관리자 패널([easy-scraping.com/admin](https://easy-scraping.com/admin))에서 즉시 답장 가능`,
-                    inline: false
                   }
-                )
-                .setFooter({ text: `월덕 1:1 고객센터 관제 시스템 (Ticket #${ticketId})` })
-                .setTimestamp();
+                );
+
+              if (imageUrl) {
+                dmEmbed.setImage(imageUrl);
+                dmEmbed.addFields({ name: '🖼️ 첨부 이미지/스크린샷', value: `[클릭하여 첨부 사진 원본 보기](${imageUrl})`, inline: false });
+              }
+
+              dmEmbed.addFields({
+                name: '⚡ 빠른 관리자 답장 명령어',
+                value: `\`/admin_reply 문의번호:${ticketId} 답변내용:답변할내용\`\n또는 웹 관리자 패널([easy-scraping.com/admin](https://easy-scraping.com/admin))에서 즉시 답장 가능`,
+                inline: false
+              });
+
+              dmEmbed.setFooter({ text: `월덕 1:1 고객센터 관제 시스템 (Ticket #${ticketId})` });
+              dmEmbed.setTimestamp();
 
               await adminUser.send({ embeds: [dmEmbed] });
               dmSentCount++;
@@ -126,14 +140,26 @@ module.exports = {
         }
       }
 
-      const successEmbed = createSuccessEmbed(
-        `📩 1:1 문의 접수 완료 (Ticket #${ticketId})`,
+      let successDesc = 
         `**${username}**님의 문의가 관리자에게 디스코드 DM으로 안전하게 전달되었습니다!\n\n` +
         `🏷️ **문의 분류:** \`${category}\`\n` +
         `📌 **문의 제목:** **${title}**\n` +
-        `📝 **문의 내용:**\n\`\`\`\n${content}\n\`\`\`\n` +
-        `💡 관리자가 답변을 등록하면 **디스코드 DM** 및 웹 대시보드([easy-scraping.com](https://easy-scraping.com)) [내 프로필]에서 확인하실 수 있습니다.`
+        `📝 **문의 내용:**\n\`\`\`\n${content}\n\`\`\`\n`;
+
+      if (imageUrl) {
+        successDesc += `🖼️ **첨부 사진:** [첨부된 사진 보기](${imageUrl})\n\n`;
+      }
+
+      successDesc += `💡 관리자가 답변을 등록하면 **디스코드 DM** 및 웹 대시보드([easy-scraping.com](https://easy-scraping.com)) [내 프로필]에서 확인하실 수 있습니다.`;
+
+      const successEmbed = createSuccessEmbed(
+        `📩 1:1 문의 접수 완료 (Ticket #${ticketId})`,
+        successDesc
       );
+
+      if (imageUrl) {
+        successEmbed.setThumbnail(imageUrl);
+      }
 
       await interaction.reply({ embeds: [successEmbed], flags: MessageFlags.Ephemeral });
     } catch (err) {
