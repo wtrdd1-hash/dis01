@@ -78,6 +78,19 @@ async function initDatabase() {
       console.log('✅ users 테이블에 last_subsidy 컬럼이 추가되었습니다.');
     }
 
+    const [gambleCols] = await connection.query(`SHOW COLUMNS FROM users LIKE 'gamble_turns';`);
+    if (gambleCols.length === 0) {
+      await connection.query(`
+        ALTER TABLE users 
+        ADD COLUMN gamble_turns INT NOT NULL DEFAULT 50,
+        ADD COLUMN last_turn_update DATETIME DEFAULT CURRENT_TIMESTAMP,
+        ADD COLUMN clicker_level INT NOT NULL DEFAULT 1,
+        ADD COLUMN auto_miner_level INT NOT NULL DEFAULT 0,
+        ADD COLUMN total_clicks BIGINT NOT NULL DEFAULT 0;
+      `);
+      console.log('✅ users 테이블에 도박 턴(gamble_turns) 및 클리커 지표 컬럼이 추가되었습니다.');
+    }
+
 
     // 주식 종목 테이블
     await connection.query(`

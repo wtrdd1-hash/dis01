@@ -6,8 +6,60 @@ const { MessageFlags } = require('discord.js');
 module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client, commandsMap) {
-    // 1. 버튼이나 셀렉트메뉴 등의 상호작용 로그
-    if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) {
+    // 1. 버튼이나 셀렉트메뉴 등의 상호작용 로그 및 클리커 버튼 처리
+    if (interaction.isButton()) {
+      logComponentInteraction(interaction);
+
+      if (interaction.customId.startsWith('click_mine_') || interaction.customId.startsWith('click_upgrade_')) {
+        const targetUserId = interaction.customId.split('_')[2];
+        if (interaction.user.id !== targetUserId) {
+          return interaction.reply({ content: '❌ 본인이 실행한 /클리커 메시지의 버튼만 조작할 수 있습니다.', flags: MessageFlags.Ephemeral });
+        }
+
+        const userData = await getOrCreateUser(interaction.user.id, interaction.user.globalName || interaction.user.username);
+        const { pool } = require('../config/database');
+        const { formatMoney } = require('../utils/formatters');
+
+        if (interaction.customId.startsWith('click_mine_')) {
+          const clickerLevel = userData.clicker_level || 1;
+          const power = clickerLevel * 100;
+          const isCrit = Math.random() < 0.15;
+          const reward = isCrit ? power * 5 : power;
+          const bonusTurn = Math.random() < 0.15;
+
+          const newCash = BigInt(userData.cash || 0) + BigInt(reward);
+          let newTurns = userData.gamble_turns ?? 50;
+          if (bonusTurn && newTurns < 50) newTurns += 1;
+          const totalClicks = BigInt(userData.total_clicks || 0) + 1n;
+
+          await pool.query('UPDATE users SET cash = ?, gamble_turns = ?, total_clicks = ? WHERE discord_id = ?', [
+            newCash.toString(), newTurns, totalClicks.toString(), interaction.user.id
+          ]);
+
+          let msg = isCrit ? `✨ **5배 크리티컬 대박!** +${formatMoney(reward)} 채굴!` : `⛏️ +${formatMoney(reward)} 채굴 성공!`;
+          if (bonusTurn) msg += ` (⚡ **도박 턴 +1** 획득!)`;
+
+          return interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
+        } else if (interaction.customId.startsWith('click_upgrade_')) {
+          const clickerLevel = userData.clicker_level || 1;
+          const cost = BigInt(clickerLevel * 10000);
+          const userCash = BigInt(userData.cash || 0);
+
+          if (userCash < cost) {
+            return interaction.reply({ content: `❌ 현금이 부족합니다! (필요: ${formatMoney(cost)}, 보유: ${formatMoney(userCash)})`, flags: MessageFlags.Ephemeral });
+          }
+
+          const newCash = userCash - cost;
+          const newLevel = clickerLevel + 1;
+          await pool.query('UPDATE users SET cash = ?, clicker_level = ? WHERE discord_id = ?', [newCash.toString(), newLevel, interaction.user.id]);
+
+          return interaction.reply({
+            content: `🔨 **곡괭이 강화 성공 (Lv.${newLevel})!** 클릭당 채굴량: +${formatMoney(newLevel * 100)}`,
+            flags: MessageFlags.Ephemeral
+          });
+        }
+      }
+    } else if (interaction.isStringSelectMenu() || interaction.isModalSubmit()) {
       logComponentInteraction(interaction);
     }
 
