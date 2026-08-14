@@ -259,12 +259,51 @@ function logError(tag, message, error = null) {
   appendJsonLog(ALL_JSONL_FILE, { type: 'ERROR', timestamp, tag, message, error: errDetails });
 }
 
+// 30일(1개월) 초과된 오래된 JSONL 파일 로그 라인 자동 정돈
+function pruneOldJsonlFiles() {
+  try {
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const files = [ACCESS_JSONL_FILE, ADMIN_JSONL_FILE, COMMANDS_JSONL_FILE, ALL_JSONL_FILE];
+
+    for (const filePath of files) {
+      if (!fs.existsSync(filePath)) continue;
+      const content = fs.readFileSync(filePath, 'utf8');
+      const lines = content.split('\n').filter(Boolean);
+      const keptLines = [];
+
+      for (const line of lines) {
+        try {
+          const parsed = JSON.parse(line);
+          const logTime = parsed.timestamp ? new Date(parsed.timestamp).getTime() : Date.now();
+          if (logTime >= thirtyDaysAgo) {
+            keptLines.push(line);
+          }
+        } catch (e) {
+          keptLines.push(line);
+        }
+      }
+
+      if (keptLines.length !== lines.length) {
+        fs.writeFileSync(filePath, keptLines.join('\n') + (keptLines.length > 0 ? '\n' : ''), 'utf8');
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ JSONL 파일 로그 정리 경고:', err.message);
+  }
+}
+
+// 봇 시작 시 및 24시간마다 30일 초과 파일 로그 자동 정돈
+pruneOldJsonlFiles();
+setInterval(pruneOldJsonlFiles, 24 * 60 * 60 * 1000);
+
 module.exports = {
   getFormattedTimestamp,
   logWebAccess,
+  logAdminAction,
   logCommandExecution,
   logComponentInteraction,
   logInfo,
   logWarn,
-  logError
+  logError,
+  pruneOldJsonlFiles
 };

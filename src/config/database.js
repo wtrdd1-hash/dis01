@@ -463,16 +463,26 @@ async function initDatabase() {
   }
 }
 
-// 오래된 로그 데이터 자동 정돈 (DB 성능 유지 및 용량 최적화)
+// 오래된 로그 데이터 자동 정돈 (모든 로그 최대 30일/1개월 보관 정책)
 async function cleanupOldDatabaseLogs() {
   try {
-    await pool.query('DELETE FROM command_logs WHERE created_at < NOW() - INTERVAL 14 DAY');
+    await pool.query('DELETE FROM command_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
     await pool.query('DELETE FROM gambling_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
-    console.log('🧹 DB 성능 최적화: 오래된 수집 로그 자동 정돈 완료');
+    await pool.query('DELETE FROM web_access_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
+    await pool.query('DELETE FROM admin_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
+    await pool.query('DELETE FROM stock_price_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
+    await pool.query('DELETE FROM stock_transactions WHERE created_at < NOW() - INTERVAL 30 DAY');
+    await pool.query('DELETE FROM economy_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
+    await pool.query('DELETE FROM market_news_feed WHERE created_at < NOW() - INTERVAL 30 DAY');
+    await pool.query('DELETE FROM stock_history WHERE recorded_at < NOW() - INTERVAL 30 DAY');
+    console.log('🧹 [30일 로그 보관 정책] 30일(1개월) 초과 오래된 로그 데이터 자동 정돈 완료');
   } catch (err) {
     console.warn('⚠️ DB 로그 정돈 경고:', err.message);
   }
 }
+
+// 24시간 주기로 30일 초과 로그 자동 정돈 스케줄러 등록
+setInterval(cleanupOldDatabaseLogs, 24 * 60 * 60 * 1000);
 
 // 유저 자동 가입 / 조회 함수
 async function getOrCreateUser(discordId, username = null, avatar = null) {
