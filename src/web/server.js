@@ -63,7 +63,6 @@ function startWebServer(client) {
   const app = express();
   const PORT = config.port || 8080;
 
-  // Nginx 프록시 신뢰 활성화
   app.set('trust proxy', true);
 
   app.use(express.json());
@@ -108,7 +107,7 @@ function startWebServer(client) {
   // 3초 TTL 메모리 캐시
   let marketCache = { data: null, timestamp: 0 };
   let leaderboardCache = { data: null, timestamp: 0 };
-  const CACHE_TTL_MS = 3000;
+  const CACHE_TTL_MS = 2500;
 
   async function getCachedMarketStocks() {
     const now = Date.now();
@@ -337,7 +336,7 @@ function startWebServer(client) {
         await pool.query('UPDATE users SET cash = ?, clicker_level = ? WHERE discord_id = ?', [userCash.toString(), clickerLevel, session.id]);
         return res.json({
           success: true,
-          message: `🔨 클릭 파워 Lv.${clickerLevel} 업그레이드 완료! (클릭당 +${formatMoney(clickerLevel * 100)})`,
+          message: `🔨 클릭 파워 Lv.${clickerLevel} 강화 완료! (클릭당 +${formatMoney(clickerLevel * 100)})`,
           newCash: userCash.toString(),
           clickerLevel
         });
@@ -376,7 +375,7 @@ function startWebServer(client) {
     }
   });
 
-  // 4. 🎰 웹 슬롯머신 게임 API (무제한 플레이 지원 + 진행 중 방어 락 + 올인 검증 + 잔고 스냅샷)
+  // 4. 🎰 웹 슬롯머신 게임 API (스냅샷 및 로그 지원)
   app.post('/api/game/slot', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -391,7 +390,6 @@ function startWebServer(client) {
       const userData = await getOrCreateUser(session.id);
       const userCash = BigInt(userData.cash || 0);
 
-      // 올인 및 배팅금액 정확한 계산
       let betAmount = 0n;
       if (bet === 'all' || bet === '올인' || bet === '전액') {
         betAmount = userCash;
@@ -400,7 +398,7 @@ function startWebServer(client) {
       }
 
       if (betAmount < 1000n) {
-        return res.status(400).json({ success: false, error: `최소 배팅금액은 1,000원입니다. (현재 보유 현금: ${formatMoney(userCash)})` });
+        return res.status(400).json({ success: false, error: `최소 배팅금액은 1,000원입니다. (보유 현금: ${formatMoney(userCash)})` });
       }
       if (userCash < betAmount) {
         return res.status(400).json({ success: false, error: `보유 현금이 부족합니다! (필요: ${formatMoney(betAmount)}, 보유: ${formatMoney(userCash)})` });
@@ -446,7 +444,6 @@ function startWebServer(client) {
         [balanceAfter.toString(), remainingTurns, session.id]
       );
 
-      // 자산 롤백 복구용 상세 로그 저장
       const [insertRes] = await pool.query(`
         INSERT INTO gambling_logs (user_id, game, bet, payout, profit, balance_before, balance_after, details)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -478,7 +475,7 @@ function startWebServer(client) {
     }
   });
 
-  // 5. 🪙 웹 동전 던지기 게임 API (무제한 플레이 지원 + 진행 중 방어 락 + 올인 검증 + 잔고 스냅샷)
+  // 5. 🪙 웹 동전 던지기 게임 API (스냅샷 및 로그 지원)
   app.post('/api/game/coinflip', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -551,7 +548,7 @@ function startWebServer(client) {
     }
   });
 
-  // 6. 🎲 웹 주사위 대결 API (무제한 플레이 지원 + 진행 중 방어 락 + 올인 검증 + 잔고 스냅샷)
+  // 6. 🎲 웹 주사위 대결 API (스냅샷 및 로그 지원)
   app.post('/api/game/dice', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -638,7 +635,7 @@ function startWebServer(client) {
     }
   });
 
-  // 7. 🎁 일일 출석체크 API
+  // 7. 🎁 일일 출석체크 API (경제 로그 기록)
   app.post('/api/economy/daily', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -663,7 +660,8 @@ function startWebServer(client) {
       const streakBonus = (cappedStreak - 1) * config.dailyStreakBonus;
       const totalReward = config.dailyReward + streakBonus;
 
-      const newCash = BigInt(userData.cash || 0) + BigInt(totalReward);
+      const beforeCash = BigInt(userData.cash || 0);
+      const newCash = beforeCash + BigInt(totalReward);
       const bonusTurns = 15;
       const { turns, maxTurns } = calculateUserTurns(userData);
       const newTurns = Math.min(maxTurns, turns + bonusTurns);
@@ -672,6 +670,14 @@ function startWebServer(client) {
         'UPDATE users SET cash = ?, gamble_turns = ?, last_daily = NOW(), daily_streak = ? WHERE discord_id = ?',
         [newCash.toString(), newTurns, streak, session.id]
       );
+
+      // 경제 활동 로그 기록
+      try {
+        await pool.query(`
+          INSERT INTO economy_logs (user_id, username, type, amount, balance_before, balance_after, description)
+          VALUES (?, ?, 'DAILY_REWARD', ?, ?, ?, ?)
+        `, [session.id, session.username, totalReward, beforeCash.toString(), newCash.toString(), `일일 출석체크 (+${streak}일 연속 보너스)`]);
+      } catch (e) {}
 
       res.json({
         success: true,
@@ -686,7 +692,7 @@ function startWebServer(client) {
     }
   });
 
-  // 8. 💸 정부 기본소득 지원금 API
+  // 8. 💸 정부 기본소득 지원금 API (경제 로그 기록)
   app.post('/api/economy/subsidy', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -707,6 +713,13 @@ function startWebServer(client) {
 
       await pool.query('UPDATE users SET cash = ?, gamble_turns = ?, last_subsidy = NOW() WHERE discord_id = ?', [newCash.toString(), newTurns, session.id]);
 
+      try {
+        await pool.query(`
+          INSERT INTO economy_logs (user_id, username, type, amount, balance_before, balance_after, description)
+          VALUES (?, ?, 'SUBSIDY', ?, ?, ?, ?)
+        `, [session.id, session.username, subsidyAmount, userCash.toString(), newCash.toString(), '정부 긴급 기본소득 구제 지원금']);
+      } catch (e) {}
+
       res.json({
         success: true,
         subsidyAmount,
@@ -719,7 +732,7 @@ function startWebServer(client) {
     }
   });
 
-  // 9. 🏦 은행 입금 / 출금 API
+  // 9. 🏦 은행 입금 / 출금 API (경제 로그 기록)
   app.post('/api/economy/bank', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -729,6 +742,7 @@ function startWebServer(client) {
       const userData = await getOrCreateUser(session.id);
       let cash = BigInt(userData.cash || 0);
       let bank = BigInt(userData.bank || 0);
+      const beforeCash = cash;
 
       let amt = (amount === 'all' || amount === '전액') ? (action === 'deposit' ? cash : bank) : BigInt(parseInt(amount, 10) || 0);
       if (amt <= 0n) return res.status(400).json({ success: false, error: '올바른 금액을 입력하세요.' });
@@ -747,6 +761,17 @@ function startWebServer(client) {
 
       await pool.query('UPDATE users SET cash = ?, bank = ? WHERE discord_id = ?', [cash.toString(), bank.toString(), session.id]);
 
+      try {
+        await pool.query(`
+          INSERT INTO economy_logs (user_id, username, type, amount, balance_before, balance_after, description)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [
+          session.id, session.username, action === 'deposit' ? 'BANK_DEPOSIT' : 'BANK_WITHDRAW',
+          amt.toString(), beforeCash.toString(), cash.toString(),
+          action === 'deposit' ? `은행에 ${formatMoney(amt)} 입금` : `은행에서 ${formatMoney(amt)} 출금`
+        ]);
+      } catch (e) {}
+
       res.json({
         success: true,
         cash: cash.toString(),
@@ -758,7 +783,7 @@ function startWebServer(client) {
     }
   });
 
-  // 10. 📈 실시간 주식 매수 / 매도 웹 트레이딩 API
+  // 10. 📈 실시간 주식 매수 / 매도 웹 트레이딩 API (체결 로그 stock_transactions 기록)
   app.post('/api/stock/trade', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -781,7 +806,7 @@ function startWebServer(client) {
 
       if (action === 'buy') {
         if (userCash < totalTradePrice) {
-          return res.status(400).json({ success: false, error: `현금이 부족합니다! (필요금액: ${formatMoney(totalTradePrice)}, 보유현금: ${formatMoney(userCash)})` });
+          return res.status(400).json({ success: false, error: `현금이 부족합니다! (필요: ${formatMoney(totalTradePrice)}, 보유: ${formatMoney(userCash)})` });
         }
 
         userCash -= totalTradePrice;
@@ -794,6 +819,14 @@ function startWebServer(client) {
             amount = amount + VALUES(amount),
             total_spent = total_spent + VALUES(total_spent)
         `, [session.id, stockId, tradeCount.toString(), totalTradePrice.toString()]);
+
+        // 체결 로그 영구 기록
+        try {
+          await pool.query(`
+            INSERT INTO stock_transactions (user_id, username, stock_id, stock_name, action, amount, price, total_price)
+            VALUES (?, ?, ?, ?, 'BUY', ?, ?, ?)
+          `, [session.id, session.username, stockId, stock.name, tradeCount.toString(), stockPrice.toString(), totalTradePrice.toString()]);
+        } catch (e) {}
 
         return res.json({
           success: true,
@@ -831,6 +864,14 @@ function startWebServer(client) {
             newHoldingAmount.toString(), newHoldingSpent.toString(), session.id, stockId
           ]);
         }
+
+        // 체결 로그 영구 기록
+        try {
+          await pool.query(`
+            INSERT INTO stock_transactions (user_id, username, stock_id, stock_name, action, amount, price, total_price)
+            VALUES (?, ?, ?, ?, 'SELL', ?, ?, ?)
+          `, [session.id, session.username, stockId, stock.name, tradeCount.toString(), stockPrice.toString(), totalTradePrice.toString()]);
+        } catch (e) {}
 
         return res.json({
           success: true,
@@ -917,7 +958,149 @@ function startWebServer(client) {
     }
   });
 
-  // 13. 🔄 [관리자 전용] 도박 이력 롤백 & 이전 잔고 원상 복구 API
+  // 13. ⚡ [통합 라이브 피드 & 모든 로그 실시간 스트림 API]
+  app.get('/api/system/activity-feed', async (req, res) => {
+    const { type = 'ALL', search = '', limit = 50 } = req.query;
+    const maxLimit = Math.min(parseInt(limit, 10) || 50, 100);
+
+    try {
+      const feedItems = [];
+
+      // 1. 주가 변동 틱 로그
+      if (type === 'ALL' || type === 'STOCK_PRICE') {
+        const [priceRows] = await pool.query('SELECT * FROM stock_price_logs ORDER BY id DESC LIMIT ?', [maxLimit]);
+        for (const p of priceRows) {
+          const isUp = Number(p.diff) >= 0;
+          feedItems.push({
+            id: `p_${p.id}`,
+            rawId: p.id,
+            type: 'STOCK_PRICE',
+            badge: isUp ? '📈 주가 상승' : '📉 주가 하락',
+            badgeClass: isUp ? 'badge-up' : 'badge-down',
+            color: isUp ? '#34d399' : '#f87171',
+            title: `[${p.stock_id}] ${p.stock_name} ${isUp ? '▲' : '▼'} ${isUp ? '+' : ''}${p.change_rate}%`,
+            desc: `현재가: ${formatMoney(p.new_price)} (변동: ${isUp ? '+' : ''}${formatMoney(p.diff)}) · ${p.reason || p.regime}`,
+            time: p.created_at,
+            actor: '실시간 시장 엔진',
+            data: { stock_id: p.stock_id, price: p.new_price, rate: p.change_rate }
+          });
+        }
+      }
+
+      // 2. 주식 매매 체결 로그
+      if (type === 'ALL' || type === 'STOCK_TRADE') {
+        const [tradeRows] = await pool.query('SELECT * FROM stock_transactions ORDER BY id DESC LIMIT ?', [maxLimit]);
+        for (const t of tradeRows) {
+          const isBuy = t.action === 'BUY';
+          feedItems.push({
+            id: `t_${t.id}`,
+            rawId: t.id,
+            type: 'STOCK_TRADE',
+            badge: isBuy ? '🛒 매수 체결' : '💰 매도 체결',
+            badgeClass: isBuy ? 'badge-buy' : 'badge-sell',
+            color: isBuy ? '#38bdf8' : '#fb923c',
+            title: `@${t.username} 님의 [${t.stock_name}] ${formatNumber(t.amount)}주 ${isBuy ? '매수' : '매도'}`,
+            desc: `주당 단가: ${formatMoney(t.price)} · 총 체결금액: ${formatMoney(t.total_price)}`,
+            time: t.created_at,
+            actor: `@${t.username}`,
+            data: { stock_id: t.stock_id, amount: t.amount, total: t.total_price }
+          });
+        }
+      }
+
+      // 3. 카지노 도박 로그
+      if (type === 'ALL' || type === 'GAMBLE') {
+        const [gambleRows] = await pool.query(`
+          SELECT g.*, u.username 
+          FROM gambling_logs g
+          LEFT JOIN users u ON g.user_id = u.discord_id
+          ORDER BY g.id DESC LIMIT ?
+        `, [maxLimit]);
+        for (const g of gambleRows) {
+          const profit = BigInt(g.profit);
+          const isWin = profit > 0n;
+          feedItems.push({
+            id: `g_${g.id}`,
+            rawId: g.id,
+            type: 'GAMBLE',
+            badge: isWin ? '🎰 당첨/잭팟' : '💀 도박 실패',
+            badgeClass: isWin ? 'badge-win' : 'badge-lose',
+            color: isWin ? '#fbbf24' : '#9ca3af',
+            title: `@${g.username || '유저'} 님의 [${g.game}] ${isWin ? '승리 및 보상' : '배팅 손실'}`,
+            desc: `배팅: ${formatMoney(g.bet)} ➔ 당첨금: ${formatMoney(g.payout)} (손익: ${profit >= 0n ? '+' : ''}${formatMoney(profit)})`,
+            time: g.created_at,
+            actor: `@${g.username || '유저'}`,
+            data: { game: g.game, bet: g.bet, profit: g.profit }
+          });
+        }
+      }
+
+      // 4. 경제 지원금 및 은행 로그
+      if (type === 'ALL' || type === 'ECONOMY') {
+        const [ecoRows] = await pool.query('SELECT * FROM economy_logs ORDER BY id DESC LIMIT ?', [maxLimit]);
+        for (const e of ecoRows) {
+          feedItems.push({
+            id: `e_${e.id}`,
+            rawId: e.id,
+            type: 'ECONOMY',
+            badge: '🎁 경제/은행',
+            badgeClass: 'badge-eco',
+            color: '#a855f7',
+            title: `@${e.username} - ${e.description}`,
+            desc: `금액: ${formatMoney(e.amount)} (이전 잔고: ${formatMoney(e.balance_before)} ➔ 갱신 잔고: ${formatMoney(e.balance_after)})`,
+            time: e.created_at,
+            actor: `@${e.username}`,
+            data: { type: e.type, amount: e.amount }
+          });
+        }
+      }
+
+      // 5. 실시간 증시 공시 뉴스
+      if (type === 'ALL' || type === 'NEWS') {
+        const [newsRows] = await pool.query('SELECT * FROM market_news_feed ORDER BY id DESC LIMIT ?', [maxLimit]);
+        for (const n of newsRows) {
+          const isBull = n.sentiment === 'BULL';
+          feedItems.push({
+            id: `n_${n.id}`,
+            rawId: n.id,
+            type: 'NEWS',
+            badge: isBull ? '🔥 호재 공시' : '⚠️ 악재 공시',
+            badgeClass: isBull ? 'badge-bull' : 'badge-bear',
+            color: isBull ? '#34d399' : '#f87171',
+            title: `[${n.event_type}] ${n.title}`,
+            desc: `${n.content} (영향 섹터: ${n.impact_sector || '전체'})`,
+            time: n.created_at,
+            actor: '증시공시센터',
+            data: { related_stock: n.related_stock }
+          });
+        }
+      }
+
+      // 최신 시간순 정렬
+      feedItems.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
+      // 검색 필터링
+      let filtered = feedItems;
+      if (search) {
+        const q = search.toLowerCase();
+        filtered = filtered.filter(item => 
+          item.title.toLowerCase().includes(q) || 
+          item.desc.toLowerCase().includes(q) || 
+          item.actor.toLowerCase().includes(q)
+        );
+      }
+
+      res.json({
+        success: true,
+        count: filtered.length,
+        items: filtered.slice(0, maxLimit)
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 14. 🔄 [관리자 전용] 도박 이력 롤백 API
   app.post('/api/admin/rollback/gambling/:logId', async (req, res) => {
     const session = getSessionUser(req);
     if (!session || !config.isAdmin(session.id)) {
@@ -939,13 +1122,8 @@ function startWebServer(client) {
       const balanceBefore = BigInt(log.balance_before);
 
       await connection.beginTransaction();
-
-      // 유저 잔고를 도박 전 잔고로 복구
       await connection.query('UPDATE users SET cash = ? WHERE discord_id = ?', [balanceBefore.toString(), targetUserId]);
-
-      // 롤백 플래그 갱신
       await connection.query('UPDATE gambling_logs SET is_rolled_back = 1, rolled_back_at = NOW() WHERE id = ?', [logId]);
-
       await connection.commit();
 
       await logAdminAction(session.id, session.username, 'WEB_ROLLBACK_GAMBLE', targetUserId, {
@@ -969,32 +1147,39 @@ function startWebServer(client) {
     }
   });
 
-  // API - 관리자 전용 도박 상세 기록 JSON
+  // API - 관리자 전용 JSON 로그들
   app.get('/api/admin/logs/gambling', async (req, res) => {
     const currentUser = getSessionUser(req);
-    if (!currentUser || !config.isAdmin(currentUser.id)) {
-      return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-    }
+    if (!currentUser || !config.isAdmin(currentUser.id)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
     try {
-      const [rows] = await pool.query(`
-        SELECT g.*, u.username 
-        FROM gambling_logs g
-        LEFT JOIN users u ON g.user_id = u.discord_id
-        ORDER BY g.id DESC LIMIT 100
-      `);
+      const [rows] = await pool.query(`SELECT g.*, u.username FROM gambling_logs g LEFT JOIN users u ON g.user_id = u.discord_id ORDER BY g.id DESC LIMIT 100`);
       res.json({ success: true, count: rows.length, logs: rows });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-  // API - 주식 시세 & 상승세 데이터 JSON
+  app.get('/api/admin/logs/access', async (req, res) => {
+    const currentUser = getSessionUser(req);
+    if (!currentUser || !config.isAdmin(currentUser.id)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+    try {
+      const [rows] = await pool.query('SELECT * FROM web_access_logs ORDER BY id DESC LIMIT 100');
+      res.json({ success: true, count: rows.length, logs: rows });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.get('/api/admin/logs/commands', async (req, res) => {
+    const currentUser = getSessionUser(req);
+    if (!currentUser || !config.isAdmin(currentUser.id)) return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+    try {
+      const [rows] = await pool.query('SELECT * FROM command_logs ORDER BY id DESC LIMIT 100');
+      res.json({ success: true, count: rows.length, logs: rows });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   app.get('/api/market', async (req, res) => {
     try {
       const stocks = await getCachedMarketStocks();
       const regime = getCurrentMarketRegime();
       const news = getLastNews();
-
       const gainers = [...stocks].sort((a, b) => b.rate - a.rate);
       const upCount = stocks.filter(s => s.rate > 0).length;
       const downCount = stocks.filter(s => s.rate < 0).length;
@@ -1004,57 +1189,18 @@ function startWebServer(client) {
       res.json({
         stocks,
         gainers,
-        marketSummary: {
-          upCount,
-          downCount,
-          flatCount,
-          avgRate: avgRate.toFixed(2),
-          isMarketBull: avgRate >= 0
-        },
+        marketSummary: { upCount, downCount, flatCount, avgRate: avgRate.toFixed(2), isMarketBull: avgRate >= 0 },
         regime,
         news
       });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-  // API - 자산가 순위표 JSON
   app.get('/api/leaderboard', async (req, res) => {
     try {
       const rows = await getCachedLeaderboard();
       res.json({ leaderboard: rows });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // API - 관리자 전용 웹 접속 JSON 로그
-  app.get('/api/admin/logs/access', async (req, res) => {
-    const currentUser = getSessionUser(req);
-    if (!currentUser || !config.isAdmin(currentUser.id)) {
-      return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-    }
-    try {
-      const [rows] = await pool.query('SELECT * FROM web_access_logs ORDER BY id DESC LIMIT 100');
-      res.json({ success: true, count: rows.length, logs: rows });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // API - 관리자 전용 명령어 실행 JSON 로그
-  app.get('/api/admin/logs/commands', async (req, res) => {
-    const currentUser = getSessionUser(req);
-    if (!currentUser || !config.isAdmin(currentUser.id)) {
-      return res.status(403).json({ error: '관리자 권한이 필요합니다.' });
-    }
-    try {
-      const [rows] = await pool.query('SELECT * FROM command_logs ORDER BY id DESC LIMIT 100');
-      res.json({ success: true, count: rows.length, logs: rows });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
   // 메인 웹사이트 대시보드 및 게임 허브
@@ -1197,7 +1343,7 @@ function startWebServer(client) {
         `;
       }
 
-      // 뉴스 피드 HTML 생성 함수
+      // 뉴스 피드 HTML
       function buildNewsCardHtml(n) {
         const timeStr = n.created_at ? new Date(n.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '방금';
         const isBull = n.sentiment === 'BULL';
@@ -1311,6 +1457,7 @@ function startWebServer(client) {
               <button class="btn-quick" onclick="claimSubsidyReward()">🏛️ 기본소득 지원금</button>
               <button class="btn-quick" onclick="openBankModal()">🏦 은행 입출금</button>
               <button class="btn-quick" style="background: rgba(99, 102, 241, 0.3); border-color: #818cf8;" onclick="switchTab('tab-clicker')">⛏️ 클리커 채굴</button>
+              <button class="btn-quick" style="background: rgba(245, 158, 11, 0.2); border-color: #fbbf24; color: #fbbf24;" onclick="switchTab('tab-feed')">⚡ 실시간 모든 로그</button>
             </div>
           </div>
         `
@@ -1362,6 +1509,39 @@ function startWebServer(client) {
                 radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.12) 0px, transparent 50%);
               background-attachment: fixed;
             }
+
+            /* 토스트 알림 컨테이너 */
+            #toast-container {
+              position: fixed;
+              top: 24px;
+              right: 24px;
+              z-index: 9999;
+              display: flex;
+              flex-direction: column;
+              gap: 10px;
+              pointer-events: none;
+            }
+            .toast {
+              pointer-events: auto;
+              min-width: 280px;
+              max-width: 380px;
+              background: rgba(17, 24, 39, 0.95);
+              border: 1px solid rgba(255, 255, 255, 0.15);
+              backdrop-filter: blur(12px);
+              padding: 14px 18px;
+              border-radius: 14px;
+              box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+              transition: all 0.3s;
+            }
+            .toast.toast-hide { opacity: 0; transform: translateX(50px); }
+            @keyframes toastSlideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+            .toast-icon { font-size: 1.4rem; }
+            .toast-title { font-weight: 700; font-size: 0.9rem; color: #fff; margin-bottom: 2px; }
+            .toast-msg { font-size: 0.82rem; color: #cbd5e1; }
 
             /* 실시간 전광판 롤링 티커 */
             .news-ticker-bar {
@@ -1509,7 +1689,7 @@ function startWebServer(client) {
             /* 탭 메뉴 */
             .tabs-nav {
               display: flex;
-              gap: 12px;
+              gap: 10px;
               margin-bottom: 25px;
               border-bottom: 1px solid var(--card-border);
               padding-bottom: 12px;
@@ -1519,9 +1699,9 @@ function startWebServer(client) {
               background: transparent;
               border: none;
               color: var(--text-muted);
-              font-size: 1.05rem;
+              font-size: 1rem;
               font-weight: 700;
-              padding: 10px 20px;
+              padding: 10px 18px;
               border-radius: 12px;
               cursor: pointer;
               transition: all 0.2s;
@@ -1540,6 +1720,129 @@ function startWebServer(client) {
             .tab-pane { display: none; }
             .tab-pane.active { display: block; animation: fadeIn 0.3s ease; }
             @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+            /* ⚡ 통합 라이브 피드 & 모든 로그 전용 스타일 */
+            .feed-container {
+              background: var(--card-bg);
+              border: 1px solid var(--card-border);
+              border-radius: 24px;
+              padding: 26px;
+              box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            }
+            .feed-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 20px;
+              flex-wrap: wrap;
+              gap: 12px;
+            }
+            .feed-title {
+              font-family: 'Outfit', sans-serif;
+              font-size: 1.35rem;
+              font-weight: 800;
+              color: #fbbf24;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            }
+            .feed-status-badge {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              font-size: 0.8rem;
+              font-weight: 700;
+              color: #34d399;
+              background: rgba(16, 185, 129, 0.15);
+              padding: 4px 12px;
+              border-radius: 20px;
+              border: 1px solid rgba(16, 185, 129, 0.3);
+            }
+            .feed-filter-bar {
+              display: flex;
+              gap: 8px;
+              margin-bottom: 20px;
+              flex-wrap: wrap;
+            }
+            .btn-feed-filter {
+              background: rgba(255, 255, 255, 0.04);
+              border: 1px solid var(--card-border);
+              color: var(--text-muted);
+              font-size: 0.82rem;
+              font-weight: 700;
+              padding: 6px 14px;
+              border-radius: 12px;
+              cursor: pointer;
+              transition: all 0.2s;
+            }
+            .btn-feed-filter.active {
+              background: #6366f1;
+              color: #fff;
+              border-color: #818cf8;
+            }
+            .feed-search-input {
+              flex: 1;
+              min-width: 240px;
+              background: #111827;
+              border: 1px solid var(--card-border);
+              color: #fff;
+              padding: 8px 14px;
+              border-radius: 10px;
+              font-size: 0.85rem;
+            }
+            
+            .feed-stream-list {
+              display: flex;
+              flex-direction: column;
+              gap: 12px;
+              max-height: 650px;
+              overflow-y: auto;
+              padding-right: 6px;
+            }
+            .feed-card {
+              background: rgba(255, 255, 255, 0.02);
+              border: 1px solid var(--card-border);
+              border-radius: 16px;
+              padding: 16px 20px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              gap: 16px;
+              transition: all 0.2s;
+            }
+            .feed-card:hover {
+              background: rgba(255, 255, 255, 0.04);
+              border-color: rgba(99, 102, 241, 0.3);
+              transform: translateX(4px);
+            }
+            .feed-card-left {
+              display: flex;
+              align-items: center;
+              gap: 14px;
+              flex: 1;
+            }
+            .feed-badge {
+              font-size: 0.75rem;
+              font-weight: 800;
+              padding: 4px 10px;
+              border-radius: 8px;
+              white-space: nowrap;
+            }
+            .badge-up { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+            .badge-down { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+            .badge-buy { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+            .badge-sell { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
+            .badge-win { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+            .badge-lose { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
+            .badge-eco { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+            .badge-bull { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+            .badge-bear { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+            
+            .feed-info-col h4 { font-size: 0.95rem; font-weight: 700; color: #fff; margin-bottom: 2px; }
+            .feed-info-col p { font-size: 0.82rem; color: #94a3b8; }
+            .feed-time-col { text-align: right; white-space: nowrap; }
+            .feed-time-text { font-size: 0.75rem; color: #64748b; font-family: 'Outfit', monospace; }
+            .feed-actor-tag { font-size: 0.78rem; font-weight: 700; color: #a5b4fc; display: block; margin-top: 2px; }
 
             /* ⛏️ 클리커 채굴기 전용 스타일 */
             .clicker-container {
@@ -1681,8 +1984,6 @@ function startWebServer(client) {
             .stock-footer { font-size: 0.82rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 10px; margin-bottom: 14px; }
             .trend-text { font-weight: 700; font-size: 0.8rem; }
             .badge { padding: 4px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; }
-            .badge-up { background: rgba(16, 185, 129, 0.15); color: #34d399; }
-            .badge-down { background: rgba(239, 68, 68, 0.15); color: #f87171; }
 
             .stock-trade-actions { display: flex; gap: 6px; flex-wrap: wrap; }
             .btn-trade { flex: 1; min-width: 60px; padding: 8px; border-radius: 8px; border: none; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
@@ -1703,27 +2004,9 @@ function startWebServer(client) {
               margin-bottom: 20px;
               flex-wrap: wrap;
             }
-            .news-search-box {
-              flex: 1;
-              min-width: 250px;
-              display: flex;
-              gap: 8px;
-            }
-            .news-search-input {
-              width: 100%;
-              background: #111827;
-              border: 1px solid var(--card-border);
-              color: #fff;
-              padding: 10px 16px;
-              border-radius: 12px;
-              font-size: 0.9rem;
-            }
-            .news-category-filters {
-              display: flex;
-              gap: 8px;
-              overflow-x: auto;
-              padding-bottom: 4px;
-            }
+            .news-search-box { flex: 1; min-width: 250px; display: flex; gap: 8px; }
+            .news-search-input { width: 100%; background: #111827; border: 1px solid var(--card-border); color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 0.9rem; }
+            .news-category-filters { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
             .btn-filter {
               background: rgba(255, 255, 255, 0.04);
               border: 1px solid var(--card-border);
@@ -1736,11 +2019,7 @@ function startWebServer(client) {
               transition: all 0.2s;
               white-space: nowrap;
             }
-            .btn-filter.active {
-              background: #6366f1;
-              color: #fff;
-              border-color: #818cf8;
-            }
+            .btn-filter.active { background: #6366f1; color: #fff; border-color: #818cf8; }
             .btn-filter:hover:not(.active) { background: rgba(255, 255, 255, 0.08); color: #fff; }
 
             .news-feed-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; margin-bottom: 40px; }
@@ -1820,6 +2099,9 @@ function startWebServer(client) {
           </style>
         </head>
         <body>
+          <!-- 플로팅 토스트 알림 컨테이너 -->
+          <div id="toast-container"></div>
+
           <!-- 롤링 증시 속보 티커 바 -->
           <div class="news-ticker-bar">
             <span class="ticker-live-dot"></span>
@@ -1837,6 +2119,7 @@ function startWebServer(client) {
             <!-- 탭 네비게이션 -->
             <div class="tabs-nav">
               <button class="tab-btn active" onclick="switchTab('tab-stocks')">📈 주식 시장 & 차트</button>
+              <button class="tab-btn" onclick="switchTab('tab-feed')">⚡ 실시간 모든 로그 (라이브)</button>
               <button class="tab-btn" onclick="switchTab('tab-news')">📰 시장 뉴스 & 경제 공시</button>
               <button class="tab-btn" onclick="switchTab('tab-clicker')">⛏️ 골드 채굴 & 클리커</button>
               <button class="tab-btn" onclick="switchTab('tab-casino')">🎰 웹 카지노 & 도박</button>
@@ -1873,7 +2156,39 @@ function startWebServer(client) {
               </div>
             </div>
 
-            <!-- 탭 2: 📰 시장 뉴스 & 경제 공시 허브 -->
+            <!-- 탭 2: ⚡ 실시간 모든 로그 (주가 변동, 거래 체결, 도박, 경제) 라이브 스트림 -->
+            <div id="tab-feed" class="tab-pane">
+              <div class="feed-container">
+                <div class="feed-header">
+                  <div class="feed-title">
+                    <span class="pulse-dot"></span>
+                    ⚡ 실시간 모든 시스템 로그 & 주가 변동 스트림
+                  </div>
+                  <div class="feed-status-badge">
+                    <span class="pulse-dot"></span>
+                    3초 자동 갱신 라이브 피드
+                  </div>
+                </div>
+
+                <div class="feed-filter-bar">
+                  <button class="btn-feed-filter active" onclick="setFeedFilter('ALL')">🌐 전체 로그</button>
+                  <button class="btn-feed-filter" onclick="setFeedFilter('STOCK_PRICE')">📈 주가 변동 틱</button>
+                  <button class="btn-feed-filter" onclick="setFeedFilter('STOCK_TRADE')">🛒 주식 매매 체결</button>
+                  <button class="btn-feed-filter" onclick="setFeedFilter('GAMBLE')">🎰 카지노 도박</button>
+                  <button class="btn-feed-filter" onclick="setFeedFilter('ECONOMY')">🎁 경제/지원금</button>
+                  <button class="btn-feed-filter" onclick="setFeedFilter('NEWS')">📰 시장 공시/속보</button>
+                  <input type="text" id="feed-search-input" class="feed-search-input" placeholder="🔍 유저명, 종목명, 키워드 검색..." oninput="filterFeedLocally()">
+                </div>
+
+                <div class="feed-stream-list" id="feed-stream-container">
+                  <div style="text-align: center; color: #9ca3af; padding: 30px;">
+                    <span class="pulse-dot"></span> 실시간 시스템 로그 데이터를 불러오는 중...
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 탭 3: 📰 시장 뉴스 & 경제 공시 허브 -->
             <div id="tab-news" class="tab-pane">
               <div class="news-control-bar">
                 <div class="news-search-box">
@@ -1895,7 +2210,7 @@ function startWebServer(client) {
               </div>
             </div>
 
-            <!-- 탭 3: ⛏️ 골드 채굴 클리커 게임 & 턴 상점 -->
+            <!-- 탭 4: ⛏️ 골드 채굴 클리커 게임 & 턴 상점 -->
             <div id="tab-clicker" class="tab-pane">
               <div class="clicker-container">
                 
@@ -1958,7 +2273,7 @@ function startWebServer(client) {
               </div>
             </div>
 
-            <!-- 탭 4: 웹 카지노 & 도박 (스팸 방지 락 + 올인 검증) -->
+            <!-- 탭 5: 웹 카지노 & 도박 -->
             <div id="tab-casino" class="tab-pane">
               <div class="casino-hub-grid">
                 
@@ -2062,7 +2377,7 @@ function startWebServer(client) {
               </div>
             </div>
 
-            <!-- 탭 5: 순위표 -->
+            <!-- 탭 6: 순위표 -->
             <div id="tab-ranking" class="tab-pane">
               <h2 class="section-title">🏆 실시간 자산가 랭킹 TOP 10</h2>
               <div class="leaderboard-card">
@@ -2195,7 +2510,7 @@ function startWebServer(client) {
             </div>
           </div>
 
-          <!-- 웹 인터랙티브 스크립트 -->
+          <!-- 웹 인터랙티브 & 실시간 라이브 스트림 스크립트 -->
           <script>
             let selectedCoin = '앞면';
             let currentTrade = { stockId: '', name: '', price: 0, action: 'buy' };
@@ -2204,9 +2519,32 @@ function startWebServer(client) {
             let clickCountBuffer = 0;
             let clickFlushTimer = null;
             let currentNewsCategory = 'ALL';
-
-            // 🛑 게임 진행 중 중복 실행/스팸 방지 락 변수
+            let currentFeedType = 'ALL';
+            let feedItemsCache = [];
             let isGameInProgress = false;
+
+            // 🌟 사용자 친화적 플로팅 토스트 알림 함수
+            function showToast(type, title, message) {
+              const container = document.getElementById('toast-container');
+              const toast = document.createElement('div');
+              toast.className = 'toast';
+              const icon = type === 'success' ? '✅' : (type === 'error' ? '❌' : (type === 'warn' ? '⚠️' : 'ℹ️'));
+              const borderCol = type === 'success' ? '#10b981' : (type === 'error' ? '#ef4444' : (type === 'warn' ? '#f59e0b' : '#6366f1'));
+              toast.style.borderColor = borderCol;
+
+              toast.innerHTML = 
+                '<span class="toast-icon">' + icon + '</span>' +
+                '<div>' +
+                  '<div class="toast-title">' + title + '</div>' +
+                  '<div class="toast-msg">' + message + '</div>' +
+                '</div>';
+
+              container.appendChild(toast);
+              setTimeout(() => {
+                toast.classList.add('toast-hide');
+                setTimeout(() => toast.remove(), 300);
+              }, 3200);
+            }
 
             function getCurrentUserCashNum() {
               const text = document.getElementById('my-cash')?.innerText || '0';
@@ -2239,7 +2577,79 @@ function startWebServer(client) {
                 if (targetBtn) targetBtn.classList.add('active');
               }
               document.getElementById(tabId).classList.add('active');
+
+              if (tabId === 'tab-feed') {
+                fetchLiveActivityFeed();
+              }
             }
+
+            // ⚡ 실시간 모든 로그 (라이브 피드) 비동기 호출 & 렌더링
+            async function fetchLiveActivityFeed() {
+              try {
+                const res = await fetch('/api/system/activity-feed?type=' + currentFeedType + '&limit=50');
+                const data = await res.json();
+                if (!data.success) return;
+                feedItemsCache = data.items;
+                renderFeedList(feedItemsCache);
+              } catch (e) {}
+            }
+
+            function setFeedFilter(type) {
+              currentFeedType = type;
+              document.querySelectorAll('.btn-feed-filter').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('onclick')?.includes(type));
+              });
+              fetchLiveActivityFeed();
+            }
+
+            function filterFeedLocally() {
+              const search = (document.getElementById('feed-search-input')?.value || '').toLowerCase().trim();
+              if (!search) {
+                renderFeedList(feedItemsCache);
+                return;
+              }
+              const filtered = feedItemsCache.filter(item => 
+                item.title.toLowerCase().includes(search) || 
+                item.desc.toLowerCase().includes(search) || 
+                item.actor.toLowerCase().includes(search)
+              );
+              renderFeedList(filtered);
+            }
+
+            function renderFeedList(items) {
+              const container = document.getElementById('feed-stream-container');
+              if (!items || items.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 40px;">기록된 실시간 로그가 없습니다.</div>';
+                return;
+              }
+
+              let html = '';
+              items.forEach(item => {
+                const timeStr = new Date(item.time).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                html += 
+                  '<div class="feed-card">' +
+                    '<div class="feed-card-left">' +
+                      '<span class="feed-badge ' + item.badgeClass + '">' + item.badge + '</span>' +
+                      '<div class="feed-info-col">' +
+                        '<h4>' + item.title + '</h4>' +
+                        '<p>' + item.desc + '</p>' +
+                      '</div>' +
+                    '</div>' +
+                    '<div class="feed-time-col">' +
+                      '<span class="feed-time-text">⏱️ ' + timeStr + '</span>' +
+                      '<span class="feed-actor-tag">' + item.actor + '</span>' +
+                    '</div>' +
+                  '</div>';
+              });
+              container.innerHTML = html;
+            }
+
+            // 3초 주기 라이브 피드 자동 새로고침
+            setInterval(() => {
+              if (document.getElementById('tab-feed').classList.contains('active')) {
+                fetchLiveActivityFeed();
+              }
+            }, 3000);
 
             function selectCoinChoice(choice) {
               if (isGameInProgress) return;
@@ -2248,7 +2658,6 @@ function startWebServer(client) {
               document.getElementById('choice-back').classList.toggle('selected', choice === '뒷면');
             }
 
-            // 올인 버튼 정확한 처리
             function setSlotBet(val) {
               if (isGameInProgress) return;
               if (val === 'all') {
@@ -2279,7 +2688,6 @@ function startWebServer(client) {
               }
             }
 
-            // 📰 뉴스 카테고리 필터 및 검색
             function selectNewsCategory(cat) {
               currentNewsCategory = cat;
               document.querySelectorAll('.btn-filter').forEach(btn => {
@@ -2344,7 +2752,7 @@ function startWebServer(client) {
                   updateUserCashDisplay(data.newCash);
                   updateUserTurnsDisplay(data.turns, data.maxTurns);
                   if (data.bonusTurns > 0) {
-                    document.getElementById('click-feedback-msg').innerHTML = '<span style="color:#fbbf24;">⚡ 대박! 채굴 중 도박 턴 +' + data.bonusTurns + '개 발견!</span>';
+                    showToast('warn', '⚡ 도박 턴 드랍!', '광석 채굴 중 도박 턴 +' + data.bonusTurns + '개를 획득했습니다!');
                   }
                 }
               } catch (e) {}
@@ -2358,24 +2766,26 @@ function startWebServer(client) {
                   body: JSON.stringify({ type })
                 });
                 const data = await res.json();
-                alert(data.message || data.error);
-                if (data.success) {
-                  updateUserCashDisplay(data.newCash);
-                  if (data.clickerLevel) {
-                    document.getElementById('clicker-power-val').innerText = '+' + (data.clickerLevel * 100).toLocaleString() + '원';
-                    document.getElementById('shop-power-lv').innerText = data.clickerLevel;
-                    document.getElementById('shop-power-cost').innerText = (data.clickerLevel * 10000).toLocaleString() + '원';
-                  }
-                  if (data.autoLevel) {
-                    document.getElementById('clicker-auto-val').innerText = '+' + (data.autoLevel * 300).toLocaleString() + '원/s';
-                    document.getElementById('shop-auto-lv').innerText = data.autoLevel;
-                    document.getElementById('shop-auto-cost').innerText = ((data.autoLevel + 1) * 30000).toLocaleString() + '원';
-                  }
-                  if (data.turns) {
-                    updateUserTurnsDisplay(data.turns, 50);
-                  }
+                if (!data.success) {
+                  showToast('error', '업그레이드 실패', data.error);
+                  return;
                 }
-              } catch (e) { alert('업그레이드 실패'); }
+                showToast('success', '업그레이드 완료', data.message);
+                updateUserCashDisplay(data.newCash);
+                if (data.clickerLevel) {
+                  document.getElementById('clicker-power-val').innerText = '+' + (data.clickerLevel * 100).toLocaleString() + '원';
+                  document.getElementById('shop-power-lv').innerText = data.clickerLevel;
+                  document.getElementById('shop-power-cost').innerText = (data.clickerLevel * 10000).toLocaleString() + '원';
+                }
+                if (data.autoLevel) {
+                  document.getElementById('clicker-auto-val').innerText = '+' + (data.autoLevel * 300).toLocaleString() + '원/s';
+                  document.getElementById('shop-auto-lv').innerText = data.autoLevel;
+                  document.getElementById('shop-auto-cost').innerText = ((data.autoLevel + 1) * 30000).toLocaleString() + '원';
+                }
+                if (data.turns) {
+                  updateUserTurnsDisplay(data.turns, 50);
+                }
+              } catch (e) { showToast('error', '통신 오류', '서버와 연결할 수 없습니다.'); }
             }
 
             // 2. 종목 상세 차트 모달 열기
@@ -2387,7 +2797,7 @@ function startWebServer(client) {
                 const res = await fetch('/api/stock/' + stockId);
                 const data = await res.json();
                 if (!data.success) {
-                  alert(data.error || '종목 정보를 불러올 수 없습니다.');
+                  showToast('error', '조회 실패', data.error || '종목 정보를 불러올 수 없습니다.');
                   closeDetailModal();
                   return;
                 }
@@ -2417,7 +2827,7 @@ function startWebServer(client) {
                 renderDetailChart(data.history.map(h => h.price), isUp);
 
               } catch (e) {
-                alert('종목 정보 로딩 실패');
+                showToast('error', '로딩 실패', '종목 정보 통신에 실패했습니다.');
                 closeDetailModal();
               }
             }
@@ -2472,7 +2882,7 @@ function startWebServer(client) {
                 '</svg>';
             }
 
-            // 3. 🎰 슬롯머신 실행 (끝나기 전 재실행 완전 차단)
+            // 3. 🎰 슬롯머신 실행
             async function playSlotMachine() {
               if (isGameInProgress) return;
               setGameLock(true);
@@ -2509,6 +2919,7 @@ function startWebServer(client) {
                   if (!data.success) {
                     resultBox.innerText = '❌ ' + (data.error || '오류 발생');
                     resultBox.style.color = '#ef4444';
+                    showToast('error', '슬롯 오류', data.error);
                     return;
                   }
 
@@ -2520,6 +2931,7 @@ function startWebServer(client) {
                   resultBox.style.color = data.isWin ? '#34d399' : '#f87171';
                   updateUserCashDisplay(data.newCash);
                   updateUserTurnsDisplay(data.turns, data.maxTurns);
+                  showToast(data.isWin ? 'success' : 'info', '🎰 슬롯머신 결과', data.message);
                 }, 1000);
               } catch (e) {
                 setGameLock(false);
@@ -2528,10 +2940,11 @@ function startWebServer(client) {
                 reel2.classList.remove('spinning');
                 reel3.classList.remove('spinning');
                 resultBox.innerText = '서버 통신 실패';
+                showToast('error', '통신 오류', '서버와 연결할 수 없습니다.');
               }
             }
 
-            // 4. 🪙 동전 던지기 실행 (끝나기 전 재실행 완전 차단)
+            // 4. 🪙 동전 던지기 실행
             async function playCoinFlip() {
               if (isGameInProgress) return;
               setGameLock(true);
@@ -2561,6 +2974,7 @@ function startWebServer(client) {
                   if (!data.success) {
                     resultBox.innerText = '❌ ' + (data.error || '오류 발생');
                     resultBox.style.color = '#ef4444';
+                    showToast('error', '동전 던지기 오류', data.error);
                     return;
                   }
 
@@ -2569,16 +2983,18 @@ function startWebServer(client) {
                   resultBox.style.color = data.isWin ? '#34d399' : '#f87171';
                   updateUserCashDisplay(data.newCash);
                   updateUserTurnsDisplay(data.turns, data.maxTurns);
+                  showToast(data.isWin ? 'success' : 'info', '🪙 동전 결과', data.message);
                 }, 900);
               } catch (e) {
                 setGameLock(false);
                 btn.innerText = '🪙 동전 던지기';
                 coin.classList.remove('flipping');
                 resultBox.innerText = '서버 통신 실패';
+                showToast('error', '통신 오류', '서버와 연결할 수 없습니다.');
               }
             }
 
-            // 5. 🎲 주사위 대결 (끝나기 전 재실행 완전 차단)
+            // 5. 🎲 주사위 대결
             async function playDice() {
               if (isGameInProgress) return;
               setGameLock(true);
@@ -2609,6 +3025,7 @@ function startWebServer(client) {
                   if (!data.success) {
                     resultBox.innerText = '❌ ' + (data.error || '오류 발생');
                     resultBox.style.color = '#ef4444';
+                    showToast('error', '주사위 오류', data.error);
                     return;
                   }
 
@@ -2618,11 +3035,13 @@ function startWebServer(client) {
                   resultBox.style.color = data.isWin ? '#34d399' : (data.isTie ? '#fbbf24' : '#f87171');
                   updateUserCashDisplay(data.newCash);
                   updateUserTurnsDisplay(data.turns, data.maxTurns);
+                  showToast(data.isWin ? 'success' : (data.isTie ? 'warn' : 'info'), '🎲 주사위 결과', data.message);
                 }, 800);
               } catch (e) {
                 setGameLock(false);
                 btn.innerText = '🎲 주사위 굴리기';
                 resultBox.innerText = '서버 통신 실패';
+                showToast('error', '통신 오류', '서버와 연결할 수 없습니다.');
               }
             }
 
@@ -2631,24 +3050,28 @@ function startWebServer(client) {
               try {
                 const res = await fetch('/api/economy/daily', { method: 'POST' });
                 const data = await res.json();
-                alert(data.message || data.error);
-                if (data.success) {
-                  updateUserCashDisplay(data.newCash);
-                  if (data.turns) updateUserTurnsDisplay(data.turns, 50);
+                if (!data.success) {
+                  showToast('error', '출석체크 안내', data.error);
+                  return;
                 }
-              } catch (e) { alert('출석체크 실패'); }
+                showToast('success', '🎁 출석 보상 완료', data.message);
+                updateUserCashDisplay(data.newCash);
+                if (data.turns) updateUserTurnsDisplay(data.turns, 50);
+              } catch (e) { showToast('error', '통신 오류', '출석체크 서버 연결 실패'); }
             }
 
             async function claimSubsidyReward() {
               try {
                 const res = await fetch('/api/economy/subsidy', { method: 'POST' });
                 const data = await res.json();
-                alert(data.message || data.error);
-                if (data.success) {
-                  updateUserCashDisplay(data.newCash);
-                  if (data.turns) updateUserTurnsDisplay(data.turns, 50);
+                if (!data.success) {
+                  showToast('error', '지원금 신청 불가', data.error);
+                  return;
                 }
-              } catch (e) { alert('지원금 신청 실패'); }
+                showToast('success', '🏛️ 기본소득 지급 완료', data.message);
+                updateUserCashDisplay(data.newCash);
+                if (data.turns) updateUserTurnsDisplay(data.turns, 50);
+              } catch (e) { showToast('error', '통신 오류', '지원금 신청 서버 연결 실패'); }
             }
 
             // 7. 주식 거래 모달
@@ -2692,16 +3115,16 @@ function startWebServer(client) {
                 const data = await res.json();
                 btn.disabled = false;
                 if (!data.success) {
-                  alert('❌ 거래 실패: ' + data.error);
+                  showToast('error', '거래 체결 실패', data.error);
                   return;
                 }
-                alert(data.message);
+                showToast('success', '주식 체결 완료', data.message);
                 closeTradeModal();
                 updateUserCashDisplay(data.newCash);
-                setTimeout(() => location.reload(), 800);
+                setTimeout(() => location.reload(), 1000);
               } catch (e) {
                 btn.disabled = false;
-                alert('거래 통신 실패');
+                showToast('error', '통신 오류', '거래 처리 실패');
               }
             }
 
@@ -2727,15 +3150,15 @@ function startWebServer(client) {
                 });
                 const data = await res.json();
                 if (!data.success) {
-                  alert('❌ 은행 오류: ' + data.error);
+                  showToast('error', '은행 업무 실패', data.error);
                   return;
                 }
-                alert(data.message);
+                showToast('success', '은행 업무 완료', data.message);
                 closeBankModal();
                 updateUserCashDisplay(data.cash);
                 const bankElem = document.getElementById('my-bank');
                 if (bankElem) bankElem.innerText = Number(data.bank).toLocaleString() + '원';
-              } catch (e) { alert('은행 통신 실패'); }
+              } catch (e) { showToast('error', '통신 오류', '은행 서버 연결 실패'); }
             }
 
             function updateUserCashDisplay(cashVal) {
@@ -2763,7 +3186,7 @@ function startWebServer(client) {
     }
   });
 
-  // 👑 관리자 전용 대시보드 페이지 (/admin) - 실시간 도박 롤백 & 복구 기능 탑재
+  // 👑 관리자 전용 대시보드 페이지 (/admin)
   app.get('/admin', async (req, res) => {
     const currentUser = getSessionUser(req);
     if (!currentUser || !config.isAdmin(currentUser.id)) {
@@ -2792,6 +3215,8 @@ function startWebServer(client) {
     }
 
     try {
+      const [priceLogs] = await pool.query('SELECT * FROM stock_price_logs ORDER BY id DESC LIMIT 50');
+      const [tradeLogs] = await pool.query('SELECT * FROM stock_transactions ORDER BY id DESC LIMIT 50');
       const [webLogs] = await pool.query('SELECT * FROM web_access_logs ORDER BY id DESC LIMIT 50');
       const [cmdLogs] = await pool.query('SELECT * FROM command_logs ORDER BY id DESC LIMIT 50');
       const [gambleLogs] = await pool.query(`
@@ -2802,6 +3227,42 @@ function startWebServer(client) {
       `);
       const [userCountRow] = await pool.query('SELECT COUNT(*) as count FROM users');
       const totalUsers = userCountRow[0]?.count || 0;
+
+      let priceRowsHtml = '';
+      for (const p of priceLogs) {
+        const isUp = Number(p.diff) >= 0;
+        const color = isUp ? '#34d399' : '#f87171';
+        priceRowsHtml += `
+          <tr>
+            <td>#${p.id}</td>
+            <td>${p.created_at ? new Date(p.created_at).toISOString().replace('T', ' ').slice(0, 19) : '-'}</td>
+            <td><b>[${p.stock_id}] ${p.stock_name}</b></td>
+            <td>${formatMoney(p.prev_price)}</td>
+            <td style="color:${color}; font-weight:700;"><b>${formatMoney(p.new_price)}</b></td>
+            <td style="color:${color}; font-weight:700;">${isUp ? '▲ +' : '▼ '}${p.change_rate}%</td>
+            <td>${p.regime}</td>
+            <td>${p.reason || '-'}</td>
+          </tr>
+        `;
+      }
+
+      let tradeRowsHtml = '';
+      for (const t of tradeLogs) {
+        const isBuy = t.action === 'BUY';
+        const color = isBuy ? '#38bdf8' : '#fb923c';
+        tradeRowsHtml += `
+          <tr>
+            <td>#${t.id}</td>
+            <td>${t.created_at ? new Date(t.created_at).toISOString().replace('T', ' ').slice(0, 19) : '-'}</td>
+            <td><b>@${t.username}</b> (<code>${t.user_id}</code>)</td>
+            <td><b>${t.stock_name}</b> [${t.stock_id}]</td>
+            <td><span style="background:${isBuy ? 'rgba(56,189,248,0.2)' : 'rgba(251,146,60,0.2)'}; color:${color}; padding:2px 6px; border-radius:4px; font-weight:700;">${isBuy ? '🛒 매수' : '💰 매도'}</span></td>
+            <td>${formatNumber(t.amount)}주</td>
+            <td>${formatMoney(t.price)}</td>
+            <td style="color:${color}; font-weight:700;">${formatMoney(t.total_price)}</td>
+          </tr>
+        `;
+      }
 
       let gambleRowsHtml = '';
       for (const g of gambleLogs) {
@@ -2902,7 +3363,7 @@ function startWebServer(client) {
         <body>
           <div class="header">
             <div>
-              <h1>👑 관리자 실시간 시스템 & 자산 롤백 복구 센터</h1>
+              <h1>👑 관리자 실시간 관제 & 모든 로그 모니터링 센터</h1>
               <p style="color: #9ca3af; font-size: 0.9rem; margin-top: 4px;">총 가입자: ${totalUsers}명 | 관리자 권한: 활성화</p>
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
@@ -2912,10 +3373,54 @@ function startWebServer(client) {
           </div>
 
           <div class="api-links">
-            <a href="/api/admin/logs/gambling" target="_blank" class="btn-json">🎰 도박 이력 & 롤백 JSON API</a>
-            <a href="/api/admin/logs/access" target="_blank" class="btn-json">📥 웹 접속 JSON 로그 API</a>
-            <a href="/api/admin/logs/commands" target="_blank" class="btn-json">📥 디스코드 명령어 JSON 로그 API</a>
-            <a href="/api/market" target="_blank" class="btn-json">📊 주식 시세 JSON API</a>
+            <a href="/api/system/activity-feed" target="_blank" class="btn-json">⚡ 실시간 모든 시스템 로그 JSON</a>
+            <a href="/api/admin/logs/gambling" target="_blank" class="btn-json">🎰 도박 이력 & 롤백 JSON</a>
+            <a href="/api/admin/logs/access" target="_blank" class="btn-json">📥 웹 접속 JSON 로그</a>
+            <a href="/api/admin/logs/commands" target="_blank" class="btn-json">🤖 디스코드 명령어 JSON 로그</a>
+          </div>
+
+          <!-- 실시간 주가 변동 틱 로그 테이블 -->
+          <div class="card">
+            <h2>📈 실시간 주가 변동 틱 로그 (최근 50건)</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>번호</th>
+                  <th>시간</th>
+                  <th>종목명</th>
+                  <th>이전가</th>
+                  <th>변동가</th>
+                  <th>등락률</th>
+                  <th>시장장세</th>
+                  <th>변동 사유</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${priceRowsHtml || '<tr><td colspan="8" style="text-align: center; color: #6b7280;">주가 변동 기록이 없습니다.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 주식 매매 체결 로그 테이블 -->
+          <div class="card">
+            <h2>🛒 실시간 주식 매수/매도 체결 로그 (최근 50건)</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>번호</th>
+                  <th>시간</th>
+                  <th>체결 유저</th>
+                  <th>종목</th>
+                  <th>거래 유형</th>
+                  <th>체결 수량</th>
+                  <th>체결 단가</th>
+                  <th>총 거래액</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tradeRowsHtml || '<tr><td colspan="8" style="text-align: center; color: #6b7280;">주식 매매 체결 기록이 없습니다.</td></tr>'}
+              </tbody>
+            </table>
           </div>
 
           <!-- 도박 상세 기록 & 원클릭 잔고 롤백 센터 -->
@@ -3050,13 +3555,11 @@ function startWebServer(client) {
     }
   });
 
-  // 로그아웃
   app.get('/auth/logout', (req, res) => {
     res.clearCookie('discord_user');
     res.redirect('/');
   });
 
-  // OAuth 미설정 가이드 페이지
   app.get('/auth/guide', (req, res) => {
     const redirectUri = getDynamicRedirectUri(req);
     res.send(`

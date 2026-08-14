@@ -242,6 +242,21 @@ async function updateStockPrices() {
         INSERT INTO stock_history (stock_id, price)
         VALUES (?, ?)
       `, [stockId, newPrice.toString()]);
+
+      // 실시간 주가 변동 틱 상세 로그 영구 기록
+      const diff = newPrice - currentPrice;
+      const changeRate = currentPrice > 0n ? ((Number(diff) / Number(currentPrice)) * 100).toFixed(2) : '0.00';
+      const reasonStr = lastNews ? `[${lastNews.title}]` : `${currentRegime.name} 시황 변동`;
+
+      try {
+        await connection.query(`
+          INSERT INTO stock_price_logs (stock_id, stock_name, prev_price, new_price, change_rate, diff, regime, reason)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          stockId, stock.name, currentPrice.toString(), newPrice.toString(),
+          changeRate, diff.toString(), currentRegime.name, reasonStr
+        ]);
+      } catch (logErr) {}
     }
 
     await connection.commit();

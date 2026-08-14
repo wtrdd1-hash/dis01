@@ -233,6 +233,61 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
+    // 실시간 주가 변동 틱 로그 테이블
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS stock_price_logs (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        stock_id VARCHAR(16) NOT NULL,
+        stock_name VARCHAR(64) NOT NULL,
+        prev_price BIGINT NOT NULL,
+        new_price BIGINT NOT NULL,
+        change_rate DECIMAL(6,2) NOT NULL,
+        diff BIGINT NOT NULL,
+        regime VARCHAR(64) NOT NULL,
+        reason VARCHAR(255) NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_stock_id (stock_id),
+        INDEX idx_created_at (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // 주식 매수/매도 실시간 체결 로그 테이블
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS stock_transactions (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id VARCHAR(32) NOT NULL,
+        username VARCHAR(100) NOT NULL,
+        stock_id VARCHAR(16) NOT NULL,
+        stock_name VARCHAR(64) NOT NULL,
+        action VARCHAR(16) NOT NULL,
+        amount BIGINT NOT NULL,
+        price BIGINT NOT NULL,
+        total_price BIGINT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_stock_id (stock_id),
+        INDEX idx_created_at (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // 출석체크, 지원금, 은행 이체 등 경제 이벤트 로그 테이블
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS economy_logs (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id VARCHAR(32) NOT NULL,
+        username VARCHAR(100) NOT NULL,
+        type VARCHAR(32) NOT NULL,
+        amount BIGINT NOT NULL,
+        balance_before BIGINT NOT NULL DEFAULT 0,
+        balance_after BIGINT NOT NULL DEFAULT 0,
+        description VARCHAR(255) NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_type (type),
+        INDEX idx_created_at (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
     // 웹 접속 및 관리자 접속 상세 로그 테이블 (IP, 국가, @유저명, JSON 데이터)
     await connection.query(`
       CREATE TABLE IF NOT EXISTS web_access_logs (
