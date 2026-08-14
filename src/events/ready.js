@@ -46,10 +46,10 @@ module.exports = {
       logError('Ready', '슬래시 명령어 등록 실패', error);
     }
 
-    // 백그라운드 주가 실시간 변동 엔진 (2분마다 실행)
+    // 백그라운드 주가 실시간 변동 엔진 (3분마다 실행)
     setInterval(() => {
       updateStockPrices();
-    }, 2 * 60 * 1000);
+    }, 3 * 60 * 1000);
 
     // 24시간마다 DB 오래된 로그 자동 최적화 정리
     setInterval(() => {

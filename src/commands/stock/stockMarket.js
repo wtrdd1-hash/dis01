@@ -21,7 +21,7 @@ module.exports = {
       headerStr += `📰 **시장 주요 속보:** ${news.text}\n\n`;
     }
 
-    let description = headerStr + '📊 **실시간 종목 시세 목록** (2분마다 변동)\n\n';
+    let description = headerStr + '📊 **실시간 종목 시세 목록** (3분마다 변동)\n\n';
 
     for (const s of stocks) {
       const price = BigInt(s.price);

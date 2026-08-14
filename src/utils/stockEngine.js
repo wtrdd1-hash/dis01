@@ -260,7 +260,7 @@ async function updateStockPrices() {
   }
 }
 
-function startStockEngine(intervalMs = 60000) {
+function startStockEngine(intervalMs = 180000) {
   console.log(`🚀 [월덕 가상 경제 엔진] 가동 시작 (갱신 주기: ${intervalMs / 1000}초)`);
   setTimeout(() => {
     updateStockPrices();

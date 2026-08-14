@@ -827,6 +827,23 @@ function startWebServer(client) {
       const [historyRows] = await pool.query('SELECT price, recorded_at FROM stock_history WHERE stock_id = ? ORDER BY id DESC LIMIT 50', [stockId]);
       const history = historyRows.reverse().map(h => ({ price: Number(h.price), time: h.recorded_at }));
 
+      let userHolding = 0;
+      let userAvgPrice = 0;
+      let userCash = '0';
+      const session = getSessionUser(req);
+      if (session) {
+        const [userStock] = await pool.query('SELECT amount, total_spent FROM user_stocks WHERE user_id = ? AND stock_id = ?', [session.id, stockId]);
+        if (userStock.length > 0) {
+          userHolding = parseInt(userStock[0].amount, 10) || 0;
+          const totalSpent = BigInt(userStock[0].total_spent || 0);
+          userAvgPrice = userHolding > 0 ? Number(totalSpent / BigInt(userHolding)) : 0;
+        }
+        const [userDataRows] = await pool.query('SELECT cash FROM users WHERE discord_id = ?', [session.id]);
+        if (userDataRows.length > 0) {
+          userCash = (userDataRows[0].cash || 0).toString();
+        }
+      }
+
       res.json({
         success: true,
         stock: {
@@ -842,7 +859,10 @@ function startWebServer(client) {
           market_cap: Number(stock.market_cap || 0),
           pe_ratio: Number(stock.pe_ratio || 15),
           dividend_yield: Number(stock.dividend_yield || 0),
-          volatility: Number(stock.volatility)
+          volatility: Number(stock.volatility),
+          userHolding,
+          userAvgPrice,
+          userCash
         },
         history
       });
@@ -1861,6 +1881,18 @@ function startWebServer(client) {
             }
             .trends-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
             .trends-title { font-family: 'Outfit', sans-serif; font-size: 1.3rem; font-weight: 700; color: #e0e7ff; display: flex; align-items: center; gap: 8px; }
+            .next-tick-badge {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              background: rgba(245, 158, 11, 0.15);
+              border: 1px solid rgba(245, 158, 11, 0.35);
+              padding: 6px 14px;
+              border-radius: 20px;
+              font-size: 0.85rem;
+              font-weight: 700;
+              color: #fbbf24;
+            }
             .market-sentiment-pill { display: flex; align-items: center; gap: 12px; background: rgba(255, 255, 255, 0.05); padding: 6px 16px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; border: 1px solid var(--card-border); }
             .gainers-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
             .gainer-card {
@@ -2060,10 +2092,16 @@ function startWebServer(client) {
                     <span class="pulse-dot"></span>
                     🔥 실시간 시장 상승세 & 급등 종목 랭킹
                   </div>
-                  <div class="market-sentiment-pill">
-                    <span>상승 🟢 <b>${upCount}개</b></span>
-                    <span>하락 🔴 <b>${downCount}개</b></span>
-                    <span class="${isMarketPositive ? 'text-up' : 'text-down'}">평균 ${isMarketPositive ? '+' : ''}${avgRate}%</span>
+                  <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <div class="next-tick-badge">
+                      <span class="pulse-dot"></span>
+                      ⏱️ 주가 변동 갱신: <b id="price-tick-countdown" style="color: #fbbf24; font-family: 'Outfit', sans-serif;">03:00</b>
+                    </div>
+                    <div class="market-sentiment-pill">
+                      <span>상승 🟢 <b>${upCount}개</b></span>
+                      <span>하락 🔴 <b>${downCount}개</b></span>
+                      <span class="${isMarketPositive ? 'text-up' : 'text-down'}">평균 ${isMarketPositive ? '+' : ''}${avgRate}%</span>
+                    </div>
                   </div>
                 </div>
                 <div class="gainers-grid">
@@ -2345,14 +2383,14 @@ function startWebServer(client) {
                 </div>
               </div>
 
-              <div class="chart-stat-grid">
+              <div class="chart-stat-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));">
                 <div class="stat-tile">
                   <span class="stat-lbl">24H 최고가</span>
-                  <span class="stat-val" id="detail-high">0원</span>
+                  <span class="stat-val text-up" id="detail-high">0원</span>
                 </div>
                 <div class="stat-tile">
                   <span class="stat-lbl">24H 최저가</span>
-                  <span class="stat-val" id="detail-low">0원</span>
+                  <span class="stat-val text-down" id="detail-low">0원</span>
                 </div>
                 <div class="stat-tile">
                   <span class="stat-lbl">추정 시가총액</span>
@@ -2362,16 +2400,24 @@ function startWebServer(client) {
                   <span class="stat-lbl">PER / 배당수익률</span>
                   <span class="stat-val" id="detail-pe-div">15.0x / 2.5%</span>
                 </div>
+                <div class="stat-tile">
+                  <span class="stat-lbl">내 보유 수량</span>
+                  <span class="stat-val" id="detail-my-holding" style="color: #38bdf8;">0주</span>
+                </div>
+                <div class="stat-tile">
+                  <span class="stat-lbl">매수 평단가</span>
+                  <span class="stat-val" id="detail-my-avg" style="color: #c084fc;">0원</span>
+                </div>
               </div>
 
               <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); padding: 14px; border-radius: 12px; margin-bottom: 18px;">
-                <span style="font-size: 0.8rem; font-weight: 700; color: #a5b4fc; display: block; margin-bottom: 4px;">🏢 기업 개요 및 기술 분석</span>
+                <span style="font-size: 0.8rem; font-weight: 700; color: #a5b4fc; display: block; margin-bottom: 4px;">🏢 기업 개요 및 성장 비전</span>
                 <p id="detail-description" style="font-size: 0.85rem; color: #cbd5e1; line-height: 1.5;">기업 설명 로딩 중...</p>
               </div>
 
-              <div style="display: flex; gap: 8px;">
-                <button class="btn-play-game" style="background: #10b981; flex: 1;" onclick="openTradeFromDetail('buy')">🛒 매수하기</button>
-                <button class="btn-play-game" style="background: #ef4444; flex: 1;" onclick="openTradeFromDetail('sell')">💰 매도하기</button>
+              <div style="display: flex; gap: 10px;">
+                <button class="btn-play-game" style="background: linear-gradient(135deg, #10b981, #059669); flex: 1;" onclick="openTradeFromDetail('buy')">🛒 즉시 매수하기</button>
+                <button class="btn-play-game" style="background: linear-gradient(135deg, #ef4444, #dc2626); flex: 1;" onclick="openTradeFromDetail('sell')">💰 즉시 매도하기</button>
               </div>
             </div>
           </div>
@@ -2383,11 +2429,27 @@ function startWebServer(client) {
                 <span id="modal-trade-title">주식 주문</span>
                 <button class="btn-close-modal" onclick="closeTradeModal()">&times;</button>
               </div>
-              <p style="color: #9ca3af; font-size: 0.9rem; margin-bottom: 16px;" id="modal-stock-info">종목 정보</p>
+              <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); padding: 12px; border-radius: 12px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #9ca3af; margin-bottom: 4px;">
+                  <span id="modal-stock-info">종목 정보</span>
+                  <span id="modal-user-holding-info" style="color: #38bdf8; font-weight: 700;">내 보유: 0주</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #9ca3af;">
+                  <span>보유 현금</span>
+                  <span id="modal-user-cash-info" style="color: #34d399; font-weight: 700;">0원</span>
+                </div>
+              </div>
               
               <div class="bet-input-group">
                 <label>주문 수량 (주)</label>
                 <input type="number" id="trade-amount-input" class="bet-input" value="1" min="1" oninput="calcTradeTotal()">
+                <div class="btn-chip-grid" style="margin-top: 8px;">
+                  <button class="btn-chip" onclick="addTradeAmount(1)">+1주</button>
+                  <button class="btn-chip" onclick="addTradeAmount(5)">+5주</button>
+                  <button class="btn-chip" onclick="addTradeAmount(10)">+10주</button>
+                  <button class="btn-chip" onclick="addTradeAmount(50)">+50주</button>
+                  <button class="btn-chip" style="background: rgba(99, 102, 241, 0.25); border-color: #818cf8; color: #fff;" onclick="setTradeMax()">🔥 최대(MAX)</button>
+                </div>
               </div>
 
               <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); padding: 14px; border-radius: 12px; margin-bottom: 20px;">
@@ -2405,16 +2467,16 @@ function startWebServer(client) {
             </div>
           </div>
 
-          <!-- 은행 입출금 모달 -->
+          <!-- 덕스 중앙은행 입출금 모달 -->
           <div class="modal-overlay" id="bank-modal">
             <div class="modal-box">
               <div class="modal-title">
-                <span>🏦 은행 입금 / 출금</span>
+                <span>🏦 덕스 중앙은행 입출금 센터</span>
                 <button class="btn-close-modal" onclick="closeBankModal()">&times;</button>
               </div>
               <div class="choice-btn-group">
-                <button class="btn-choice selected" id="bank-act-deposit" onclick="selectBankAction('deposit')">💵 입금 (현금 ➔ 은행)</button>
-                <button class="btn-choice" id="bank-act-withdraw" onclick="selectBankAction('withdraw')">🏧 출금 (은행 ➔ 현금)</button>
+                <button class="btn-choice selected" id="bank-act-deposit" onclick="selectBankAction('deposit')">💵 입금 (현금 ➔ 예금)</button>
+                <button class="btn-choice" id="bank-act-withdraw" onclick="selectBankAction('withdraw')">🏧 출금 (예금 ➔ 현금)</button>
               </div>
 
               <div class="bet-input-group">
@@ -2424,11 +2486,12 @@ function startWebServer(client) {
                   <button class="btn-chip" onclick="document.getElementById('bank-amount-input').value = 10000">1만원</button>
                   <button class="btn-chip" onclick="document.getElementById('bank-amount-input').value = 50000">5만원</button>
                   <button class="btn-chip" onclick="document.getElementById('bank-amount-input').value = 100000">10만원</button>
-                  <button class="btn-chip" onclick="document.getElementById('bank-amount-input').value = 'all'">전액</button>
+                  <button class="btn-chip" onclick="document.getElementById('bank-amount-input').value = 500000">50만원</button>
+                  <button class="btn-chip" style="background: rgba(99, 102, 241, 0.25); border-color: #818cf8; color: #fff;" onclick="document.getElementById('bank-amount-input').value = 'all'">🔥 전액(ALL)</button>
                 </div>
               </div>
 
-              <button class="btn-play-game" onclick="submitBankTransfer()">이체 완료</button>
+              <button class="btn-play-game" onclick="submitBankTransfer()">이체 실행</button>
             </div>
           </div>
 
@@ -2741,6 +2804,12 @@ function startWebServer(client) {
                 document.getElementById('detail-low').innerText = s.low_24h.toLocaleString() + '원';
                 document.getElementById('detail-cap').innerText = formatCap(s.market_cap);
                 document.getElementById('detail-pe-div').innerText = s.pe_ratio + '배 / ' + s.dividend_yield + '%';
+                
+                const holdingElem = document.getElementById('detail-my-holding');
+                if (holdingElem) holdingElem.innerText = (s.userHolding || 0) + '주';
+                const avgElem = document.getElementById('detail-my-avg');
+                if (avgElem) avgElem.innerText = (s.userAvgPrice ? Number(s.userAvgPrice).toLocaleString() : '0') + '원';
+
                 document.getElementById('detail-description').innerText = s.description;
 
                 renderDetailChart(data.history.map(h => h.price), isUp);
@@ -2988,16 +3057,47 @@ function startWebServer(client) {
               } catch (e) { showToast('error', '통신 오류', '지원금 신청 서버 연결 실패'); }
             }
 
-            // 7. 주식 거래 모달
+            // 7. 주식 거래 모달 & 수량 프리셋
             function openTradeModal(stockId, name, price, action) {
               currentTrade = { stockId, name, price, action };
               document.getElementById('modal-trade-title').innerText = (action === 'buy' ? '🛒 주식 매수: ' : '💰 주식 매도: ') + name;
-              document.getElementById('modal-stock-info').innerText = '종목코드: [' + stockId + '] | 현재가: ' + Number(price).toLocaleString() + '원';
+              document.getElementById('modal-stock-info').innerText = '종목코드: [' + stockId + ']';
               document.getElementById('modal-unit-price').innerText = Number(price).toLocaleString() + '원';
+              
+              const holding = currentDetailStock && currentDetailStock.stock_id === stockId ? (currentDetailStock.userHolding || 0) : 0;
+              const holdingElem = document.getElementById('modal-user-holding-info');
+              if (holdingElem) holdingElem.innerText = '내 보유: ' + holding + '주';
+
+              const cashElem = document.getElementById('modal-user-cash-info');
+              if (cashElem) cashElem.innerText = getCurrentUserCashNum().toLocaleString() + '원';
+
               document.getElementById('trade-amount-input').value = 1;
               calcTradeTotal();
-              document.getElementById('btn-submit-trade').innerText = (action === 'buy' ? '🛒 매수 주문 체결' : '💰 매도 주문 체결');
+              const submitBtn = document.getElementById('btn-submit-trade');
+              submitBtn.innerText = (action === 'buy' ? '🛒 매수 주문 체결' : '💰 매도 주문 체결');
+              submitBtn.style.background = (action === 'buy' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)');
               document.getElementById('trade-modal').style.display = 'flex';
+            }
+
+            function addTradeAmount(qty) {
+              const input = document.getElementById('trade-amount-input');
+              const current = parseInt(input.value, 10) || 0;
+              input.value = Math.max(1, current + qty);
+              calcTradeTotal();
+            }
+
+            function setTradeMax() {
+              const input = document.getElementById('trade-amount-input');
+              if (currentTrade.action === 'buy') {
+                const userCash = getCurrentUserCashNum();
+                const price = Number(currentTrade.price) || 1;
+                const maxCanBuy = Math.floor(userCash / price);
+                input.value = Math.max(1, maxCanBuy);
+              } else {
+                const holding = currentDetailStock?.userHolding || 0;
+                input.value = Math.max(1, holding);
+              }
+              calcTradeTotal();
             }
 
             function closeTradeModal() {
@@ -3008,6 +3108,42 @@ function startWebServer(client) {
               const count = parseInt(document.getElementById('trade-amount-input').value, 10) || 0;
               const total = BigInt(count) * BigInt(currentTrade.price || 0);
               document.getElementById('modal-total-price').innerText = Number(total).toLocaleString() + '원';
+            }
+
+            // ⏱️ 3분 주기 주가 변동 카운트다운 타이머 & 라이브 갱신
+            let stockCountdownSeconds = 180;
+            function updateStockCountdown() {
+              stockCountdownSeconds--;
+              if (stockCountdownSeconds <= 0) {
+                stockCountdownSeconds = 180;
+                refreshStockPricesLive();
+              }
+              const min = Math.floor(stockCountdownSeconds / 60).toString().padStart(2, '0');
+              const sec = (stockCountdownSeconds % 60).toString().padStart(2, '0');
+              const cdElem = document.getElementById('price-tick-countdown');
+              if (cdElem) cdElem.innerText = min + ':' + sec;
+            }
+            setInterval(updateStockCountdown, 1000);
+
+            async function refreshStockPricesLive() {
+              try {
+                const res = await fetch('/api/stocks');
+                const data = await res.json();
+                if (!data.success || !data.stocks) return;
+
+                data.stocks.forEach(s => {
+                  const priceElem = document.getElementById('price-' + s.stock_id);
+                  if (priceElem) {
+                    const oldPrice = parseInt(priceElem.innerText.replace(/[^0-9]/g, ''), 10) || 0;
+                    const newPrice = Number(s.price);
+                    priceElem.innerText = newPrice.toLocaleString() + '원';
+                    if (newPrice !== oldPrice) {
+                      priceElem.style.color = newPrice > oldPrice ? '#34d399' : '#f87171';
+                      setTimeout(() => { priceElem.style.color = '#fff'; }, 1500);
+                    }
+                  }
+                });
+              } catch (e) {}
             }
 
             async function submitTradeOrder() {
