@@ -566,6 +566,107 @@ function startWebServer(client) {
     }
   });
 
+  // 6.5 🎫 럭키세븐 즉석 스크래치 복권 API (도박 로그 기록 & 롤백 지원)
+  app.post('/api/game/lottery', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
+
+    if (activeGameUsers.has(session.id)) {
+      return res.status(429).json({ success: false, error: '이전 복권 추첨이 아직 진행 중입니다. 잠시 후 다시 시도하세요.' });
+    }
+    activeGameUsers.add(session.id);
+
+    try {
+      const { bet = 1000 } = req.body;
+      const userData = await getOrCreateUser(session.id);
+      const userCash = BigInt(userData.cash || 0);
+
+      let betAmount = 0n;
+      if (bet === 'all' || bet === '올인') {
+        betAmount = userCash;
+      } else {
+        betAmount = BigInt(parseInt(bet, 10) || 1000);
+      }
+
+      if (betAmount < 1000n) {
+        return res.status(400).json({ success: false, error: '최소 복권 구매 금액은 1,000원입니다.' });
+      }
+      if (userCash < betAmount) {
+        return res.status(400).json({ success: false, error: `보유 현금이 부족합니다! (필요: ${formatMoney(betAmount)}, 보유: ${formatMoney(userCash)})` });
+      }
+
+      // 복권 심볼 풀: 💎 다이아몬드(100x), 7️⃣ 럭키세븐(20x), 🔔 골든벨(10x), 🍇 포도(5x), 🍋 레몬(3x), 🍒 체리(2x), 💀 꽝
+      const symbols = ['💎', '7️⃣', '🔔', '🍇', '🍋', '🍒', '💀'];
+      const weights = [0.01, 0.04, 0.08, 0.15, 0.22, 0.25, 0.25];
+
+      function pickRandomSymbol() {
+        const r = Math.random();
+        let acc = 0;
+        for (let i = 0; i < symbols.length; i++) {
+          acc += weights[i];
+          if (r <= acc) return symbols[i];
+        }
+        return '💀';
+      }
+
+      const s1 = pickRandomSymbol();
+      const s2 = pickRandomSymbol();
+      const s3 = pickRandomSymbol();
+
+      let multiplier = 0;
+      let winDesc = '';
+
+      if (s1 === '💎' && s2 === '💎' && s3 === '💎') {
+        multiplier = 100.0; winDesc = '💎💎💎 초호화 다이아몬드 잭팟! 100배 대박!';
+      } else if (s1 === '7️⃣' && s2 === '7️⃣' && s3 === '7️⃣') {
+        multiplier = 20.0; winDesc = '7️⃣7️⃣7️⃣ 럭키세븐 잭팟! 20배 당첨!';
+      } else if (s1 === '🔔' && s2 === '🔔' && s3 === '🔔') {
+        multiplier = 10.0; winDesc = '🔔🔔🔔 골든벨 3개 일치! 10배 당첨!';
+      } else if (s1 === '🍇' && s2 === '🍇' && s3 === '🍇') {
+        multiplier = 5.0; winDesc = '🍇🍇🍇 달콤한 포도 3개! 5배 당첨!';
+      } else if (s1 === '🍋' && s2 === '🍋' && s3 === '🍋') {
+        multiplier = 3.0; winDesc = '🍋🍋🍋 상큼한 레몬 3개! 3배 당첨!';
+      } else if ([s1, s2, s3].filter(s => s === '🍒').length >= 2) {
+        multiplier = 2.0; winDesc = '🍒🍒 체리 2개 이상 일치! 2배 당첨!';
+      } else {
+        multiplier = 0; winDesc = '💀 아쉽게도 꽝입니다! 다음 복권에 도전하세요.';
+      }
+
+      const payout = BigInt(Math.floor(Number(betAmount) * multiplier));
+      const profit = payout - betAmount;
+      const balanceBefore = userCash;
+      const balanceAfter = userCash + profit;
+
+      await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [balanceAfter.toString(), session.id]);
+
+      const [insertRes] = await pool.query(`
+        INSERT INTO gambling_logs (user_id, game, bet, payout, profit, balance_before, balance_after, details)
+        VALUES (?, 'WEB_LOTTERY', ?, ?, ?, ?, ?, ?)
+      `, [
+        session.id, betAmount.toString(), payout.toString(), profit.toString(),
+        balanceBefore.toString(), balanceAfter.toString(),
+        JSON.stringify({ symbols: [s1, s2, s3], multiplier, winDesc, isAllIn: (betAmount === userCash) })
+      ]);
+
+      res.json({
+        success: true,
+        logId: insertRes.insertId,
+        symbols: [s1, s2, s3],
+        multiplier,
+        payout: payout.toString(),
+        profit: profit.toString(),
+        newCash: balanceAfter.toString(),
+        balanceBefore: balanceBefore.toString(),
+        isWin: multiplier > 0,
+        message: winDesc
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    } finally {
+      activeGameUsers.delete(session.id);
+    }
+  });
+
   // 7. 🎁 일일 출석체크 API (경제 로그 기록)
   app.post('/api/economy/daily', async (req, res) => {
     const session = getSessionUser(req);
@@ -1200,6 +1301,7 @@ function startWebServer(client) {
       let userAssets = null;
       let isAdminUser = false;
       let userTurnsInfo = { turns: 50, maxTurns: 50 };
+      let portfolioSectionHtml = '';
 
       if (req.cookies && req.cookies.discord_user) {
         try {
@@ -1233,6 +1335,84 @@ function startWebServer(client) {
             autoLevel: userData.auto_miner_level || 0,
             totalClicks: userData.total_clicks || 0
           };
+
+          // 📊 내 보유 주식 포트폴리오 상세 분석
+          const [portfolioRows] = await pool.query(`
+            SELECT us.stock_id, us.amount, us.total_spent, s.name, s.price, s.prev_price, s.sector
+            FROM user_stocks us
+            JOIN stocks s ON us.stock_id = s.stock_id
+            WHERE us.user_id = ? AND us.amount > 0
+            ORDER BY (us.amount * s.price) DESC
+          `, [currentUser.id]);
+
+          let portfolioItemsHtml = '';
+          let totalPortfolioInvested = 0n;
+          let totalPortfolioCurrent = 0n;
+
+          for (const item of portfolioRows) {
+            const amount = BigInt(item.amount);
+            const spent = BigInt(item.total_spent);
+            const currentPrice = BigInt(item.price);
+            const val = amount * currentPrice;
+            const avg = amount > 0n ? spent / amount : 0n;
+            const profit = val - spent;
+            const profitRate = spent > 0n ? ((Number(profit) / Number(spent)) * 100).toFixed(2) : '0.00';
+            const isProfit = profit >= 0n;
+
+            totalPortfolioInvested += spent;
+            totalPortfolioCurrent += val;
+
+            portfolioItemsHtml += `
+              <div class="portfolio-item-card">
+                <div class="portfolio-item-top">
+                  <div>
+                    <span class="stock-symbol">[${item.stock_id}] · ${item.sector || '성장주'}</span>
+                    <h4 class="stock-name" onclick="openDetailModal('${item.stock_id}')" style="cursor: pointer; font-size: 1.05rem; margin-top: 2px;">${item.name}</h4>
+                  </div>
+                  <span class="badge ${isProfit ? 'badge-up' : 'badge-down'}">${isProfit ? '▲ +' : '▼ '}${profitRate}%</span>
+                </div>
+                <div class="portfolio-grid-stats">
+                  <div class="port-stat"><span>보유 수량</span><b>${Number(amount).toLocaleString()}주</b></div>
+                  <div class="port-stat"><span>매수 평단가</span><b>${formatMoney(avg)}</b></div>
+                  <div class="port-stat"><span>현재 평가액</span><b style="color: #38bdf8;">${formatMoney(val)}</b></div>
+                  <div class="port-stat"><span>평가 손익</span><b class="${isProfit ? 'text-up' : 'text-down'}">${isProfit ? '+' : ''}${formatMoney(profit)}</b></div>
+                </div>
+                <div class="stock-trade-actions" style="margin-top: 10px;">
+                  <button class="btn-trade btn-detail" onclick="openDetailModal('${item.stock_id}')">🔍 분석</button>
+                  <button class="btn-trade btn-buy" onclick="openTradeModal('${item.stock_id}', '${item.name}', ${item.price}, 'buy')">🛒 추가 매수</button>
+                  <button class="btn-trade btn-sell" onclick="openTradeModal('${item.stock_id}', '${item.name}', ${item.price}, 'sell')">💰 전량 매도</button>
+                </div>
+              </div>
+            `;
+          }
+
+          const totalProfit = totalPortfolioCurrent - totalPortfolioInvested;
+          const totalProfitRate = totalPortfolioInvested > 0n ? ((Number(totalProfit) / Number(totalPortfolioInvested)) * 100).toFixed(2) : '0.00';
+          const isTotalProfit = totalProfit >= 0n;
+
+          portfolioSectionHtml = portfolioRows.length > 0 ? `
+            <div class="portfolio-panel">
+              <div class="portfolio-header">
+                <div class="portfolio-title">
+                  <span class="pulse-dot"></span>
+                  📊 내 보유 주식 포트폴리오 (실시간 손익 현황)
+                </div>
+                <div class="portfolio-summary-pill">
+                  <span>총 투자금: <b>${formatMoney(totalPortfolioInvested)}</b></span>
+                  <span>총 평가액: <b style="color:#38bdf8;">${formatMoney(totalPortfolioCurrent)}</b></span>
+                  <span class="${isTotalProfit ? 'text-up' : 'text-down'}">총 손익: <b>${isTotalProfit ? '+' : ''}${formatMoney(totalProfit)} (${isTotalProfit ? '+' : ''}${totalProfitRate}%)</b></span>
+                </div>
+              </div>
+              <div class="portfolio-cards-grid">
+                ${portfolioItemsHtml}
+              </div>
+            </div>
+          ` : `
+            <div class="portfolio-panel" style="text-align: center; padding: 24px;">
+              <p style="color: #9ca3af; font-size: 0.95rem; margin-bottom: 6px;">현재 보유 중인 주식이 없습니다.</p>
+              <p style="color: #64748b; font-size: 0.82rem;">아래 종목 시세 카드에서 <b>[🛒 매수]</b> 버튼을 눌러 첫 주식에 투자해보세요!</p>
+            </div>
+          `;
         } catch (e) {
           currentUser = null;
         }
@@ -1939,7 +2119,26 @@ function startWebServer(client) {
             .gainer-symbol { font-size: 0.75rem; color: #818cf8; }
             .gainer-rate { font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 800; }
             .text-up { color: #34d399; }
-            .text-down { color: #f87171; }
+            /* 📊 포트폴리오 패널 스타일 */
+            .portfolio-panel {
+              background: linear-gradient(135deg, rgba(30, 27, 75, 0.7) 0%, rgba(17, 24, 39, 0.9) 100%);
+              border: 1px solid rgba(129, 140, 248, 0.35);
+              border-radius: 20px;
+              padding: 24px;
+              margin-bottom: 30px;
+              box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+            }
+            .portfolio-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }
+            .portfolio-title { font-family: 'Outfit', sans-serif; font-size: 1.3rem; font-weight: 800; color: #818cf8; display: flex; align-items: center; gap: 8px; }
+            .portfolio-summary-pill { display: flex; align-items: center; gap: 14px; background: rgba(255, 255, 255, 0.05); padding: 8px 18px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; border: 1px solid var(--card-border); flex-wrap: wrap; }
+            .portfolio-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+            .portfolio-item-card { background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border); border-radius: 16px; padding: 18px; transition: all 0.2s; }
+            .portfolio-item-card:hover { transform: translateY(-3px); border-color: rgba(99, 102, 241, 0.4); background: rgba(255, 255, 255, 0.05); }
+            .portfolio-item-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+            .portfolio-grid-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.82rem; margin-bottom: 10px; }
+            .port-stat { display: flex; flex-direction: column; }
+            .port-stat span { color: var(--text-muted); font-size: 0.75rem; }
+            .port-stat b { font-family: 'Outfit', sans-serif; font-size: 0.95rem; margin-top: 2px; }
 
             .macro-news-banner {
               background: linear-gradient(90deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1));
@@ -2140,6 +2339,8 @@ function startWebServer(client) {
                 <span class="macro-badge">${regime ? regime.name : '시장 안정세'}</span>
                 <span class="news-text">${news ? news.text : '실시간 시장 거래가 활발하게 이루어지고 있습니다.'}</span>
               </div>
+
+              ${currentUser ? portfolioSectionHtml : ''}
 
               <h2 class="section-title">📊 실시간 가상 주식 시세 & 차트 분석</h2>
               <div class="stocks-grid">
@@ -2359,6 +2560,36 @@ function startWebServer(client) {
 
                   <button class="btn-play-game" id="btn-roll-dice" onclick="playDice()">🎲 주사위 굴리기</button>
                   <div class="game-result-box" id="dice-result">딜러와의 한판 승부! 주사위를 굴려보세요.</div>
+                </div>
+
+                <!-- 🎫 럭키세븐 즉석 복권 -->
+                <div class="casino-card">
+                  <span class="turn-cost-tag" style="background: rgba(168, 85, 247, 0.2); border-color: #c084fc; color: #c084fc;">🎫 럭키세븐 복권</span>
+                  <div class="casino-title" style="color: #c084fc;">🎫 럭키세븐 즉석 복권</div>
+                  <p class="casino-desc">💎다이아(100배), 7️⃣럭키세븐(20배), 🔔골든벨(10배), 🍇포도(5배), 🍋레몬(3배), 🍒체리2개(2배)</p>
+                  
+                  <div class="slot-display" style="background: #1e1035; border-color: #8b5cf6;">
+                    <div class="slot-reel" id="lottery-slot-1" style="background: #2e1065; border-color: #a855f7;">🎫</div>
+                    <div class="slot-reel" id="lottery-slot-2" style="background: #2e1065; border-color: #a855f7;">🎫</div>
+                    <div class="slot-reel" id="lottery-slot-3" style="background: #2e1065; border-color: #a855f7;">🎫</div>
+                  </div>
+
+                  <div class="bet-input-group">
+                    <label>복권 구매 금액 (원)</label>
+                    <div class="bet-input-row">
+                      <input type="number" id="lottery-bet" class="bet-input" value="1000" min="1000" step="1000">
+                    </div>
+                    <div class="btn-chip-grid">
+                      <button class="btn-chip" onclick="setLotteryBet(1000)">1장(1천원)</button>
+                      <button class="btn-chip" onclick="setLotteryBet(5000)">5장(5천원)</button>
+                      <button class="btn-chip" onclick="setLotteryBet(10000)">10장(1만원)</button>
+                      <button class="btn-chip" onclick="setLotteryBet(50000)">50장(5만원)</button>
+                      <button class="btn-chip" style="background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #fca5a5;" onclick="setLotteryBet('all')">🔥 올인 (ALL-IN)</button>
+                    </div>
+                  </div>
+
+                  <button class="btn-play-game" id="btn-scratch-lottery" style="background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); box-shadow: 0 4px 16px rgba(168, 85, 247, 0.4);" onclick="playInstantLottery()">🎫 즉석 복권 긁기</button>
+                  <div class="game-result-box" id="lottery-result">복권 장수를 정하고 즉석 복권을 긁어보세요!</div>
                 </div>
 
               </div>
@@ -3052,6 +3283,76 @@ function startWebServer(client) {
               } catch (e) {
                 setGameLock(false);
                 btn.innerText = '🎲 주사위 굴리기';
+                resultBox.innerText = '서버 통신 실패';
+                showToast('error', '통신 오류', '서버와 연결할 수 없습니다.');
+              }
+            }
+
+            // 5.5 🎫 럭키세븐 즉석 복권 게임
+            function setLotteryBet(amount) {
+              const input = document.getElementById('lottery-bet');
+              if (amount === 'all') {
+                input.value = getCurrentUserCashNum();
+              } else {
+                input.value = amount;
+              }
+            }
+
+            async function playInstantLottery() {
+              if (isGameInProgress) return;
+              setGameLock(true);
+
+              const bet = document.getElementById('lottery-bet').value;
+              const r1 = document.getElementById('lottery-slot-1');
+              const r2 = document.getElementById('lottery-slot-2');
+              const r3 = document.getElementById('lottery-slot-3');
+              const resultBox = document.getElementById('lottery-result');
+              const btn = document.getElementById('btn-scratch-lottery');
+
+              r1.classList.add('spinning');
+              r2.classList.add('spinning');
+              r3.classList.add('spinning');
+              btn.innerText = '⏳ 복권 긁는 중...';
+              resultBox.innerText = '🎫 즉석 복권을 긁고 있습니다...';
+              resultBox.style.color = '#c084fc';
+
+              try {
+                const res = await fetch('/api/game/lottery', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ bet })
+                });
+                const data = await res.json();
+
+                setTimeout(() => {
+                  r1.classList.remove('spinning');
+                  r2.classList.remove('spinning');
+                  r3.classList.remove('spinning');
+                  setGameLock(false);
+                  btn.innerText = '🎫 즉석 복권 긁기';
+
+                  if (!data.success) {
+                    resultBox.innerText = '❌ ' + (data.error || '오류 발생');
+                    resultBox.style.color = '#ef4444';
+                    showToast('error', '복권 오류', data.error);
+                    return;
+                  }
+
+                  r1.innerText = data.symbols[0];
+                  r2.innerText = data.symbols[1];
+                  r3.innerText = data.symbols[2];
+
+                  resultBox.innerText = data.message;
+                  resultBox.style.color = data.isWin ? '#34d399' : '#f87171';
+                  updateUserCashDisplay(data.newCash);
+                  showToast(data.isWin ? 'success' : 'info', '🎫 복권 결과', data.message);
+                }, 800);
+              } catch (e) {
+                setGameLock(false);
+                btn.innerText = '🎫 즉석 복권 긁기';
+                r1.classList.remove('spinning');
+                r2.classList.remove('spinning');
+                r3.classList.remove('spinning');
                 resultBox.innerText = '서버 통신 실패';
                 showToast('error', '통신 오류', '서버와 연결할 수 없습니다.');
               }
