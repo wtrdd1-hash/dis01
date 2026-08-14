@@ -816,6 +816,33 @@ function startWebServer(client) {
     }
   });
 
+  // 10.5 📊 전체 실시간 주식 시세 목록 API (3분 주기 라이브 갱신용)
+  app.get('/api/stocks', async (req, res) => {
+    try {
+      const [stocks] = await pool.query('SELECT * FROM stocks ORDER BY market_cap DESC');
+      const formatted = stocks.map(s => {
+        const price = Number(s.price);
+        const prevPrice = Number(s.prev_price);
+        const diff = price - prevPrice;
+        const rate = prevPrice > 0 ? ((diff / prevPrice) * 100) : 0;
+        return {
+          stock_id: s.stock_id,
+          name: s.name,
+          price,
+          prev_price: prevPrice,
+          diff,
+          rate: Number(rate.toFixed(2)),
+          isUp: diff >= 0,
+          sector: s.sector,
+          market_cap: Number(s.market_cap || 0)
+        };
+      });
+      res.json({ success: true, count: formatted.length, stocks: formatted });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // 11. 🔍 종목 상세 분석 및 고해상도 차트 히스토리 API
   app.get('/api/stock/:stockId', async (req, res) => {
     const { stockId } = req.params;
