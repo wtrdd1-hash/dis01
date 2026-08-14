@@ -1646,6 +1646,13 @@ function startWebServer(client) {
         ? `📢 [실시간 속보] ${news.title || news.text}` 
         : `📢 [실시간 속보] 시장 호조세 속에 활발한 거래가 이어지고 있습니다.`;
 
+      const currentClickerLevel = userAssets ? userAssets.clickerLevel : 1;
+      const currentAutoLevel = userAssets ? userAssets.autoLevel : 0;
+      const powerCost = currentClickerLevel * 10000;
+      const autoCost = (currentAutoLevel + 1) * 30000;
+      const powerVal = currentClickerLevel * 100;
+      const autoVal = currentAutoLevel * 300;
+
       res.send(`
         <!DOCTYPE html>
         <html lang="ko">
@@ -1678,6 +1685,22 @@ function startWebServer(client) {
                 radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
                 radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.12) 0px, transparent 50%);
               background-attachment: fixed;
+            }
+
+            /* 🌌 다크 테마 커스텀 스크롤바 (OS 기본 흰색 스크롤바 제거) */
+            ::-webkit-scrollbar {
+              width: 6px;
+              height: 6px;
+            }
+            ::-webkit-scrollbar-track {
+              background: rgba(11, 15, 25, 0.6);
+            }
+            ::-webkit-scrollbar-thumb {
+              background: rgba(99, 102, 241, 0.35);
+              border-radius: 6px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+              background: rgba(99, 102, 241, 0.7);
             }
 
             /* 토스트 알림 컨테이너 */
@@ -1727,6 +1750,7 @@ function startWebServer(client) {
               overflow: hidden;
               white-space: nowrap;
             }
+            .news-ticker-bar:hover .ticker-content { animation-play-state: paused; }
             .ticker-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 8px #ef4444; animation: pulse 1s infinite; flex-shrink: 0; }
             .ticker-content { display: inline-block; animation: marquee 25s linear infinite; }
             @keyframes marquee { 0% { transform: translateX(50%); } 100% { transform: translateX(-100%); } }
@@ -1864,6 +1888,22 @@ function startWebServer(client) {
               border-bottom: 1px solid var(--card-border);
               padding-bottom: 12px;
               overflow-x: auto;
+              scrollbar-width: thin;
+              scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+              -webkit-overflow-scrolling: touch;
+            }
+            .tabs-nav::-webkit-scrollbar {
+              height: 4px;
+            }
+            .tabs-nav::-webkit-scrollbar-track {
+              background: transparent;
+            }
+            .tabs-nav::-webkit-scrollbar-thumb {
+              background: rgba(99, 102, 241, 0.25);
+              border-radius: 4px;
+            }
+            .tabs-nav::-webkit-scrollbar-thumb:hover {
+              background: rgba(99, 102, 241, 0.6);
             }
             .tab-btn {
               background: transparent;
@@ -2507,15 +2547,15 @@ function startWebServer(client) {
                   <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); padding: 12px; border-radius: 14px; margin-bottom: 16px; display: flex; justify-content: space-around;">
                     <div>
                       <span style="font-size: 0.75rem; color: #9ca3af; display: block;">클릭당 채굴량</span>
-                      <b id="clicker-power-val" style="color: #34d399; font-size: 1.1rem; font-family: 'Outfit', sans-serif;">+100원</b>
+                      <b id="clicker-power-val" style="color: #34d399; font-size: 1.1rem; font-family: 'Outfit', sans-serif;">+${powerVal.toLocaleString()}원</b>
                     </div>
                     <div>
                       <span style="font-size: 0.75rem; color: #9ca3af; display: block;">누적 클릭수</span>
-                      <b id="clicker-clicks-val" style="color: #fbbf24; font-size: 1.1rem; font-family: 'Outfit', sans-serif;">${userAssets ? userAssets.totalClicks : 0}회</b>
+                      <b id="clicker-clicks-val" style="color: #fbbf24; font-size: 1.1rem; font-family: 'Outfit', sans-serif;">${userAssets ? Number(userAssets.totalClicks).toLocaleString() : 0}회</b>
                     </div>
                     <div>
                       <span style="font-size: 0.75rem; color: #9ca3af; display: block;">자동 초당 채굴</span>
-                      <b id="clicker-auto-val" style="color: #818cf8; font-size: 1.1rem; font-family: 'Outfit', sans-serif;">+0원/s</b>
+                      <b id="clicker-auto-val" style="color: #818cf8; font-size: 1.1rem; font-family: 'Outfit', sans-serif;">+${autoVal.toLocaleString()}원/s</b>
                     </div>
                   </div>
 
@@ -2532,18 +2572,18 @@ function startWebServer(client) {
 
                   <div class="shop-item">
                     <div class="shop-item-info">
-                      <h4>🔨 클릭 파워 강화 (Lv.<span id="shop-power-lv">1</span>)</h4>
+                      <h4>🔨 클릭 파워 강화 (Lv.<span id="shop-power-lv">${currentClickerLevel}</span>)</h4>
                       <p>클릭당 현금 획득량 +100원 증가</p>
                     </div>
-                    <button class="btn-upgrade" onclick="buyUpgrade('power')"><span id="shop-power-cost">10,000원</span> 강화</button>
+                    <button class="btn-upgrade" onclick="buyUpgrade('power')"><span id="shop-power-cost">${powerCost.toLocaleString()}원</span> 강화</button>
                   </div>
 
                   <div class="shop-item">
                     <div class="shop-item-info">
-                      <h4>🤖 자동 채굴 봇 (Lv.<span id="shop-auto-lv">0</span>)</h4>
+                      <h4>🤖 자동 채굴 봇 (Lv.<span id="shop-auto-lv">${currentAutoLevel}</span>)</h4>
                       <p>아무것도 안 해도 초당 현금 자동 채굴</p>
                     </div>
-                    <button class="btn-upgrade" onclick="buyUpgrade('auto')"><span id="shop-auto-cost">30,000원</span> 구매</button>
+                    <button class="btn-upgrade" onclick="buyUpgrade('auto')"><span id="shop-auto-cost">${autoCost.toLocaleString()}원</span> 구매</button>
                   </div>
                 </div>
 
@@ -3104,12 +3144,12 @@ function startWebServer(client) {
                 }
                 showToast('success', '업그레이드 완료', data.message);
                 updateUserCashDisplay(data.newCash);
-                if (data.clickerLevel) {
+                if (data.clickerLevel !== undefined) {
                   document.getElementById('clicker-power-val').innerText = '+' + (data.clickerLevel * 100).toLocaleString() + '원';
                   document.getElementById('shop-power-lv').innerText = data.clickerLevel;
                   document.getElementById('shop-power-cost').innerText = (data.clickerLevel * 10000).toLocaleString() + '원';
                 }
-                if (data.autoLevel) {
+                if (data.autoLevel !== undefined) {
                   document.getElementById('clicker-auto-val').innerText = '+' + (data.autoLevel * 300).toLocaleString() + '원/s';
                   document.getElementById('shop-auto-lv').innerText = data.autoLevel;
                   document.getElementById('shop-auto-cost').innerText = ((data.autoLevel + 1) * 30000).toLocaleString() + '원';
