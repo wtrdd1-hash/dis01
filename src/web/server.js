@@ -2105,6 +2105,36 @@ function startWebServer(client) {
             }
             .trends-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
             .trends-title { font-family: 'Outfit', sans-serif; font-size: 1.3rem; font-weight: 700; color: #e0e7ff; display: flex; align-items: center; gap: 8px; }
+            /* GPU 하드웨어 가속 및 부드러운 렌더링 최적화 */
+            .stock-card, .casino-card, .gainer-card, .portfolio-item-card, .clicker-box, .shop-box {
+              transform: translateZ(0);
+              will-change: transform;
+              backface-visibility: hidden;
+            }
+            .stock-price {
+              transition: color 0.4s ease;
+            }
+
+            .btn-quick-refresh {
+              background: rgba(255, 255, 255, 0.12);
+              border: 1px solid rgba(255, 255, 255, 0.25);
+              color: #fbbf24;
+              border-radius: 50%;
+              width: 22px;
+              height: 22px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              cursor: pointer;
+              font-size: 0.72rem;
+              transition: transform 0.2s, background 0.2s;
+              padding: 0;
+              line-height: 1;
+            }
+            .btn-quick-refresh:hover { background: rgba(255, 255, 255, 0.3); transform: rotate(180deg); }
+            .btn-quick-refresh.spinning-fast { animation: spinFast 0.5s linear infinite; }
+            @keyframes spinFast { 100% { transform: rotate(360deg); } }
+
             .next-tick-badge {
               display: flex;
               align-items: center;
@@ -2338,7 +2368,8 @@ function startWebServer(client) {
                   <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <div class="next-tick-badge">
                       <span class="pulse-dot"></span>
-                      ⏱️ 주가 변동 갱신: <b id="price-tick-countdown" style="color: #fbbf24; font-family: 'Outfit', sans-serif;">03:00</b>
+                      ⏱️ 다음 갱신: <b id="price-tick-countdown" style="color: #fbbf24; font-family: 'Outfit', sans-serif;">03:00</b>
+                      <button class="btn-quick-refresh" onclick="refreshStockPricesLive(true)" title="실시간 시세 즉시 갱신">🔄</button>
                     </div>
                     <div class="market-sentiment-pill">
                       <span>상승 🟢 <b>${upCount}개</b></span>
@@ -3470,7 +3501,9 @@ function startWebServer(client) {
             }
             setInterval(updateStockCountdown, 1000);
 
-            async function refreshStockPricesLive() {
+            async function refreshStockPricesLive(manual = false) {
+              const spinBtn = document.querySelector('.btn-quick-refresh');
+              if (spinBtn) spinBtn.classList.add('spinning-fast');
               try {
                 const res = await fetch('/api/stocks');
                 const data = await res.json();
@@ -3488,7 +3521,12 @@ function startWebServer(client) {
                     }
                   }
                 });
-              } catch (e) {}
+                if (manual) showToast('info', '시세 갱신 완료', '8개 전 종목의 최신 실시간 시세를 동기화했습니다.');
+              } catch (e) {
+                if (manual) showToast('error', '통신 오류', '실시간 시세 갱신 실패');
+              } finally {
+                if (spinBtn) setTimeout(() => spinBtn.classList.remove('spinning-fast'), 600);
+              }
             }
 
             async function submitTradeOrder() {
