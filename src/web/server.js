@@ -861,7 +861,7 @@ function startWebServer(client) {
       const userData = await getOrCreateUser(session.id);
       let userCash = BigInt(userData.cash || 0);
 
-      const isAll = (typeof amount === 'string') && ['all', 'max', '전량', '올인', '최대', '전체'].includes(amount.trim().toLowerCase());
+      const isAll = (typeof amount === 'string' && ['all', 'max', '전량', '올인', '최대', '전체'].includes(amount.trim().toLowerCase())) || req.body.isAll === true;
       if (isAll) {
         if (action === 'sell') {
           const [holdingRows] = await pool.query('SELECT amount FROM user_stocks WHERE user_id = ? AND stock_id = ?', [session.id, stockId]);
@@ -872,12 +872,19 @@ function startWebServer(client) {
         } else if (action === 'buy') {
           const maxCanBuy = stockPrice > 0n ? Number(userCash / stockPrice) : 0;
           if (maxCanBuy <= 0) {
-            return res.status(400).json({ success: false, error: '현재 보유 현금으로 매수할 수 있는 수량이 없습니다.' });
+            return res.status(400).json({ success: false, error: '현재 보유 현금으로 1주도 매수할 수 없습니다.' });
           }
           count = maxCanBuy;
         }
       } else {
         count = parseInt(amount, 10);
+        // 만약 매수 시 호가 변동/오차로 현금이 미세하게 부족한 경우 가용 현금 최대치로 스마트 보정
+        if (action === 'buy' && userCash < (stockPrice * BigInt(count)) && userCash >= stockPrice) {
+          const adjustedMax = Number(userCash / stockPrice);
+          if (adjustedMax > 0 && Math.abs(adjustedMax - count) <= 10) {
+            count = adjustedMax;
+          }
+        }
       }
 
       if (!count || count <= 0) return res.status(400).json({ success: false, error: '거래 수량은 1주 이상이어야 합니다.' });
@@ -4169,7 +4176,7 @@ function startWebServer(client) {
 
             // 7. 주식 거래 모달 & 수량 프리셋 / 전량(MAX) 처리
             function openTradeModal(stockId, name, price, action, directHolding) {
-              currentTrade = { stockId, name, price, action };
+              currentTrade = { stockId, name, price, action, isAll: false };
               document.getElementById('modal-trade-title').innerText = (action === 'buy' ? '🛒 주식 매수: ' : '💰 주식 매도: ') + name;
               document.getElementById('modal-stock-info').innerText = '종목코드: [' + stockId + ']';
               document.getElementById('modal-unit-price').innerText = Number(price).toLocaleString() + '원';
@@ -4195,16 +4202,19 @@ function startWebServer(client) {
 
               const input = document.getElementById('trade-amount-input');
               if (action === 'sell') {
-                input.value = holding > 0 ? holding : 0; // 매도 창 열면 기본적으로 보유 전량 또는 0주로 편리하게 프리셋
+                input.value = holding > 0 ? holding : 0;
+                currentTrade.isAll = (holding > 0);
               } else {
                 input.value = 1;
+                currentTrade.isAll = false;
               }
 
-              calcTradeTotal();
-
               const submitBtn = document.getElementById('btn-submit-trade');
+              submitBtn.disabled = false;
               submitBtn.innerText = (action === 'buy' ? '🛒 매수 주문 체결' : '💰 매도 주문 체결');
               submitBtn.style.background = (action === 'buy' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)');
+
+              calcTradeTotal();
               document.getElementById('trade-modal').style.display = 'flex';
             }
 
@@ -4214,6 +4224,12 @@ function startWebServer(client) {
               const holding = userHoldings[stockId] || 0;
               const price = Number(currentTrade.price) || 1;
               const userCash = getCurrentUserCashNum();
+
+              if (pct === 100) {
+                currentTrade.isAll = true;
+              } else {
+                currentTrade.isAll = false;
+              }
 
               if (currentTrade.action === 'buy') {
                 const maxCanBuy = Math.floor(userCash / price);
@@ -4247,6 +4263,7 @@ function startWebServer(client) {
             }
 
             function addTradeAmount(qty) {
+              currentTrade.isAll = false;
               const input = document.getElementById('trade-amount-input');
               const current = parseInt(input.value, 10) || 0;
               const stockId = currentTrade.stockId;
@@ -4254,13 +4271,14 @@ function startWebServer(client) {
               
               let nextVal = Math.max(1, current + qty);
               if (currentTrade.action === 'sell' && holding > 0 && nextVal > holding) {
-                nextVal = holding; // 보유량 초과 방지
+                nextVal = holding;
               }
               input.value = nextVal;
               calcTradeTotal();
             }
 
             function resetTradeAmount() {
+              currentTrade.isAll = false;
               const input = document.getElementById('trade-amount-input');
               input.value = 1;
               calcTradeTotal();
@@ -4351,13 +4369,16 @@ function startWebServer(client) {
             }
 
             async function submitTradeOrder() {
-              const amount = document.getElementById('trade-amount-input').value;
+              const input = document.getElementById('trade-amount-input');
+              const amount = input.value;
               const count = parseInt(amount, 10) || 0;
               const stockId = currentTrade.stockId;
               const holding = userHoldings[stockId] || 0;
               const userCash = getCurrentUserCashNum();
               const price = Number(currentTrade.price) || 0;
               const total = count * price;
+              const defaultBtnText = (currentTrade.action === 'buy' ? '🛒 매수 주문 체결' : '💰 매도 주문 체결');
+              const btn = document.getElementById('btn-submit-trade');
 
               if (count <= 0) {
                 showToast('error', '수량 오류', '1주 이상의 수량을 입력해주세요.');
@@ -4365,7 +4386,7 @@ function startWebServer(client) {
               }
 
               if (currentTrade.action === 'sell' && count > holding) {
-                showToast('error', '보유 수량 부족', '보유 주식(' + holding + '주)보다 많은 수량을 매도할 수 없습니다.');
+                showToast('error', '보유 수량 부족', '보유 주식(' + holding.toLocaleString() + '주)보다 많은 수량을 매도할 수 없습니다.');
                 return;
               }
 
@@ -4374,7 +4395,6 @@ function startWebServer(client) {
                 return;
               }
 
-              const btn = document.getElementById('btn-submit-trade');
               btn.disabled = true;
               btn.innerText = '⏳ 주문 처리 중...';
 
@@ -4385,13 +4405,22 @@ function startWebServer(client) {
                   body: JSON.stringify({
                     action: currentTrade.action,
                     stockId: currentTrade.stockId,
-                    amount: count
+                    amount: count,
+                    isAll: currentTrade.isAll || (currentTrade.action === 'sell' && count === holding) || (currentTrade.action === 'buy' && (userCash - total) < price)
                   })
                 });
                 const data = await res.json();
-                btn.disabled = false;
+                
                 if (!data.success) {
+                  btn.disabled = false;
+                  btn.innerText = defaultBtnText;
                   showToast('error', '거래 체결 실패', data.error);
+                  const warnBox = document.getElementById('trade-warning-msg');
+                  if (warnBox) {
+                    warnBox.style.display = 'block';
+                    warnBox.style.color = '#ef4444';
+                    warnBox.innerText = '⚠️ ' + data.error;
+                  }
                   return;
                 }
 
@@ -4403,12 +4432,16 @@ function startWebServer(client) {
                 }
 
                 showToast('success', '주식 체결 완료', data.message);
-                closeTradeModal();
+                btn.innerText = '✅ 체결 완료!';
                 updateUserCashDisplay(data.newCash);
-                setTimeout(() => location.reload(), 800);
+                setTimeout(() => {
+                  closeTradeModal();
+                  location.reload();
+                }, 700);
               } catch (e) {
                 btn.disabled = false;
-                showToast('error', '통신 오류', '거래 처리 실패');
+                btn.innerText = defaultBtnText;
+                showToast('error', '통신 오류', '거래 처리 중 서버 연결 실패');
               }
             }
 

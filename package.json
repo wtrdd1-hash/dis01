@@ -23,6 +23,7 @@
     "cookie-parser": "^1.4.7",
     "discord.js": "^14.18.0",
     "dotenv": "^16.4.7",
+    "ejs": "^6.0.1",
     "express": "^5.2.1",
     "geoip-lite": "^2.0.3",
     "mysql2": "^3.12.0"
