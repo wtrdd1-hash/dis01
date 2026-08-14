@@ -1297,6 +1297,22 @@ function startWebServer(client) {
       const userCash = BigInt(userData.cash || 0);
       const userBank = BigInt(userData.bank || 0);
 
+      // 주식 평가액 계산
+      let stockVal = 0n;
+      try {
+        const [holdings] = await pool.query(`
+          SELECT h.shares, s.price 
+          FROM user_stocks h
+          JOIN stocks s ON h.stock_id = s.stock_id
+          WHERE h.user_id = ?
+        `, [session.id]);
+        for (const h of holdings) {
+          stockVal += BigInt(h.shares) * BigInt(h.price);
+        }
+      } catch (e) {}
+
+      const netWorth = userCash + userBank + stockVal;
+
       const [result] = await pool.query(`
         INSERT INTO inquiries (user_id, username, avatar, category, title, content, status)
         VALUES (?, ?, ?, ?, ?, ?, 'WAITING')
@@ -1313,13 +1329,27 @@ function startWebServer(client) {
               const dmEmbed = new EmbedBuilder()
                 .setTitle(`📩 [새 1:1 고객센터 문의 접수] Ticket #${ticketId}`)
                 .setColor(0xf59e0b)
-                .setDescription(`**작성 유저:** <@${session.id}> (${session.username} / \`${session.id}\`)\n**문의 분류:** \`${category || '일반 문의'}\`\n**접수 일시:** <t:${Math.floor(Date.now() / 1000)}:F>`)
+                .setThumbnail(session.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png')
+                .setDescription(
+                  `**작성 유저:** <@${session.id}> (\`${session.username}\` / ID: \`${session.id}\`)\n` +
+                  `**문의 분류:** \`${category || '일반 문의'}\`\n` +
+                  `**접수 일시:** <t:${Math.floor(Date.now() / 1000)}:F>`
+                )
                 .addFields(
                   { name: '📌 문의 제목', value: title.trim(), inline: false },
                   { name: '📝 상세 문의 내용', value: content.trim().length > 1000 ? content.trim().slice(0, 1000) + '...' : content.trim(), inline: false },
-                  { name: '💳 유저 자산 현황', value: `현금: ${formatMoney(userCash)} | 은행: ${formatMoney(userBank)}`, inline: false }
+                  { 
+                    name: '💳 유저 자산 현황', 
+                    value: `💵 현금: **${formatMoney(userCash)}** | 🏦 예금: **${formatMoney(userBank)}** | 💎 순자산: **${formatMoney(netWorth)}**`, 
+                    inline: false 
+                  },
+                  {
+                    name: '⚡ 빠른 관리자 답장 명령어',
+                    value: `\`/admin_reply 문의번호:${ticketId} 답변내용:답변할내용\`\n또는 웹 관리자 패널([easy-scraping.com/admin](https://easy-scraping.com/admin))에서 즉시 답장 가능`,
+                    inline: false
+                  }
                 )
-                .setFooter({ text: `답변 방법: 웹 관리자 패널(/admin) 또는 디스코드에서 /admin_reply 문의번호:${ticketId} 답변내용:...` })
+                .setFooter({ text: `월덕 1:1 고객센터 관제 시스템 (Ticket #${ticketId})` })
                 .setTimestamp();
 
               await adminUser.send({ embeds: [dmEmbed] });
