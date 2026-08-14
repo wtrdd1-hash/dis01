@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23007bff'/%3E%3Cpath d='M30 55 L45 70 L70 35' stroke='%23fff' stroke-width='10' fill='none'/%3E%3C/svg%3E" />
+  <title><%= typeof title !== 'undefined' ? title : 'Easy Scraping' %></title>
+  <link rel="stylesheet" href="/static/css/main.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+  <header class="site-header">
+    <nav>
+      <a href="/">홈</a>
+      <a href="/privacy">개인정보처리방침</a>
+      <a href="/terms">이용약관</a>
+      <a href="/inquiry">문의하기</a>
+    </nav>
+  </header>
+
+  <main class="site-main">
+    <%- body %>
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; <%= new Date().getFullYear() %> Easy Scraping. All rights reserved.</p>
+  </footer>
+</body>
+</html>
