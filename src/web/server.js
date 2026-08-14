@@ -40,22 +40,6 @@ function generateSparklineSvg(prices, isUp) {
   `;
 }
 
-// 도박 턴(Turn/Energy) 계산 및 자동 회복 헬퍼 (30초당 1턴, 최대 50턴)
-function calculateUserTurns(user) {
-  const maxTurns = 50;
-  let turns = user.gamble_turns ?? 50;
-  const lastUpdate = user.last_turn_update ? new Date(user.last_turn_update).getTime() : Date.now();
-  const now = Date.now();
-  const elapsedSeconds = Math.floor((now - lastUpdate) / 1000);
-  const recovered = Math.floor(elapsedSeconds / 30);
-  
-  if (recovered > 0 && turns < maxTurns) {
-    turns = Math.min(maxTurns, turns + recovered);
-  }
-  const nextSec = turns >= maxTurns ? 0 : (30 - (elapsedSeconds % 30));
-  return { turns, maxTurns, nextSec, recovered };
-}
-
 // 백엔드 게임 중복/스팸 실행 방지 락 (User In-flight Action Lock)
 const activeGameUsers = new Set();
 
@@ -181,22 +165,13 @@ function startWebServer(client) {
     return rows;
   }
 
-  // ==========================================
-  // 🎮 웹 카지노 & 클리커 & 경제 API 엔드포인트
-  // ==========================================
-
-  // 1. 현재 로그인 유저 상세 정보 API
+  // ========================================  // 1. 현재 로그인 유저 상세 정보 API
   app.get('/api/user/me', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: '로그인이 필요합니다.' });
 
     try {
       const userData = await getOrCreateUser(session.id, session.username, session.avatar);
-      const { turns, maxTurns, nextSec, recovered } = calculateUserTurns(userData);
-
-      if (recovered > 0) {
-        await pool.query('UPDATE users SET gamble_turns = ?, last_turn_update = NOW() WHERE discord_id = ?', [turns, session.id]);
-      }
 
       const [userStocks] = await pool.query(`
         SELECT us.stock_id, us.amount, us.total_spent, s.name, s.price
@@ -242,9 +217,6 @@ function startWebServer(client) {
           bank: bank.toString(),
           stockVal: stockVal.toString(),
           netWorth: netWorth.toString(),
-          gamble_turns: turns,
-          max_turns: maxTurns,
-          next_turn_sec: nextSec,
           clicker_level: userData.clicker_level || 1,
           auto_miner_level: userData.auto_miner_level || 0,
           total_clicks: Number(userData.total_clicks || 0),
@@ -270,13 +242,10 @@ function startWebServer(client) {
 
     try {
       const userData = await getOrCreateUser(session.id);
-      const { turns, maxTurns } = calculateUserTurns(userData);
-
       const level = userData.clicker_level || 1;
       const basePerClick = level * 100;
       
       let earnedCash = 0;
-      let bonusTurns = 0;
       let critCount = 0;
 
       for (let i = 0; i < clicks; i++) {
@@ -284,29 +253,21 @@ function startWebServer(client) {
         const clickReward = isCrit ? (basePerClick * 5) : basePerClick;
         if (isCrit) critCount++;
         earnedCash += clickReward;
-
-        if (Math.random() < 0.12 && (turns + bonusTurns < maxTurns)) {
-          bonusTurns++;
-        }
       }
 
       const newCash = BigInt(userData.cash || 0) + BigInt(earnedCash);
-      const newTurns = Math.min(maxTurns, turns + bonusTurns);
       const totalClicks = BigInt(userData.total_clicks || 0) + BigInt(clicks);
 
       await pool.query(
-        'UPDATE users SET cash = ?, gamble_turns = ?, total_clicks = ? WHERE discord_id = ?',
-        [newCash.toString(), newTurns, totalClicks.toString(), session.id]
+        'UPDATE users SET cash = ?, total_clicks = ? WHERE discord_id = ?',
+        [newCash.toString(), totalClicks.toString(), session.id]
       );
 
       res.json({
         success: true,
         earnedCash,
-        bonusTurns,
         critCount,
         newCash: newCash.toString(),
-        turns: newTurns,
-        maxTurns,
         totalClicks: totalClicks.toString()
       });
     } catch (err) {
@@ -325,7 +286,6 @@ function startWebServer(client) {
       let userCash = BigInt(userData.cash || 0);
       let clickerLevel = userData.clicker_level || 1;
       let autoLevel = userData.auto_miner_level || 0;
-      let { turns, maxTurns } = calculateUserTurns(userData);
 
       if (type === 'power') {
         const cost = BigInt(clickerLevel * 10000);
@@ -349,23 +309,9 @@ function startWebServer(client) {
         await pool.query('UPDATE users SET cash = ?, auto_miner_level = ? WHERE discord_id = ?', [userCash.toString(), autoLevel, session.id]);
         return res.json({
           success: true,
-          message: `🤖 자동 채굴기 Lv.${autoLevel} 가동! (초당 +${formatMoney(autoLevel * 300)})`,
+          message: `🤖 자동 채굴 봇 Lv.${autoLevel} 가동! (초당 +${formatMoney(autoLevel * 300)})`,
           newCash: userCash.toString(),
           autoLevel
-        });
-      } else if (type === 'recharge') {
-        const cost = 20000n;
-        if (userCash < cost) return res.status(400).json({ success: false, error: `현금이 부족합니다! (필요: ${formatMoney(cost)})` });
-        if (turns >= maxTurns) return res.status(400).json({ success: false, error: '도박 턴이 이미 가득 차 있습니다 (50/50).' });
-
-        userCash -= cost;
-        turns = Math.min(maxTurns, turns + 25);
-        await pool.query('UPDATE users SET cash = ?, gamble_turns = ?, last_turn_update = NOW() WHERE discord_id = ?', [userCash.toString(), turns, session.id]);
-        return res.json({
-          success: true,
-          message: `⚡ 도박 턴 +25개 긴급 충전 완료! (현재 턴: ${turns}/${maxTurns})`,
-          newCash: userCash.toString(),
-          turns
         });
       } else {
         return res.status(400).json({ success: false, error: '유효하지 않은 업그레이드입니다.' });
@@ -375,7 +321,7 @@ function startWebServer(client) {
     }
   });
 
-  // 4. 🎰 웹 슬롯머신 게임 API (스냅샷 및 로그 지원)
+  // 4. 🎰 웹 슬롯머신 게임 API
   app.post('/api/game/slot', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -403,9 +349,6 @@ function startWebServer(client) {
       if (userCash < betAmount) {
         return res.status(400).json({ success: false, error: `보유 현금이 부족합니다! (필요: ${formatMoney(betAmount)}, 보유: ${formatMoney(userCash)})` });
       }
-
-      const { turns, maxTurns } = calculateUserTurns(userData);
-      const remainingTurns = Math.max(0, turns - 1);
 
       const SYMBOLS = ['🍒', '🍋', '🍇', '🔔', '7️⃣', '💎'];
       const reel1 = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
@@ -440,8 +383,8 @@ function startWebServer(client) {
       const balanceAfter = userCash + profit;
 
       await pool.query(
-        'UPDATE users SET cash = ?, gamble_turns = ?, last_turn_update = NOW() WHERE discord_id = ?',
-        [balanceAfter.toString(), remainingTurns, session.id]
+        'UPDATE users SET cash = ? WHERE discord_id = ?',
+        [balanceAfter.toString(), session.id]
       );
 
       const [insertRes] = await pool.query(`
@@ -464,8 +407,6 @@ function startWebServer(client) {
         profit: profit.toString(),
         newCash: balanceAfter.toString(),
         balanceBefore: balanceBefore.toString(),
-        turns: remainingTurns,
-        maxTurns,
         message: resultText
       });
     } catch (err) {
@@ -475,7 +416,7 @@ function startWebServer(client) {
     }
   });
 
-  // 5. 🪙 웹 동전 던지기 게임 API (스냅샷 및 로그 지원)
+  // 5. 🪙 웹 동전 던지기 게임 API
   app.post('/api/game/coinflip', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -500,9 +441,6 @@ function startWebServer(client) {
       if (betAmount < 1000n) return res.status(400).json({ success: false, error: '최소 배팅금액은 1,000원입니다.' });
       if (userCash < betAmount) return res.status(400).json({ success: false, error: '보유 현금이 부족합니다.' });
 
-      const { turns, maxTurns } = calculateUserTurns(userData);
-      const remainingTurns = Math.max(0, turns - 1);
-
       const outcomes = ['앞면', '뒷면'];
       const result = outcomes[Math.floor(Math.random() * outcomes.length)];
       const isWin = (choice === result);
@@ -514,8 +452,8 @@ function startWebServer(client) {
       const balanceAfter = userCash + profit;
 
       await pool.query(
-        'UPDATE users SET cash = ?, gamble_turns = ?, last_turn_update = NOW() WHERE discord_id = ?',
-        [balanceAfter.toString(), remainingTurns, session.id]
+        'UPDATE users SET cash = ? WHERE discord_id = ?',
+        [balanceAfter.toString(), session.id]
       );
 
       const [insertRes] = await pool.query(`
@@ -537,8 +475,6 @@ function startWebServer(client) {
         profit: profit.toString(),
         newCash: balanceAfter.toString(),
         balanceBefore: balanceBefore.toString(),
-        turns: remainingTurns,
-        maxTurns,
         message: isWin ? `🎉 적중! 동전 결과는 [${result}] 입니다 (+${formatMoney(profit)})` : `💀 실패! 동전 결과는 [${result}] 입니다 (-${formatMoney(betAmount)})`
       });
     } catch (err) {
@@ -548,7 +484,7 @@ function startWebServer(client) {
     }
   });
 
-  // 6. 🎲 웹 주사위 대결 API (스냅샷 및 로그 지원)
+  // 6. 🎲 웹 주사위 대결 API
   app.post('/api/game/dice', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -572,9 +508,6 @@ function startWebServer(client) {
 
       if (betAmount < 1000n) return res.status(400).json({ success: false, error: '최소 배팅금액은 1,000원입니다.' });
       if (userCash < betAmount) return res.status(400).json({ success: false, error: '보유 현금이 부족합니다.' });
-
-      const { turns, maxTurns } = calculateUserTurns(userData);
-      const remainingTurns = Math.max(0, turns - 1);
 
       const userDice1 = Math.floor(Math.random() * 6) + 1;
       const userDice2 = Math.floor(Math.random() * 6) + 1;
@@ -600,8 +533,8 @@ function startWebServer(client) {
       const balanceAfter = userCash + profit;
 
       await pool.query(
-        'UPDATE users SET cash = ?, gamble_turns = ?, last_turn_update = NOW() WHERE discord_id = ?',
-        [balanceAfter.toString(), remainingTurns, session.id]
+        'UPDATE users SET cash = ? WHERE discord_id = ?',
+        [balanceAfter.toString(), session.id]
       );
 
       const [insertRes] = await pool.query(`
@@ -624,8 +557,6 @@ function startWebServer(client) {
         profit: profit.toString(),
         newCash: balanceAfter.toString(),
         balanceBefore: balanceBefore.toString(),
-        turns: remainingTurns,
-        maxTurns,
         message: resultText
       });
     } catch (err) {
@@ -662,13 +593,10 @@ function startWebServer(client) {
 
       const beforeCash = BigInt(userData.cash || 0);
       const newCash = beforeCash + BigInt(totalReward);
-      const bonusTurns = 15;
-      const { turns, maxTurns } = calculateUserTurns(userData);
-      const newTurns = Math.min(maxTurns, turns + bonusTurns);
 
       await pool.query(
-        'UPDATE users SET cash = ?, gamble_turns = ?, last_daily = NOW(), daily_streak = ? WHERE discord_id = ?',
-        [newCash.toString(), newTurns, streak, session.id]
+        'UPDATE users SET cash = ?, last_daily = NOW(), daily_streak = ? WHERE discord_id = ?',
+        [newCash.toString(), streak, session.id]
       );
 
       // 경제 활동 로그 기록
@@ -684,8 +612,7 @@ function startWebServer(client) {
         reward: totalReward,
         streak,
         newCash: newCash.toString(),
-        turns: newTurns,
-        message: `🎉 출석체크 성공! +${formatMoney(totalReward)} 및 ⚡도박 턴 +15개 지급 완료!`
+        message: `🎉 출석체크 성공! +${formatMoney(totalReward)} 지급 완료!`
       });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -708,10 +635,8 @@ function startWebServer(client) {
 
       const subsidyAmount = 50000;
       const newCash = userCash + BigInt(subsidyAmount);
-      const { turns, maxTurns } = calculateUserTurns(userData);
-      const newTurns = Math.min(maxTurns, turns + 10);
 
-      await pool.query('UPDATE users SET cash = ?, gamble_turns = ?, last_subsidy = NOW() WHERE discord_id = ?', [newCash.toString(), newTurns, session.id]);
+      await pool.query('UPDATE users SET cash = ?, last_subsidy = NOW() WHERE discord_id = ?', [newCash.toString(), session.id]);
 
       try {
         await pool.query(`
@@ -724,8 +649,7 @@ function startWebServer(client) {
         success: true,
         subsidyAmount,
         newCash: newCash.toString(),
-        turns: newTurns,
-        message: `🏛️ 정부 긴급 기본소득 +${formatMoney(subsidyAmount)} 및 ⚡도박 턴 +10개 지급 완료!`
+        message: `🏛️ 정부 긴급 기본소득 +${formatMoney(subsidyAmount)} 지급 완료!`
       });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -958,8 +882,13 @@ function startWebServer(client) {
     }
   });
 
-  // 13. ⚡ [통합 라이브 피드 & 모든 로그 실시간 스트림 API]
+  // 13. ⚡ [통합 라이브 피드 & 모든 로그 실시간 스트림 API] (관리자 전용)
   app.get('/api/system/activity-feed', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) {
+      return res.status(403).json({ success: false, error: '관리자만 열람할 수 있는 시스템 로그입니다.' });
+    }
+
     const { type = 'ALL', search = '', limit = 50 } = req.query;
     const maxLimit = Math.min(parseInt(limit, 10) || 50, 100);
 
@@ -1230,7 +1159,6 @@ function startWebServer(client) {
           currentUser = JSON.parse(req.cookies.discord_user);
           isAdminUser = config.isAdmin(currentUser.id);
           const userData = await getOrCreateUser(currentUser.id, currentUser.username, currentUser.avatar);
-          userTurnsInfo = calculateUserTurns(userData);
 
           const [stocksRows] = await pool.query(`
             SELECT us.amount, s.price
@@ -1254,7 +1182,6 @@ function startWebServer(client) {
             stockVal,
             netWorth,
             streak: userData.daily_streak || 0,
-            turns: userTurnsInfo.turns,
             clickerLevel: userData.clicker_level || 1,
             autoLevel: userData.auto_miner_level || 0,
             totalClicks: userData.total_clicks || 0
@@ -1418,7 +1345,6 @@ function startWebServer(client) {
         ? `
           <div class="nav-profile-group">
             ${adminNavButton}
-            <div class="turn-badge-nav">⚡ <span id="nav-turns">${userTurnsInfo.turns}</span>/50</div>
             <img src="${currentUser.avatar}" class="nav-avatar-img" alt="Avatar" onError="this.src='https://cdn.discordapp.com/embed/avatars/0.png';">
             <span class="nav-username-text">@${currentUser.username} ${isAdminUser ? '<span class="admin-tag">👑</span>' : ''}</span>
             <a href="/auth/logout" class="btn-logout">🚪 로그아웃</a>
@@ -1431,7 +1357,7 @@ function startWebServer(client) {
           <div class="hero logged-in-hero">
             <div class="status-badge logged-in-badge">🟢 Discord 인증 완료 (@${currentUser.username}) ${isAdminUser ? '👑 관리자' : ''}</div>
             <h1>👋 환영합니다, @${currentUser.username}님!</h1>
-            <p>실시간 <b>상세 주식 차트, 골드 채굴 클리커, 도박 턴 시스템, 실시간 증시 속보</b>를 웹에서 직접 이용하세요.</p>
+            <p>실시간 <b>상세 주식 차트, 커뮤니티 기업 생태계, 골드 채굴 클리커, 웹 카지노, 증시 속보</b>를 웹에서 직접 이용하세요.</p>
             
             <div class="personal-asset-grid">
               <div class="asset-card">
@@ -1443,8 +1369,8 @@ function startWebServer(client) {
                 <span class="asset-val" id="my-bank">${formatMoney(userAssets.bank)}</span>
               </div>
               <div class="asset-card">
-                <span class="asset-lbl">⚡ 도박 남은 턴</span>
-                <span class="asset-val" id="my-turns" style="color: #fbbf24;">${userAssets.turns} / 50</span>
+                <span class="asset-lbl">📈 보유 주식 평가액</span>
+                <span class="asset-val" id="my-stock-val" style="color: #38bdf8;">${formatMoney(userAssets.stockVal)}</span>
               </div>
               <div class="asset-card highlight">
                 <span class="asset-lbl">💎 총 순자산</span>
@@ -1453,11 +1379,11 @@ function startWebServer(client) {
             </div>
             
             <div class="hero-quick-actions">
-              <button class="btn-quick" onclick="claimDailyReward()">🎁 출석체크 (+15턴)</button>
+              <button class="btn-quick" onclick="claimDailyReward()">🎁 출석체크 (+보너스)</button>
               <button class="btn-quick" onclick="claimSubsidyReward()">🏛️ 기본소득 지원금</button>
               <button class="btn-quick" onclick="openBankModal()">🏦 은행 입출금</button>
               <button class="btn-quick" style="background: rgba(99, 102, 241, 0.3); border-color: #818cf8;" onclick="switchTab('tab-clicker')">⛏️ 클리커 채굴</button>
-              <button class="btn-quick" style="background: rgba(245, 158, 11, 0.2); border-color: #fbbf24; color: #fbbf24;" onclick="switchTab('tab-feed')">⚡ 실시간 모든 로그</button>
+              ${isAdminUser ? '<button class="btn-quick" style="background: rgba(245, 158, 11, 0.2); border-color: #fbbf24; color: #fbbf24;" onclick="switchTab(\'tab-feed\')">⚡ 실시간 모든 로그 (관리자)</button>' : ''}
             </div>
           </div>
         `
@@ -1465,7 +1391,7 @@ function startWebServer(client) {
           <div class="hero">
             <div class="status-badge logged-out-badge">🔴 미인증 상태 (로그인 필요)</div>
             <h1>실시간 디스코드 주식 차트 & 클리커 & 카지노</h1>
-            <p>디스코드 계정으로 로그인하면 웹에서 실시간으로 <b>종목별 상세 차트 분석, 골드 채굴 클리커, 도박 턴 충전, 증시 공시 속보</b>를 바로 이용할 수 있습니다.</p>
+            <p>디스코드 계정으로 로그인하면 웹에서 실시간으로 <b>종목별 상세 차트 분석, 골드 채굴 클리커, 웹 카지노, 증시 공시 속보</b>를 바로 이용할 수 있습니다.</p>
             <a href="${discordLoginUrl}" class="btn-discord btn-hero">
               ⚡ Discord 계정으로 로그인하고 시작하기
             </a>
@@ -2119,11 +2045,11 @@ function startWebServer(client) {
             <!-- 탭 네비게이션 -->
             <div class="tabs-nav">
               <button class="tab-btn active" onclick="switchTab('tab-stocks')">📈 주식 시장 & 차트</button>
-              <button class="tab-btn" onclick="switchTab('tab-feed')">⚡ 실시간 모든 로그 (라이브)</button>
               <button class="tab-btn" onclick="switchTab('tab-news')">📰 시장 뉴스 & 경제 공시</button>
               <button class="tab-btn" onclick="switchTab('tab-clicker')">⛏️ 골드 채굴 & 클리커</button>
               <button class="tab-btn" onclick="switchTab('tab-casino')">🎰 웹 카지노 & 도박</button>
               <button class="tab-btn" onclick="switchTab('tab-ranking')">🏆 자산가 순위표</button>
+              ${isAdminUser ? '<button class="tab-btn" style="border-color: rgba(245, 158, 11, 0.4); color: #fbbf24;" onclick="switchTab(\'tab-feed\')">⚡ 실시간 모든 로그 (관리자)</button>' : ''}
             </div>
 
             <!-- 탭 1: 주식 시장 & 차트 -->
@@ -2156,13 +2082,14 @@ function startWebServer(client) {
               </div>
             </div>
 
-            <!-- 탭 2: ⚡ 실시간 모든 로그 (주가 변동, 거래 체결, 도박, 경제) 라이브 스트림 -->
+            ${isAdminUser ? `
+            <!-- 탭: ⚡ 실시간 모든 로그 (관리자 전용) -->
             <div id="tab-feed" class="tab-pane">
               <div class="feed-container">
                 <div class="feed-header">
                   <div class="feed-title">
                     <span class="pulse-dot"></span>
-                    ⚡ 실시간 모든 시스템 로그 & 주가 변동 스트림
+                    ⚡ 실시간 모든 시스템 로그 & 주가 변동 스트림 (관리자 전용)
                   </div>
                   <div class="feed-status-badge">
                     <span class="pulse-dot"></span>
@@ -2187,8 +2114,9 @@ function startWebServer(client) {
                 </div>
               </div>
             </div>
+            ` : ''}
 
-            <!-- 탭 3: 📰 시장 뉴스 & 경제 공시 허브 -->
+            <!-- 탭 2: 📰 시장 뉴스 & 경제 공시 허브 -->
             <div id="tab-news" class="tab-pane">
               <div class="news-control-bar">
                 <div class="news-search-box">
@@ -2212,14 +2140,14 @@ function startWebServer(client) {
               </div>
             </div>
 
-            <!-- 탭 4: ⛏️ 골드 채굴 클리커 게임 & 턴 상점 -->
+            <!-- 탭 3: ⛏️ 골드 채굴 클리커 게임 -->
             <div id="tab-clicker" class="tab-pane">
               <div class="clicker-container">
                 
                 <!-- 클리커 채굴 영역 -->
                 <div class="clicker-box" id="clicker-zone">
-                  <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.4rem; font-weight: 800; color: #fbbf24; margin-bottom: 4px;">⛏️ 골드 & 턴 마이닝 클리커</h2>
-                  <p style="color: #9ca3af; font-size: 0.85rem; margin-bottom: 12px;">보석을 마구 클릭하여 현금을 채굴하고 ⚡도박 턴을 획득하세요!</p>
+                  <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.4rem; font-weight: 800; color: #fbbf24; margin-bottom: 4px;">⛏️ 골드 마이닝 클리커</h2>
+                  <p style="color: #9ca3af; font-size: 0.85rem; margin-bottom: 12px;">보석을 마구 클릭하여 현금을 채굴하세요!</p>
 
                   <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); padding: 12px; border-radius: 14px; margin-bottom: 16px; display: flex; justify-content: space-around;">
                     <div>
@@ -2227,8 +2155,8 @@ function startWebServer(client) {
                       <b id="clicker-power-val" style="color: #34d399; font-size: 1.1rem; font-family: 'Outfit', sans-serif;">+100원</b>
                     </div>
                     <div>
-                      <span style="font-size: 0.75rem; color: #9ca3af; display: block;">남은 도박 턴</span>
-                      <b id="clicker-turns-val" style="color: #fbbf24; font-size: 1.1rem; font-family: 'Outfit', sans-serif;">${userTurnsInfo.turns} / 50</b>
+                      <span style="font-size: 0.75rem; color: #9ca3af; display: block;">누적 클릭수</span>
+                      <b id="clicker-clicks-val" style="color: #fbbf24; font-size: 1.1rem; font-family: 'Outfit', sans-serif;">${userAssets ? userAssets.totalClicks : 0}회</b>
                     </div>
                     <div>
                       <span style="font-size: 0.75rem; color: #9ca3af; display: block;">자동 초당 채굴</span>
@@ -2239,13 +2167,13 @@ function startWebServer(client) {
                   <div class="big-click-gem" id="gem-clicker" onclick="handleClickMining(event)">💎</div>
                   
                   <div style="font-size: 0.85rem; font-weight: 600; color: #cbd5e1; margin-top: 10px;" id="click-feedback-msg">
-                    광석을 클릭하면 15% 확률로 5배 크리티컬 및 도박 턴이 드랍됩니다!
+                    광석을 클릭하면 15% 확률로 5배 크리티컬 대박이 터집니다!
                   </div>
                 </div>
 
                 <!-- 업그레이드 상점 -->
                 <div class="shop-box">
-                  <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 800; color: #e0e7ff; margin-bottom: 16px;">🛒 채굴기 & 턴 업그레이드 상점</h3>
+                  <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.25rem; font-weight: 800; color: #e0e7ff; margin-bottom: 16px;">🛒 채굴기 업그레이드 상점</h3>
 
                   <div class="shop-item">
                     <div class="shop-item-info">
@@ -2262,20 +2190,12 @@ function startWebServer(client) {
                     </div>
                     <button class="btn-upgrade" onclick="buyUpgrade('auto')"><span id="shop-auto-cost">30,000원</span> 구매</button>
                   </div>
-
-                  <div class="shop-item">
-                    <div class="shop-item-info">
-                      <h4>⚡ 도박 턴 +25개 긴급 충전팩</h4>
-                      <p>즉시 도박 턴 25개를 즉시 충전합니다</p>
-                    </div>
-                    <button class="btn-upgrade" style="background: linear-gradient(135deg, #f59e0b, #d97706);" onclick="buyUpgrade('recharge')">20,000원 충전</button>
-                  </div>
                 </div>
 
               </div>
             </div>
 
-            <!-- 탭 5: 웹 카지노 & 도박 -->
+            <!-- 탭 4: 웹 카지노 & 도박 -->
             <div id="tab-casino" class="tab-pane">
               <div class="casino-hub-grid">
                 
@@ -2752,9 +2672,9 @@ function startWebServer(client) {
                 const data = await res.json();
                 if (data.success) {
                   updateUserCashDisplay(data.newCash);
-                  updateUserTurnsDisplay(data.turns, data.maxTurns);
-                  if (data.bonusTurns > 0) {
-                    showToast('warn', '⚡ 도박 턴 드랍!', '광석 채굴 중 도박 턴 +' + data.bonusTurns + '개를 획득했습니다!');
+                  const clicksValElem = document.getElementById('clicker-clicks-val');
+                  if (clicksValElem && data.totalClicks) {
+                    clicksValElem.innerText = Number(data.totalClicks).toLocaleString() + '회';
                   }
                 }
               } catch (e) {}
@@ -2783,9 +2703,6 @@ function startWebServer(client) {
                   document.getElementById('clicker-auto-val').innerText = '+' + (data.autoLevel * 300).toLocaleString() + '원/s';
                   document.getElementById('shop-auto-lv').innerText = data.autoLevel;
                   document.getElementById('shop-auto-cost').innerText = ((data.autoLevel + 1) * 30000).toLocaleString() + '원';
-                }
-                if (data.turns) {
-                  updateUserTurnsDisplay(data.turns, 50);
                 }
               } catch (e) { showToast('error', '통신 오류', '서버와 연결할 수 없습니다.'); }
             }
@@ -2932,7 +2849,6 @@ function startWebServer(client) {
                   resultBox.innerText = data.message;
                   resultBox.style.color = data.isWin ? '#34d399' : '#f87171';
                   updateUserCashDisplay(data.newCash);
-                  updateUserTurnsDisplay(data.turns, data.maxTurns);
                   showToast(data.isWin ? 'success' : 'info', '🎰 슬롯머신 결과', data.message);
                 }, 1000);
               } catch (e) {
@@ -2984,7 +2900,6 @@ function startWebServer(client) {
                   resultBox.innerText = data.message;
                   resultBox.style.color = data.isWin ? '#34d399' : '#f87171';
                   updateUserCashDisplay(data.newCash);
-                  updateUserTurnsDisplay(data.turns, data.maxTurns);
                   showToast(data.isWin ? 'success' : 'info', '🪙 동전 결과', data.message);
                 }, 900);
               } catch (e) {
@@ -3036,7 +2951,6 @@ function startWebServer(client) {
                   resultBox.innerText = data.message;
                   resultBox.style.color = data.isWin ? '#34d399' : (data.isTie ? '#fbbf24' : '#f87171');
                   updateUserCashDisplay(data.newCash);
-                  updateUserTurnsDisplay(data.turns, data.maxTurns);
                   showToast(data.isWin ? 'success' : (data.isTie ? 'warn' : 'info'), '🎲 주사위 결과', data.message);
                 }, 800);
               } catch (e) {
@@ -3058,7 +2972,6 @@ function startWebServer(client) {
                 }
                 showToast('success', '🎁 출석 보상 완료', data.message);
                 updateUserCashDisplay(data.newCash);
-                if (data.turns) updateUserTurnsDisplay(data.turns, 50);
               } catch (e) { showToast('error', '통신 오류', '출석체크 서버 연결 실패'); }
             }
 
@@ -3072,7 +2985,6 @@ function startWebServer(client) {
                 }
                 showToast('success', '🏛️ 기본소득 지급 완료', data.message);
                 updateUserCashDisplay(data.newCash);
-                if (data.turns) updateUserTurnsDisplay(data.turns, 50);
               } catch (e) { showToast('error', '통신 오류', '지원금 신청 서버 연결 실패'); }
             }
 
@@ -3170,14 +3082,6 @@ function startWebServer(client) {
                 cashElem.style.color = '#34d399';
                 setTimeout(() => { cashElem.style.color = '#fff'; }, 1000);
               }
-            }
-
-            function updateUserTurnsDisplay(turnsVal, maxVal) {
-              const max = maxVal || 50;
-              const turnsElems = [document.getElementById('my-turns'), document.getElementById('clicker-turns-val'), document.getElementById('nav-turns')];
-              turnsElems.forEach(el => {
-                if (el) el.innerText = (el.id === 'nav-turns') ? turnsVal : (turnsVal + ' / ' + max);
-              });
             }
           </script>
         </body>
