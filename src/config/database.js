@@ -149,21 +149,21 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // 기본 주식 종목 초기화 시드 (현실적인 실시간 주가 시세 기준)
+    // 기본 주식 종목 초기화 시드 (가상 패러디 명칭 적용)
     const defaultStocks = [
-      { stock_id: 'BTC', name: '비트코인 (가상자산)', price: 82193159, prev_price: 93839069, volatility: 0.08 },
-      { stock_id: 'ETH', name: '이더리움 (가상자산)', price: 5767959, prev_price: 5575796, volatility: 0.06 },
-      { stock_id: 'AAPL', name: '애플 (빅테크)', price: 248149, prev_price: 257958, volatility: 0.03 },
-      { stock_id: 'NVDA', name: '엔비디아 (AI)', price: 211105, prev_price: 211657, volatility: 0.04 },
-      { stock_id: 'SAM', name: '삼성전자 (반도체)', price: 90418, prev_price: 92922, volatility: 0.03 },
-      { stock_id: 'BIO', name: 'K-바이오 (제약)', price: 36354, prev_price: 39427, volatility: 0.05 }
+      { stock_id: 'BTC', name: '디스코인 (가상자산)', price: 82193159, prev_price: 93839069, volatility: 0.08 },
+      { stock_id: 'ETH', name: '에테르코인 (가상자산)', price: 5767959, prev_price: 5575796, volatility: 0.06 },
+      { stock_id: 'AAPL', name: '사과전자 (빅테크)', price: 248149, prev_price: 257958, volatility: 0.03 },
+      { stock_id: 'NVDA', name: '엔비칩스 (AI반도체)', price: 211105, prev_price: 211657, volatility: 0.04 },
+      { stock_id: 'SAM', name: '삼송전자 (전자/반도체)', price: 90418, prev_price: 92922, volatility: 0.03 },
+      { stock_id: 'BIO', name: '알약바이오 (제약/바이오)', price: 36354, prev_price: 39427, volatility: 0.05 }
     ];
 
     for (const stock of defaultStocks) {
       await connection.query(`
         INSERT INTO stocks (stock_id, name, price, prev_price, volatility)
         VALUES (?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE name=VALUES(name), price=VALUES(price), prev_price=VALUES(prev_price), volatility=VALUES(volatility);
+        ON DUPLICATE KEY UPDATE name=VALUES(name), volatility=VALUES(volatility);
       `, [stock.stock_id, stock.name, stock.price, stock.prev_price, stock.volatility]);
     }
 
