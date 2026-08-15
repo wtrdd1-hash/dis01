@@ -14,17 +14,54 @@ function createEconomyRoutes(getSessionUser) {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: '로그인이 필요합니다.' });
 
-    const clicks = Math.min(Math.max(parseInt(req.body.clicks, 10) || 1, 1), 20);
-    const userData = await getOrCreateUser(session.id, session.username, session.avatar);
-    const clickerLevel = userData.clicker_level || 1;
-    const earned = BigInt(clicks * (10 + (clickerLevel - 1) * 15));
-    const newCash = BigInt(userData.cash || 0) + earned;
+    // 프론트는 { count }를 보내고 있었는데 기존 코드는 req.body.clicks만 읽어서
+    // 연타 배치가 항상 1클릭으로 처리되는 문제가 있었다. 두 이름 모두 호환한다.
+    const rawClicks = req.body?.count ?? req.body?.clicks;
+    const clicks = Math.min(Math.max(parseInt(rawClicks, 10) || 1, 1), 200);
 
-    await pool.query('UPDATE users SET cash = ?, total_clicks = total_clicks + ? WHERE discord_id = ?', [
-      newCash.toString(), clicks, session.id
-    ]);
+    try {
+      const userData = await getOrCreateUser(session.id, session.username, session.avatar);
+      const clickerLevel = Number(userData.clicker_level || 1);
+      const basePerClick = clickerLevel * 10;
 
-    return res.json({ success: true, earned: earned.toString(), newCash: newCash.toString(), clicks });
+      let earnedCash = 0;
+      let critCount = 0;
+
+      // 화면 설명과 동일하게 클릭마다 10% 확률로 3배 크리티컬 적용
+      for (let i = 0; i < clicks; i++) {
+        const isCrit = Math.random() < 0.10;
+        earnedCash += isCrit ? basePerClick * 3 : basePerClick;
+        if (isCrit) critCount++;
+      }
+
+      // 읽은 cash를 다시 덮어쓰지 않고 DB에서 원자적으로 증가시켜
+      // 빠른 연속 요청/동시 요청에서도 이전 클릭 보상이 사라지지 않게 한다.
+      await pool.query(
+        'UPDATE users SET cash = cash + ?, total_clicks = total_clicks + ? WHERE discord_id = ?',
+        [earnedCash, clicks, session.id]
+      );
+
+      const [rows] = await pool.query(
+        'SELECT cash, total_clicks FROM users WHERE discord_id = ? LIMIT 1',
+        [session.id]
+      );
+
+      if (rows.length === 0) {
+        return res.status(404).json({ success: false, error: '유저 정보를 찾을 수 없습니다.' });
+      }
+
+      return res.json({
+        success: true,
+        clicks,
+        earned: String(earnedCash),
+        earnedCash,
+        critCount,
+        newCash: String(rows[0].cash),
+        totalClicks: String(rows[0].total_clicks)
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // 2. 클리커 레벨 강화
