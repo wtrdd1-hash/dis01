@@ -1,14 +1,16 @@
 const { pool } = require('../config/database');
 
-// 우리 커뮤니티 가상 경제 시황 국면 (Custom Community Economic Regimes)
+// 우리 커뮤니티 가상 경제 시황 국면 (Custom Community Economic Regimes - 상승 & 하락 사이클 보장)
 const MARKET_REGIMES = [
   { name: '🦆 월덕 경제 번영기 (Duck Prosperity)', drift: 0.03, volatilityFactor: 1.0, desc: '서버 커뮤니티 활동과 채굴, 카지노 이용이 활발해지며 전 종목 매수세가 우세합니다.' },
-  { name: '📉 가상 시장 조정기 (Market Cooldown)', drift: -0.02, volatilityFactor: 1.1, desc: '차익 실현 매물 출회와 자산 보수적 운용으로 단기 조정 국면에 진입했습니다.' },
+  { name: '📉 가상 시장 차익실현 조정기 (Market Cooldown)', drift: -0.035, volatilityFactor: 1.2, desc: '단기 급등에 따른 차익 실현 매물 출회로 전반적인 숨고르기 조정 국면에 진입했습니다.' },
   { name: '⚖️ 안정적 박스권 횡보 (Stable Sideways)', drift: 0.00, volatilityFactor: 0.7, desc: '예금과 실물 소비가 균형을 이루며 주가가 안정적인 가격대를 형성하고 있습니다.' },
-  { name: '🔥 카지노 & 광산 대박 랠리 (Jackpot Boom)', drift: 0.04, volatilityFactor: 1.4, desc: '광산에서 초희귀 원석이 대량 출토되고 카지노 잭팟 열풍으로 투기적 매수세가 폭발합니다.' },
-  { name: '🚀 냥코 양자 퀀텀 폭등 (Neko Quantum Surge)', drift: 0.05, volatilityFactor: 1.6, desc: '네코 랩스의 신비한 고양이 에너지 기술 발표로 첨단 테마주들이 폭등세를 주도합니다.' },
+  { name: '🔥 카지노 & 광산 대박 랠리 (Jackpot Boom)', drift: 0.05, volatilityFactor: 1.4, desc: '광산에서 초희귀 원석이 대량 출토되고 카지노 잭팟 열풍으로 투기적 매수세가 폭발합니다.' },
+  { name: '❄️ 시장 긴축 & 매물 소화기 (Market Tightening)', drift: -0.04, volatilityFactor: 1.3, desc: '중앙은행의 건전성 정책과 현금 확보 심리로 주가가 일시적 하락세를 보입니다.' },
+  { name: '🚀 냥코 양자 퀀텀 폭등 (Neko Quantum Surge)', drift: 0.06, volatilityFactor: 1.6, desc: '네코 랩스의 신비한 고양이 에너지 기술 발표로 첨단 테마주들이 폭등세를 주도합니다.' },
+  { name: '⚠️ 경기 침체 우려 & 저가 매수 구간 (Recession Fear)', drift: -0.045, volatilityFactor: 1.5, desc: '투자 심리 위축으로 급락세가 나타나며 스마트 머니의 저가 분할매수 기회가 열립니다.' },
   { name: '🏦 중앙은행 유동성 무제한 살포 (Bank Liquidity)', drift: 0.04, volatilityFactor: 1.2, desc: '덕스 중앙은행의 지원금 확대와 예금 금리 우대로 풍부한 유동성이 증시로 유입됩니다.' },
-  { name: '🌟 메가 서포터즈 슈퍼사이클 (Mega Supercycle)', drift: 0.06, volatilityFactor: 1.8, desc: '전 세계 디스코드 유저 유입과 대형 기관 투자가 몰리며 전 종목 역사적 신고가를 돌파합니다.' }
+  { name: '🌟 메가 서포터즈 슈퍼사이클 (Mega Supercycle)', drift: 0.07, volatilityFactor: 1.8, desc: '전 세계 디스코드 유저 유입과 대형 기관 투자가 몰리며 전 종목 역사적 신고가를 돌파합니다.' }
 ];
 
 // 120가지 이상의 독창적인 가상 커뮤니티 기업 뉴스 & 경제 공시 풀
