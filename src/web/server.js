@@ -5233,6 +5233,81 @@ function startWebServer(client) {
             <a href="/api/admin/logs/access" target="_blank" class="btn-json">📥 웹 접속 JSON 로그</a>
             <a href="/api/admin/logs/commands" target="_blank" class="btn-json">🤖 디스코드 명령어 JSON 로그</a>
             <a href="/api/admin/inquiries" target="_blank" class="btn-json">📩 1:1 고객센터 문의 JSON</a>
+            <a href="/api/admin/security" target="_blank" class="btn-json">🛡️ 보안 & 차단 현황 JSON</a>
+          </div>
+
+          <!-- 👑 관리자 실시간 명령어 제어 센터 (Web Command Console) -->
+          <div class="card" style="border: 1px solid rgba(251, 191, 36, 0.4); background: rgba(17, 24, 39, 0.9);">
+            <h2 style="color: #fbbf24;">👑 관리자 실시간 명령 컨트롤 센터 (Web Console)</h2>
+            <p style="font-size: 0.85rem; color: #9ca3af; margin-bottom: 18px;">디스코드 명령어(/admin_give, /admin_take, /admin_stock, /admin_reset, /아이피)를 웹에서 직접 실행합니다.</p>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px;">
+              <!-- 1. 유저 돈 지급 / 회수 -->
+              <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
+                <h3 style="font-size: 1rem; color: #34d399; margin-bottom: 12px;">💰 유저 자산 지급 & 회수</h3>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <input type="text" id="cmd-user-id" placeholder="유저 Discord ID (예: 889085646768078850)" style="background: #111827; border: 1px solid var(--border); color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem;">
+                  <input type="number" id="cmd-amount" placeholder="금액 (원 단위)" style="background: #111827; border: 1px solid var(--border); color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem;">
+                  <input type="text" id="cmd-reason" placeholder="사유 (예: 이벤트 당첨, 버그 보상)" style="background: #111827; border: 1px solid var(--border); color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem;">
+                  <div style="display: flex; gap: 8px; margin-top: 4px;">
+                    <button onclick="execGiveMoney()" style="flex: 1; background: #10b981; border: none; color: #fff; font-weight: 700; padding: 8px; border-radius: 6px; cursor: pointer;">➕ 돈 지급</button>
+                    <button onclick="execTakeMoney()" style="flex: 1; background: #ef4444; border: none; color: #fff; font-weight: 700; padding: 8px; border-radius: 6px; cursor: pointer;">➖ 돈 회수</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 2. 주가 강제 조작 & 국면 변경 -->
+              <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
+                <h3 style="font-size: 1rem; color: #38bdf8; margin-bottom: 12px;">📈 주식 시세 & 시장 국면 조작</h3>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <div style="display: flex; gap: 8px;">
+                    <select id="cmd-stock-id" style="flex: 1; background: #111827; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 6px; font-size: 0.85rem;">
+                      <option value="WTRD">WTRD - 월덕 인터내셔널</option>
+                      <option value="MINE">MINE - 월덕 광업 & 제련</option>
+                      <option value="CASN">CASN - 황금오리 카지노</option>
+                      <option value="BANK">BANK - 덕스 중앙은행</option>
+                      <option value="NEKO">NEKO - 네코 에너지</option>
+                      <option value="CHKN">CHKN - 황금닭 치킨</option>
+                      <option value="SLOT">SLOT - 럭키세븐 복권 (입문주)</option>
+                      <option value="SCRP">SCRP - 이지스크랩 테크</option>
+                    </select>
+                    <input type="number" id="cmd-stock-price" placeholder="새 주가(원)" style="flex: 1; background: #111827; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 6px; font-size: 0.85rem;">
+                  </div>
+                  <button onclick="execSetStockPrice()" style="background: #0ea5e9; border: none; color: #fff; font-weight: 700; padding: 8px; border-radius: 6px; cursor: pointer;">📊 주가 즉시 변경 & SSE 알림</button>
+                  <div style="display: flex; gap: 8px; margin-top: 6px;">
+                    <select id="cmd-regime-idx" style="flex: 1; background: #111827; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 6px; font-size: 0.85rem;">
+                      <option value="0">🦆 번영기 (상승 우세)</option>
+                      <option value="1">📉 시장 조정기 (하락 완화)</option>
+                      <option value="2">⚖️ 박스권 횡보 (안정)</option>
+                      <option value="3">🔥 카지노/광산 잭팟 랠리</option>
+                      <option value="4">🚀 냥코 양자 폭등</option>
+                      <option value="5">🏦 중앙은행 유동성 살포</option>
+                      <option value="6">🌟 슈퍼사이클 (대호황)</option>
+                    </select>
+                    <button onclick="execSetRegime()" style="background: #8b5cf6; border: none; color: #fff; font-weight: 700; padding: 8px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap;">국면 전환</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 3. IP 차단 / 해제 & 유저 초기화 -->
+              <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
+                <h3 style="font-size: 1rem; color: #f87171; margin-bottom: 12px;">🛡️ 보안 IP 관리 & 유저 초기화</h3>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <div style="display: flex; gap: 8px;">
+                    <input type="text" id="cmd-ip-addr" placeholder="IP 주소 (예: 23.234.116.83)" style="flex: 1; background: #111827; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 6px; font-size: 0.85rem;">
+                    <input type="number" id="cmd-ip-mins" placeholder="차단(분)" value="1440" style="width: 80px; background: #111827; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 6px; font-size: 0.85rem;">
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                    <button onclick="execBanIp()" style="flex: 1; background: #dc2626; border: none; color: #fff; font-weight: 700; padding: 8px; border-radius: 6px; cursor: pointer;">🔴 IP 수동 차단</button>
+                    <button onclick="execUnbanIp()" style="flex: 1; background: #4b5563; border: none; color: #fff; font-weight: 700; padding: 8px; border-radius: 6px; cursor: pointer;">🟢 IP 차단 해제</button>
+                  </div>
+                  <div style="border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px; display: flex; gap: 8px;">
+                    <input type="text" id="cmd-reset-user-id" placeholder="초기화할 유저 ID" style="flex: 1; background: #111827; border: 1px solid var(--border); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 0.8rem;">
+                    <button onclick="execResetUser()" style="background: #991b1b; border: none; color: #fff; font-weight: 700; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">⚠️ 유저 초기화</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 📩 1:1 고객센터 문의 & 유저 답변 관리 카드 -->
@@ -5405,6 +5480,110 @@ function startWebServer(client) {
               } catch (e) {
                 alert('서버 통신 실패');
               }
+            }
+
+            // 👑 웹 관리자 명령어 AJAX 함수들
+            async function execGiveMoney() {
+              const userId = document.getElementById('cmd-user-id').value.trim();
+              const amount = document.getElementById('cmd-amount').value.trim();
+              const reason = document.getElementById('cmd-reason').value.trim();
+              if (!userId || !amount) return alert('유저 ID와 금액을 입력하세요.');
+
+              const res = await fetch('/api/admin/action/give', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, amount, reason })
+              });
+              const data = await res.json();
+              alert(data.message || data.error);
+              if (data.success) location.reload();
+            }
+
+            async function execTakeMoney() {
+              const userId = document.getElementById('cmd-user-id').value.trim();
+              const amount = document.getElementById('cmd-amount').value.trim();
+              const reason = document.getElementById('cmd-reason').value.trim();
+              if (!userId || !amount) return alert('유저 ID와 금액을 입력하세요.');
+
+              const res = await fetch('/api/admin/action/take', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, amount, reason })
+              });
+              const data = await res.json();
+              alert(data.message || data.error);
+              if (data.success) location.reload();
+            }
+
+            async function execResetUser() {
+              const userId = document.getElementById('cmd-reset-user-id').value.trim();
+              if (!userId) return alert('초기화할 유저 Discord ID를 입력하세요.');
+              if (!confirm('정말로 유저(' + userId + ')의 모든 경제/주식/클리커 데이터를 초기화하시겠습니까?')) return;
+
+              const res = await fetch('/api/admin/action/reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId })
+              });
+              const data = await res.json();
+              alert(data.message || data.error);
+              if (data.success) location.reload();
+            }
+
+            async function execSetStockPrice() {
+              const stockId = document.getElementById('cmd-stock-id').value;
+              const price = document.getElementById('cmd-stock-price').value.trim();
+              if (!stockId || !price) return alert('종목과 새 주가를 입력하세요.');
+
+              const res = await fetch('/api/admin/action/stock-price', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stockId, price })
+              });
+              const data = await res.json();
+              alert(data.message || data.error);
+              if (data.success) location.reload();
+            }
+
+            async function execSetRegime() {
+              const regimeIndex = document.getElementById('cmd-regime-idx').value;
+              const res = await fetch('/api/admin/action/market-regime', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ regimeIndex })
+              });
+              const data = await res.json();
+              alert(data.message || data.error);
+              if (data.success) location.reload();
+            }
+
+            async function execBanIp() {
+              const ip = document.getElementById('cmd-ip-addr').value.trim();
+              const durationMinutes = document.getElementById('cmd-ip-mins').value.trim();
+              if (!ip) return alert('차단할 IP를 입력하세요.');
+
+              const res = await fetch('/api/admin/security/ban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip, durationMinutes })
+              });
+              const data = await res.json();
+              alert(data.message || data.error);
+              if (data.success) location.reload();
+            }
+
+            async function execUnbanIp() {
+              const ip = document.getElementById('cmd-ip-addr').value.trim();
+              if (!ip) return alert('차단 해제할 IP를 입력하세요.');
+
+              const res = await fetch('/api/admin/security/unban', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip })
+              });
+              const data = await res.json();
+              alert(data.message || data.error);
+              if (data.success) location.reload();
             }
           </script>
         </body>
@@ -6166,6 +6345,169 @@ function startWebServer(client) {
     if (!ip) return res.status(400).json({ error: 'IP 필요' });
     const ok = unbanIp(ip);
     return res.json({ success: ok, message: ok ? `${ip} 차단 해제` : `${ip}는 차단 목록에 없음` });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 👑 웹 관리자 명령어 실행 API (Discord 관리자 명령어 웹 연동)
+  // ════════════════════════════════════════════════════════════
+
+  // 1. 유저 돈 지급 (/admin_give 웹 버전)
+  app.post('/api/admin/action/give', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) return res.status(403).json({ success: false, error: '관리자 전용' });
+
+    const { userId, amount, reason } = req.body;
+    if (!userId || !amount) return res.status(400).json({ success: false, error: '유저 ID와 금액을 입력하세요.' });
+
+    const parsedAmount = BigInt(amount);
+    if (parsedAmount <= 0n) return res.status(400).json({ success: false, error: '금액은 1원 이상이어야 합니다.' });
+
+    try {
+      const targetUser = await getOrCreateUser(userId);
+      const beforeCash = BigInt(targetUser.cash || 0);
+      const afterCash = beforeCash + parsedAmount;
+
+      await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [afterCash.toString(), userId]);
+
+      // 경제 로그 및 관리자 로그
+      await pool.query(`
+        INSERT INTO economy_logs (user_id, username, type, amount, balance_before, balance_after, description)
+        VALUES (?, ?, 'ADMIN_GIVE', ?, ?, ?, ?)
+      `, [userId, targetUser.username || `유저_${userId.slice(-4)}`, parsedAmount.toString(), beforeCash.toString(), afterCash.toString(), `👑 [웹 관리자 지급] +${formatMoney(parsedAmount)} (사유: ${reason || '관리자 수동 지급'})`]);
+
+      await logAdminAction(session.id, session.username || '관리자', 'WEB_GIVE_MONEY', userId, { amount: parsedAmount.toString(), reason: reason || '관리자 수동 지급' }, req);
+
+      return res.json({ success: true, message: `✅ 유저 <@${userId}>에게 ${formatMoney(parsedAmount)}이 지급되었습니다. (잔액: ${formatMoney(afterCash)})` });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 2. 유저 돈 회수 (/admin_take 웹 버전)
+  app.post('/api/admin/action/take', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) return res.status(403).json({ success: false, error: '관리자 전용' });
+
+    const { userId, amount, reason } = req.body;
+    if (!userId || !amount) return res.status(400).json({ success: false, error: '유저 ID와 금액을 입력하세요.' });
+
+    const parsedAmount = BigInt(amount);
+    if (parsedAmount <= 0n) return res.status(400).json({ success: false, error: '금액은 1원 이상이어야 합니다.' });
+
+    try {
+      const targetUser = await getOrCreateUser(userId);
+      const beforeCash = BigInt(targetUser.cash || 0);
+      const afterCash = beforeCash > parsedAmount ? beforeCash - parsedAmount : 0n;
+
+      await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [afterCash.toString(), userId]);
+
+      // 경제 로그 및 관리자 로그
+      await pool.query(`
+        INSERT INTO economy_logs (user_id, username, type, amount, balance_before, balance_after, description)
+        VALUES (?, ?, 'ADMIN_TAKE', ?, ?, ?, ?)
+      `, [userId, targetUser.username || `유저_${userId.slice(-4)}`, parsedAmount.toString(), beforeCash.toString(), afterCash.toString(), `👑 [웹 관리자 회수] -${formatMoney(parsedAmount)} (사유: ${reason || '관리자 수동 회수'})`]);
+
+      await logAdminAction(session.id, session.username || '관리자', 'WEB_TAKE_MONEY', userId, { amount: parsedAmount.toString(), reason: reason || '관리자 수동 회수' }, req);
+
+      return res.json({ success: true, message: `✅ 유저 <@${userId}>의 자금 ${formatMoney(parsedAmount)}이 회수되었습니다. (잔액: ${formatMoney(afterCash)})` });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 3. 유저 데이터 초기화 (/admin_reset 웹 버전)
+  app.post('/api/admin/action/reset', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) return res.status(403).json({ success: false, error: '관리자 전용' });
+
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ success: false, error: '유저 ID를 입력하세요.' });
+
+    try {
+      await pool.query(`
+        UPDATE users 
+        SET cash = ?, bank = 0, clicker_level = 1, auto_miner_level = 0, total_clicks = 0,
+            daily_streak = 0, last_daily = NULL, last_work = NULL, last_subsidy = NULL
+        WHERE discord_id = ?
+      `, [config.initialBalance || 10000, userId]);
+
+      await pool.query('DELETE FROM user_stocks WHERE user_id = ?', [userId]);
+
+      await logAdminAction(session.id, session.username || '관리자', 'WEB_RESET_USER', userId, {}, req);
+
+      return res.json({ success: true, message: `✅ 유저 <@${userId}>의 모든 경제 데이터가 초기화되었습니다.` });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 4. 주가 강제 조작 (/admin_stock 웹 버전)
+  app.post('/api/admin/action/stock-price', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) return res.status(403).json({ success: false, error: '관리자 전용' });
+
+    const { stockId, price } = req.body;
+    if (!stockId || !price) return res.status(400).json({ success: false, error: '종목 ID와 가격을 입력하세요.' });
+
+    const newPrice = BigInt(price);
+    if (newPrice < 10n) return res.status(400).json({ success: false, error: '주가는 10원 이상이어야 합니다.' });
+
+    try {
+      const [stocks] = await pool.query('SELECT * FROM stocks WHERE stock_id = ?', [stockId]);
+      if (stocks.length === 0) return res.status(404).json({ success: false, error: '존재하지 않는 종목입니다.' });
+
+      const current = stocks[0];
+      const prevPrice = BigInt(current.price);
+      const diff = newPrice - prevPrice;
+      const changeRate = prevPrice > 0n ? ((Number(diff) / Number(prevPrice)) * 100).toFixed(2) : '0.00';
+
+      await pool.query(`
+        UPDATE stocks 
+        SET prev_price = price, price = ?, updated_at = NOW() 
+        WHERE stock_id = ?
+      `, [newPrice.toString(), stockId]);
+
+      await pool.query('INSERT INTO stock_history (stock_id, price) VALUES (?, ?)', [stockId, newPrice.toString()]);
+
+      await pool.query(`
+        INSERT INTO stock_price_logs (stock_id, stock_name, prev_price, new_price, change_rate, diff, regime, reason)
+        VALUES (?, ?, ?, ?, ?, ?, '👑 관리자 수동 조작', '웹 관리자 패널에서 주가 직접 지정')
+      `, [stockId, current.name, prevPrice.toString(), newPrice.toString(), changeRate, diff.toString()]);
+
+      if (typeof global.__invalidateMarketCache === 'function') global.__invalidateMarketCache();
+      if (typeof global.__broadcastMarketUpdate === 'function') setTimeout(global.__broadcastMarketUpdate, 100);
+
+      await logAdminAction(session.id, session.username || '관리자', 'WEB_SET_STOCK_PRICE', stockId, { prevPrice: prevPrice.toString(), newPrice: newPrice.toString() }, req);
+
+      return res.json({ success: true, message: `✅ [${current.name}] 주가가 ${formatMoney(newPrice)}으로 즉시 변경되었습니다.` });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 5. 시장 국면 강제 변경
+  app.post('/api/admin/action/market-regime', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) return res.status(403).json({ success: false, error: '관리자 전용' });
+
+    const { regimeIndex } = req.body;
+    const idx = parseInt(regimeIndex, 10);
+    if (isNaN(idx)) return res.status(400).json({ success: false, error: '국면 인덱스를 지정하세요.' });
+
+    try {
+      const { setMarketRegime, getCurrentMarketRegime } = require('../utils/stockEngine');
+      setMarketRegime(idx);
+
+      if (typeof global.__invalidateMarketCache === 'function') global.__invalidateMarketCache();
+      if (typeof global.__broadcastMarketUpdate === 'function') setTimeout(global.__broadcastMarketUpdate, 100);
+
+      const regime = getCurrentMarketRegime();
+      await logAdminAction(session.id, session.username || '관리자', 'WEB_SET_REGIME', String(idx), { regimeName: regime ? regime.name : '' }, req);
+
+      return res.json({ success: true, message: `✅ 시장 국면이 [${regime ? regime.name : idx}] (으)로 변경 예약되었습니다.` });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
   });
 
   app.listen(PORT, () => {
