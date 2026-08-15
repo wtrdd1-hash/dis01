@@ -3337,8 +3337,9 @@ function startWebServer(client) {
               position: fixed;
               bottom: 24px;
               right: 24px;
-              z-index: 9998;
+              z-index: 999999;
               font-family: 'Inter', sans-serif;
+              pointer-events: auto;
             }
             #btn-floating-chat-toggle {
               background: linear-gradient(135deg, #0284c7, #0369a1);
@@ -3354,6 +3355,7 @@ function startWebServer(client) {
               gap: 8px;
               box-shadow: 0 8px 24px rgba(2, 132, 199, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
               transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+              user-select: none;
             }
             #btn-floating-chat-toggle:hover {
               transform: translateY(-3px) scale(1.03);
@@ -3383,7 +3385,7 @@ function startWebServer(client) {
               display: flex;
               flex-direction: column;
               overflow: hidden;
-              z-index: 9999;
+              z-index: 1000000;
               animation: slideUpChat 0.25s ease-out;
             }
             @keyframes slideUpChat {
@@ -5791,11 +5793,11 @@ function startWebServer(client) {
               }, 800);
             }
 
-            // ── 실시간 인디케이터 배지 ─────────────────
+            // ── 실시간 인디케이터 배지 (좌측 하단) ─────────────────
             const liveBadge = document.createElement('div');
             liveBadge.id = 'live-indicator';
             liveBadge.style.cssText = [
-              'position:fixed','bottom:20px','right:20px','z-index:9999',
+              'position:fixed','bottom:20px','left:20px','z-index:999','pointer-events:none',
               'background:rgba(0,230,118,0.15)','border:1px solid #00e676',
               'color:#00e676','padding:6px 14px','border-radius:999px',
               'font-size:12px','font-weight:700','letter-spacing:0.5px',
@@ -6115,10 +6117,27 @@ function startWebServer(client) {
                 const fEl = document.getElementById('fchat-msg-' + msgId);
                 if (fEl) fEl.remove();
               } else {
-                alert(data.error || '삭제 권한이 없습니다.');
+                showToast('error', '삭제 실패', data.error || '삭제 권한이 없습니다.');
               }
             } catch (e) {}
           }
+
+          window.toggleFloatingChat = toggleFloatingChat;
+          window.handleSendChat = handleSendChat;
+          window.handleSendFloatingChat = handleSendFloatingChat;
+          window.insertEmoji = insertEmoji;
+          window.insertFloatingEmoji = insertFloatingEmoji;
+          window.deleteChatMessage = deleteChatMessage;
+
+          document.addEventListener('DOMContentLoaded', function() {
+            const toggleBtn = document.getElementById('btn-floating-chat-toggle');
+            if (toggleBtn) {
+              toggleBtn.onclick = function(e) {
+                e.stopPropagation();
+                toggleFloatingChat();
+              };
+            }
+          });
           </script>
         </body>
         </html>
