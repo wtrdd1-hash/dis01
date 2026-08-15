@@ -24,6 +24,19 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
+// 🛡️ 소수점 문자열/숫자 및 null 안전 BigInt 변환 헬퍼
+function safeBigInt(val) {
+  if (val === null || val === undefined || val === '') return 0n;
+  if (typeof val === 'bigint') return val;
+  if (typeof val === 'number') return BigInt(Math.floor(val));
+  if (typeof val === 'string') {
+    const floatVal = parseFloat(val);
+    if (isNaN(floatVal)) return 0n;
+    return BigInt(Math.floor(floatVal));
+  }
+  return 0n;
+}
+
 // 스파크라인 SVG 미니 차트 생성 헬퍼
 function generateSparklineSvg(prices, isUp) {
   if (!prices || prices.length < 2) {
@@ -1528,8 +1541,8 @@ function startWebServer(client) {
         holdings[sr.stock_id] = amt;
       });
 
-      const cash = BigInt(u.cash || 0);
-      const bank = BigInt(u.bank || 0);
+      const cash = safeBigInt(u.cash);
+      const bank = safeBigInt(u.bank);
       const netWorth = cash + bank + totalStockVal;
 
       return res.json({
@@ -6345,8 +6358,8 @@ function startWebServer(client) {
           u.cash, 
           u.bank, 
           u.created_at,
-          COALESCE(SUM(us.amount * s.price), 0) AS stock_val,
-          (u.cash + u.bank + COALESCE(SUM(us.amount * s.price), 0)) AS net_worth
+          CAST(ROUND(COALESCE(SUM(us.amount * s.price), 0)) AS SIGNED) AS stock_val,
+          CAST(ROUND(u.cash + u.bank + COALESCE(SUM(us.amount * s.price), 0)) AS SIGNED) AS net_worth
         FROM users u
         LEFT JOIN user_stocks us ON u.discord_id = us.user_id
         LEFT JOIN stocks s ON us.stock_id = s.stock_id
@@ -6358,10 +6371,10 @@ function startWebServer(client) {
 
       let userWealthRowsHtml = '';
       for (const u of allUsersWealth) {
-        const cash = BigInt(u.cash || 0);
-        const bank = BigInt(u.bank || 0);
-        const stockVal = BigInt(u.stock_val || 0);
-        const netWorth = BigInt(u.net_worth || 0);
+        const cash = safeBigInt(u.cash);
+        const bank = safeBigInt(u.bank);
+        const stockVal = safeBigInt(u.stock_val);
+        const netWorth = safeBigInt(u.net_worth);
 
         userWealthRowsHtml += `
           <tr class="user-wealth-row" data-name="${(u.username || '').toLowerCase()}" data-id="${u.discord_id}">

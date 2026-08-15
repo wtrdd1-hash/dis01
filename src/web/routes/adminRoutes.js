@@ -8,6 +8,18 @@ const { logAdminAction } = require('../../utils/logger');
 const { getSecurityStats, banIp, unbanIp } = require('../security');
 const config = require('../../config/config');
 
+function safeBigInt(val) {
+  if (val === null || val === undefined || val === '') return 0n;
+  if (typeof val === 'bigint') return val;
+  if (typeof val === 'number') return BigInt(Math.floor(val));
+  if (typeof val === 'string') {
+    const floatVal = parseFloat(val.replace(/[,원\s]/g, ''));
+    if (isNaN(floatVal)) return 0n;
+    return BigInt(Math.floor(floatVal));
+  }
+  return 0n;
+}
+
 function createAdminRoutes(getSessionUser) {
   const router = express.Router();
 
@@ -53,8 +65,7 @@ function createAdminRoutes(getSessionUser) {
       return res.status(400).json({ success: false, error: '유저 ID(또는 닉네임)와 금액을 입력하세요.' });
     }
 
-    const cleanAmtStr = String(amount).replace(/[,원\s]/g, '');
-    const parsedAmount = BigInt(cleanAmtStr || '0');
+    const parsedAmount = safeBigInt(amount);
     if (parsedAmount <= 0n) return res.status(400).json({ success: false, error: '금액은 1원 이상이어야 합니다.' });
 
     try {
@@ -63,7 +74,7 @@ function createAdminRoutes(getSessionUser) {
 
       const targetId = targetUser.discord_id;
       const targetName = targetUser.username || `유저_${targetId.slice(-4)}`;
-      const beforeCash = BigInt(targetUser.cash || 0);
+      const beforeCash = safeBigInt(targetUser.cash);
       const afterCash = beforeCash + parsedAmount;
 
       await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [afterCash.toString(), targetId]);
@@ -89,8 +100,7 @@ function createAdminRoutes(getSessionUser) {
       return res.status(400).json({ success: false, error: '유저 ID(또는 닉네임)와 금액을 입력하세요.' });
     }
 
-    const cleanAmtStr = String(amount).replace(/[,원\s]/g, '');
-    const parsedAmount = BigInt(cleanAmtStr || '0');
+    const parsedAmount = safeBigInt(amount);
     if (parsedAmount <= 0n) return res.status(400).json({ success: false, error: '금액은 1원 이상이어야 합니다.' });
 
     try {
@@ -99,7 +109,7 @@ function createAdminRoutes(getSessionUser) {
 
       const targetId = targetUser.discord_id;
       const targetName = targetUser.username || `유저_${targetId.slice(-4)}`;
-      const beforeCash = BigInt(targetUser.cash || 0);
+      const beforeCash = safeBigInt(targetUser.cash);
       const afterCash = beforeCash > parsedAmount ? beforeCash - parsedAmount : 0n;
 
       await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [afterCash.toString(), targetId]);
