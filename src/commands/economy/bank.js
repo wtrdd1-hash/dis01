@@ -43,22 +43,22 @@ module.exports = {
     let cash = BigInt(userData.cash);
     let bank = BigInt(userData.bank);
     const rate = getCurrentInterestRate();
-    const ratePercent = (rate * 100).toFixed(2);
-    const hourlyExpectedInterest = BigInt(Math.floor(Number(bank) * rate));
+    const ratePercent = (rate * 100).toFixed(4);
+    const minExpectedInterest = BigInt(Math.floor(Number(bank) * rate));
 
     if (subcommand === '정보') {
       const embed = new EmbedBuilder()
         .setColor(0x3B82F6)
-        .setTitle('🏦 덕스 중앙은행 계좌 정보 & 기준금리')
+        .setTitle('🏦 덕스 중앙은행 계좌 정보 & 실시간 기준금리')
         .setDescription(
           `👤 **예금주:** **@${interaction.user.username}**\n\n` +
           `🏦 **보유 예금 잔고:** **${formatMoney(bank)}**\n` +
           `💵 **보유 현금 잔고:** **${formatMoney(cash)}**\n\n` +
           `─────────────────────────────\n` +
-          `📈 **중앙은행 기준금리:** **${ratePercent}% / 1시간 주기 (복리)**\n` +
-          `🎁 **1시간당 예상 이자:** **+${formatMoney(hourlyExpectedInterest)}**\n` +
+          `📈 **중앙은행 기준금리:** **${ratePercent}% / 1분 주기 (복리)**\n` +
+          `🎁 **1분당 예상 이자:** **+${formatMoney(minExpectedInterest)}**\n` +
           `─────────────────────────────\n` +
-          `💡 *은행에 예금해 두시면 1시간마다 자동으로 이자가 복리로 입금됩니다.*`
+          `💡 *은행에 예금해 두시면 1분마다 자동으로 이자가 복리로 입금됩니다.*`
         )
         .setFooter({ text: '덕스 중앙은행 • 안전한 자산 관리' })
         .setTimestamp();
@@ -87,7 +87,7 @@ module.exports = {
         `**저금된 금액:** **${formatMoney(depositAmount)}**\n\n` +
         `💵 **남은 현금:** **${formatMoney(newCash)}**\n` +
         `🏦 **총 은행 예금:** **${formatMoney(newBank)}**\n\n` +
-        `📈 **적용 예금금리:** **${ratePercent}% / 1시간마다 자동 이자 지급**`
+        `📈 **적용 예금금리:** **${ratePercent}% / 1분마다 자동 복리 이자 지급**`
       );
       return interaction.reply({ embeds: [embed] });
 

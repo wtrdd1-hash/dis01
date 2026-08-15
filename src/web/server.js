@@ -5413,8 +5413,44 @@ function startWebServer(client) {
         LEFT JOIN users u ON g.user_id = u.discord_id
         ORDER BY g.id DESC LIMIT 50
       `);
-      const [userCountRow] = await pool.query('SELECT COUNT(*) as count FROM users');
-      const totalUsers = userCountRow[0]?.count || 0;
+      const [allUsersWealth] = await pool.query(`
+        SELECT 
+          u.discord_id, 
+          u.username, 
+          u.cash, 
+          u.bank, 
+          u.created_at,
+          COALESCE(SUM(us.amount * s.price), 0) AS stock_val,
+          (u.cash + u.bank + COALESCE(SUM(us.amount * s.price), 0)) AS net_worth
+        FROM users u
+        LEFT JOIN user_stocks us ON u.discord_id = us.user_id
+        LEFT JOIN stocks s ON us.stock_id = s.stock_id
+        GROUP BY u.discord_id, u.username, u.cash, u.bank, u.created_at
+        ORDER BY net_worth DESC
+        LIMIT 100
+      `);
+
+      let userWealthRowsHtml = '';
+      for (const u of allUsersWealth) {
+        const cash = BigInt(u.cash || 0);
+        const bank = BigInt(u.bank || 0);
+        const stockVal = BigInt(u.stock_val || 0);
+        const netWorth = BigInt(u.net_worth || 0);
+
+        userWealthRowsHtml += `
+          <tr class="user-wealth-row" data-name="${(u.username || '').toLowerCase()}" data-id="${u.discord_id}">
+            <td><b>@${u.username || '알수없음'}</b></td>
+            <td><code>${u.discord_id}</code></td>
+            <td style="color:#34d399; font-weight:700;">${formatMoney(cash)}</td>
+            <td style="color:#818cf8; font-weight:700;">${formatMoney(bank)}</td>
+            <td style="color:#38bdf8; font-weight:700;">${formatMoney(stockVal)}</td>
+            <td style="color:#fbbf24; font-weight:800; font-size:0.95rem;">${formatMoney(netWorth)}</td>
+            <td>
+              <button onclick="fillUserAction('${u.discord_id}')" style="background:#1f2937; border:1px solid var(--border); color:#a5b4fc; padding:3px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;">⚡ 빠른선택</button>
+            </td>
+          </tr>
+        `;
+      }
 
       let inquiryRowsHtml = '';
       for (const inq of inquiryLogs) {
@@ -5606,6 +5642,36 @@ function startWebServer(client) {
             <a href="/api/admin/logs/commands" target="_blank" class="btn-json">🤖 디스코드 명령어 JSON 로그</a>
             <a href="/api/admin/inquiries" target="_blank" class="btn-json">📩 1:1 고객센터 문의 JSON</a>
             <a href="/api/admin/security" target="_blank" class="btn-json">🛡️ 보안 & 차단 현황 JSON</a>
+          </div>
+
+          <!-- 👥 전체 사용자 자산 & 은행 예금 실시간 관제 센터 -->
+          <div class="card" style="border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(17, 24, 39, 0.95);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+              <div>
+                <h2 style="color: #38bdf8; display: flex; align-items: center; gap: 8px;">👥 전체 사용자 자산 & 은행 예금 실시간 관제 센터</h2>
+                <p style="font-size: 0.85rem; color: #9ca3af;">모든 유저의 현금, 은행 예금, 주식 평가액, 총 순자산을 실시간으로 모니터링합니다. (1분 복리 이자 적용 중)</p>
+              </div>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="user-search-input" placeholder="🔍 유저명 또는 Discord ID 실시간 검색..." oninput="filterUserWealthList()" style="background: #111827; border: 1px solid var(--border); color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 0.85rem; width: 280px;">
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>유저명</th>
+                  <th>Discord ID</th>
+                  <th>💵 보유 현금</th>
+                  <th>🏦 은행 예금 (1분 복리)</th>
+                  <th>📈 보유 주식 평가액</th>
+                  <th>💎 총 순자산</th>
+                  <th>작업</th>
+                </tr>
+              </thead>
+              <tbody id="user-wealth-tbody">
+                ${userWealthRowsHtml || '<tr><td colspan="7" style="text-align:center; color:#6b7280;">등록된 유저 데이터가 없습니다.</td></tr>'}
+              </tbody>
+            </table>
           </div>
 
           <!-- 👑 관리자 실시간 명령어 제어 센터 (Web Command Console) -->
@@ -5956,6 +6022,33 @@ function startWebServer(client) {
               const data = await res.json();
               alert(data.message || data.error);
               if (data.success) location.reload();
+            }
+
+            // 🔍 유저 자산/예금 실시간 검색 필터
+            function filterUserWealthList() {
+              const q = (document.getElementById('user-search-input')?.value || '').trim().toLowerCase();
+              const rows = document.querySelectorAll('.user-wealth-row');
+              rows.forEach(r => {
+                const name = r.getAttribute('data-name') || '';
+                const id = r.getAttribute('data-id') || '';
+                if (!q || name.includes(q) || id.includes(q)) {
+                  r.style.display = '';
+                } else {
+                  r.style.display = 'none';
+                }
+              });
+            }
+
+            // ⚡ 빠른 선택 (유저 ID 자동 입력 및 포커스)
+            function fillUserAction(userId) {
+              const uInput = document.getElementById('cmd-user-id');
+              const resetInput = document.getElementById('cmd-reset-user-id');
+              if (uInput) uInput.value = userId;
+              if (resetInput) resetInput.value = userId;
+              if (uInput) {
+                uInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                uInput.focus();
+              }
             }
           </script>
         </body>

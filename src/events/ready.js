@@ -54,8 +54,8 @@ module.exports = {
     // 🏦 자동 경제 조절 시스템 가동 (10분 주기 분석, 관리자 DM 발송)
     startAutoBalancer(client, setMarketRegime);
 
-    // 🏦 덕스 중앙은행 정기 예금 이자 지급 엔진 가동 (1시간 주기)
-    startBankEngine(60 * 60 * 1000);
+    // 🏦 덕스 중앙은행 정기 예금 이자 지급 엔진 가동 (1분 주기, 1분 복리)
+    startBankEngine(60 * 1000);
 
     // 24시간마다 DB 오래된 로그 자동 최적화 정리
     setInterval(() => {

@@ -195,6 +195,7 @@ async function applyAutoBalancing(report) {
     subsidyMultiplier:        1.0,
     gamblingPayoutMultiplier: 1.0,
     taxRate:                  0.0,
+    bankInterestRate:         0.0001, // 기본 1분당 0.01% (시간당 0.6% 복리 수준)
     forcedRegimeIndex:        null,
     wealthThresholdForTax:    5000000,
     subsidyThresholdForBonus: 10000,
@@ -206,25 +207,27 @@ async function applyAutoBalancing(report) {
     const r = intensity.rate;
 
     if (issue.type === 'INFLATION') {
-      // 인플레이션: 보상 감소, 세금 증가, 시장 조정기 전환
+      // 인플레이션: 보상 감소, 세금 증가, 시장 조정기 전환, 시중 유동성 흡수를 위한 고금리 예금 유도
       newSettings.dailyRewardMultiplier    = Math.max(0.5, 1.0 - r);
       newSettings.workRewardMultiplier     = Math.max(0.5, 1.0 - r);
       newSettings.subsidyMultiplier        = Math.max(0.5, 1.0 - r * 0.5);
       newSettings.gamblingPayoutMultiplier = Math.max(0.6, 1.0 - r);
       newSettings.taxRate                  = Math.min(0.15, r * 0.5);
+      newSettings.bankInterestRate         = Math.min(0.0003, 0.0001 * (1 + r)); // 긴축 금리 인상
       newSettings.forcedRegimeIndex        = 1; // 📉 가상 시장 조정기
-      actions.push(`📉 **인플레이션** (${intensity.label}) → 보상 -${Math.round(r*100)}%, 세금 +${Math.round(r*50)}%, 시장: 📉 조정기 전환`);
+      actions.push(`📉 **인플레이션** (${intensity.label}) → 보상 -${Math.round(r*100)}%, 세금 +${Math.round(r*50)}%, 예금금리 인상, 시장: 📉 조정기 전환`);
 
     } else if (issue.type === 'DEFLATION') {
-      // 디플레이션: 보상 증가, 부양기 전환
+      // 디플레이션: 보상 증가, 부양기 전환, 예금 특별 우대금리
       newSettings.dailyRewardMultiplier    = Math.min(2.0, 1.0 + r);
       newSettings.workRewardMultiplier     = Math.min(2.0, 1.0 + r);
       newSettings.subsidyMultiplier        = Math.min(2.5, 1.0 + r * 1.5);
       newSettings.gamblingPayoutMultiplier = Math.min(1.5, 1.0 + r * 0.5);
       newSettings.taxRate                  = 0.0;
+      newSettings.bankInterestRate         = Math.min(0.0004, 0.0001 * (1 + r * 1.5)); // 부양 우대금리
       newSettings.forcedRegimeIndex        = 5; // 🏦 중앙은행 유동성 무제한 살포
       newSettings.subsidyThresholdForBonus = 50000;
-      actions.push(`🚀 **디플레이션** (${intensity.label}) → 보상 +${Math.round(r*100)}%, 지원금 +${Math.round(r*150)}%, 시장: 🏦 부양기 전환`);
+      actions.push(`🚀 **디플레이션** (${intensity.label}) → 보상 +${Math.round(r*100)}%, 지원금 +${Math.round(r*150)}%, 우대금리 적용, 시장: 🏦 부양기 전환`);
 
     } else if (issue.type === 'INEQUALITY') {
       // 빈부격차: 고자산 세금 증가, 저소득 지원 강화

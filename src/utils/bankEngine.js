@@ -4,32 +4,29 @@ const { formatMoney } = require('./formatters');
 const config = require('../config/config');
 const { getDynamicSettings } = require('./economyBalancer');
 
-// 기본 1시간당 이자율 (0.5% = 0.005)
-let baseInterestRate = config.bankInterestRate || 0.005;
+// 기본 1분당 이자율 (0.01% = 0.0001)
+const DEFAULT_1MIN_RATE = 0.0001;
 
 /**
- * 현재 적용 중인 중앙은행 기준 예금 이자율 조회
+ * 현재 적용 중인 중앙은행 기준 1분 예금 이자율 조회
  */
 function getCurrentInterestRate() {
-  let rate = baseInterestRate;
   try {
     const dyn = getDynamicSettings();
-    if (dyn && dyn.subsidyMultiplier) {
-      // 경제 부양 시에는 예금 금리도 소폭 우대
-      if (dyn.subsidyMultiplier > 1.2) rate *= 1.2;
-      else if (dyn.subsidyMultiplier < 0.8) rate *= 0.8;
+    if (dyn && typeof dyn.bankInterestRate === 'number' && dyn.bankInterestRate > 0) {
+      return dyn.bankInterestRate;
     }
   } catch (e) {}
-  return rate;
+  return DEFAULT_1MIN_RATE;
 }
 
 /**
- * 🏦 은행 예금 이자 정기 지급 실행
+ * 🏦 은행 예금 이자 정기 지급 실행 (1분 주기)
  */
 async function processBankInterest() {
   try {
     const rate = getCurrentInterestRate();
-    const ratePercent = (rate * 100).toFixed(2);
+    const ratePercent = (rate * 100).toFixed(4);
 
     // 예금 잔고가 100원 이상인 유저 목록 조회
     const [users] = await pool.query('SELECT discord_id, username, bank FROM users WHERE bank >= 100');
@@ -58,7 +55,7 @@ async function processBankInterest() {
           interest.toString(),
           currentBank.toString(),
           newBank.toString(),
-          `🏦 [덕스 중앙은행] 정기 예금 이자 지급 (+${ratePercent}% / +${formatMoney(interest)})`
+          `🏦 [덕스 중앙은행] 1분 정기 예금 이자 지급 (+${ratePercent}% / +${formatMoney(interest)})`
         ]);
       } catch (e) {}
 
@@ -67,7 +64,7 @@ async function processBankInterest() {
     }
 
     if (paidCount > 0) {
-      logInfo('BankEngine', `🏦 [정기 예금 이자 지급] 총 ${paidCount}명에게 ${formatMoney(totalInterestPaid)} 지급 완료 (기준금리: ${ratePercent}%)`);
+      logInfo('BankEngine', `🏦 [1분 예금 이자 지급] ${paidCount}명에게 총 ${formatMoney(totalInterestPaid)} 지급 완료 (기준금리: ${ratePercent}%/분)`);
     }
   } catch (err) {
     logError('BankEngine', '예금 이자 지급 처리 중 오류 발생', err);
@@ -75,15 +72,15 @@ async function processBankInterest() {
 }
 
 /**
- * 🏦 은행 예금 이자 백그라운드 엔진 시작 (기본 1시간 주기 = 3,600,000ms)
+ * 🏦 은행 예금 이자 백그라운드 엔진 시작 (기본 1분 주기 = 60,000ms)
  */
-function startBankEngine(intervalMs = 60 * 60 * 1000) {
-  logInfo('BankEngine', `🏦 [덕스 중앙은행 이자 엔진] 가동 시작 (지급 주기: ${intervalMs / 1000 / 60}분, 기본이율: ${(baseInterestRate * 100).toFixed(2)}%)`);
+function startBankEngine(intervalMs = 60 * 1000) {
+  logInfo('BankEngine', `🏦 [덕스 중앙은행 이자 엔진] 가동 시작 (지급 주기: ${intervalMs / 1000}초, 1분 복리 적용)`);
   
-  // 첫 실행: 5분 후 1회 체크, 이후 매 시간 정기 실행
+  // 첫 실행: 10초 후 1회 체크, 이후 매 1분마다 정기 실행
   setTimeout(() => {
     processBankInterest();
-  }, 5 * 60 * 1000);
+  }, 10 * 1000);
 
   setInterval(processBankInterest, intervalMs);
 }
