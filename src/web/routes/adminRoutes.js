@@ -152,19 +152,30 @@ function createAdminRoutes(getSessionUser) {
     const { stockId, price } = req.body;
     if (!stockId || !price) return res.status(400).json({ success: false, error: '종목 ID와 가격을 입력하세요.' });
 
-    const newPrice = BigInt(price);
-    if (newPrice <= 0n) return res.status(400).json({ success: false, error: '주가는 1원 이상이어야 합니다.' });
+    try {
+      const { adjustStockPrice } = require('../../utils/stockEngine');
+      const result = await adjustStockPrice(stockId, price, `관리자(@${session.username}) 웹 수동 조절`);
+      await logAdminAction(session.id, session.username || '관리자', 'WEB_SET_STOCK_PRICE', stockId, { oldPrice: result.oldPrice.toString(), newPrice: result.newPrice.toString() }, req);
+
+      return res.json({ success: true, message: `✅ [${result.name}] 주가가 ${formatMoney(result.newPrice)} (${result.rate}%) 으로 조절되었습니다.` });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 4-1. 전 종목 일괄 비율 조절 (+10%, -10%, +20% 등)
+  router.post('/action/stock-adjust-ratio', async (req, res) => {
+    const session = req.adminSession;
+    const { percent } = req.body;
+    const pct = parseFloat(percent);
+    if (isNaN(pct)) return res.status(400).json({ success: false, error: '조절할 비율(%)을 입력하세요.' });
 
     try {
-      const [stocks] = await pool.query('SELECT * FROM stocks WHERE stock_id = ?', [stockId]);
-      if (stocks.length === 0) return res.status(404).json({ success: false, error: '존재하지 않는 주식 종목입니다.' });
+      const { adjustAllStocksRatio } = require('../../utils/stockEngine');
+      const results = await adjustAllStocksRatio(pct, `관리자(@${session.username}) 전종목 ${pct > 0 ? '+' : ''}${pct}% 일괄 조절`);
+      await logAdminAction(session.id, session.username || '관리자', 'WEB_SET_ALL_STOCKS_RATIO', 'ALL', { percent: pct }, req);
 
-      const oldStock = stocks[0];
-      await pool.query('UPDATE stocks SET prev_price = price, price = ? WHERE stock_id = ?', [newPrice.toString(), stockId]);
-      await pool.query('INSERT INTO stock_history (stock_id, price) VALUES (?, ?)', [stockId, newPrice.toString()]);
-      await logAdminAction(session.id, session.username || '관리자', 'WEB_SET_STOCK_PRICE', stockId, { oldPrice: oldStock.price.toString(), newPrice: newPrice.toString() }, req);
-
-      return res.json({ success: true, message: `✅ [${oldStock.name}] 주가가 ${formatMoney(newPrice)}으로 강제 변경되었습니다.` });
+      return res.json({ success: true, message: `✅ 전 종목 ${pct > 0 ? '+' : ''}${pct}% 일괄 가격 조절이 완료되었습니다. (${results.length}개 종목)` });
     } catch (e) {
       return res.status(500).json({ success: false, error: e.message });
     }
@@ -178,11 +189,12 @@ function createAdminRoutes(getSessionUser) {
     if (isNaN(idx)) return res.status(400).json({ success: false, error: '국면 번호를 선택하세요.' });
 
     try {
-      const stockMarketEngine = require('../../utils/stockMarketEngine');
-      const newRegime = stockMarketEngine.setMarketRegimeManually(idx);
-      await logAdminAction(session.id, session.username || '관리자', 'WEB_SET_REGIME', 'MARKET', { regime: newRegime ? newRegime.name : 'Unknown' }, req);
+      const stockEngine = require('../../utils/stockEngine');
+      stockEngine.setMarketRegime(idx);
+      const targetRegime = stockEngine.MARKET_REGIMES[idx];
+      await logAdminAction(session.id, session.username || '관리자', 'WEB_SET_REGIME', 'MARKET', { regime: targetRegime ? targetRegime.name : 'Unknown' }, req);
 
-      return res.json({ success: true, message: `✅ 시장 국면이 [${newRegime.name}] (으)로 강제 변경되었습니다!` });
+      return res.json({ success: true, message: `✅ 시장 국면이 [${targetRegime ? targetRegime.name : idx}] (으)로 강제 변경되었습니다!` });
     } catch (e) {
       return res.status(500).json({ success: false, error: e.message });
     }

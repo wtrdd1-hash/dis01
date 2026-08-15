@@ -6499,6 +6499,13 @@ function startWebServer(client) {
                     <input type="number" id="cmd-stock-price" placeholder="새 주가(원)" style="flex: 1; background: #111827; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 6px; font-size: 0.85rem;">
                   </div>
                   <button onclick="execSetStockPrice()" style="background: #0ea5e9; border: none; color: #fff; font-weight: 700; padding: 8px; border-radius: 6px; cursor: pointer;">📊 주가 즉시 변경 & SSE 알림</button>
+                  <!-- 전 종목 일괄 퀵 조절 버튼 -->
+                  <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 4px;">
+                    <button type="button" onclick="execAdjustAllStocksRatio(10)" style="background: rgba(16,185,129,0.2); border: 1px solid #10b981; color: #6ee7b7; padding: 6px 4px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer;">🚀 전종목 +10%</button>
+                    <button type="button" onclick="execAdjustAllStocksRatio(20)" style="background: rgba(16,185,129,0.2); border: 1px solid #10b981; color: #6ee7b7; padding: 6px 4px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer;">🔥 전종목 +20%</button>
+                    <button type="button" onclick="execAdjustAllStocksRatio(-10)" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 6px 4px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer;">📉 전종목 -10%</button>
+                    <button type="button" onclick="execAdjustAllStocksRatio(-20)" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 6px 4px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer;">❄️ 전종목 -20%</button>
+                  </div>
                   <div style="display: flex; gap: 8px; margin-top: 6px;">
                     <select id="cmd-regime-idx" style="flex: 1; background: #111827; border: 1px solid var(--border); color: #fff; padding: 8px; border-radius: 6px; font-size: 0.85rem;">
                       <option value="0">🦆 번영기 (상승 우세)</option>
@@ -6768,6 +6775,22 @@ function startWebServer(client) {
               const data = await res.json();
               alert(data.message || data.error);
               if (data.success) location.reload();
+            }
+
+            async function execAdjustAllStocksRatio(percent) {
+              if (!confirm('전 종목의 주가를 ' + (percent > 0 ? '+' : '') + percent + '% 일괄 조절하시겠습니까?')) return;
+              try {
+                const res = await fetch('/api/admin/action/stock-adjust-ratio', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ percent })
+                });
+                const data = await res.json();
+                alert(data.message || data.error);
+                if (data.success) location.reload();
+              } catch (e) {
+                alert('요청 중 오류가 발생했습니다.');
+              }
             }
 
             async function execSetRegime() {

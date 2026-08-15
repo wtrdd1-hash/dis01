@@ -173,7 +173,7 @@ let lastNews = null;
 let historyCleanupCounter = 0;
 let forcedRegimeIndex = null; // 자동 경제 조절 시스템에 의해 강제 지정된 국면 인덱스
 
-// 📈 3분 주기 가상 주식 가격 변동 엔진
+// 📈 3분 주기 유저 상황 연동 주식 가격 변동 엔진
 async function updateStockPrices() {
   const connection = await pool.getConnection();
   try {
@@ -190,6 +190,50 @@ async function updateStockPrices() {
     const currentRegime = MARKET_REGIMES[currentRegimeIndex];
 
     const [stocks] = await connection.query('SELECT * FROM stocks');
+    if (stocks.length === 0) return;
+
+    // 2. 📊 유저 실시간 경제 상황 & 거래량 (수요/공급) 분석
+    const userTradeImpactMap = {};
+    try {
+      // 최근 1시간 동안의 유저 실거래량 (매수 vs 매도) 집계
+      const [txRows] = await connection.query(`
+        SELECT stock_id, action, COALESCE(SUM(amount), 0) as total_amount, COALESCE(SUM(total_price), 0) as total_money
+        FROM stock_transactions
+        WHERE created_at >= NOW() - INTERVAL 1 HOUR
+        GROUP BY stock_id, action
+      `);
+
+      const buyMap = {};
+      const sellMap = {};
+      txRows.forEach(r => {
+        const sid = r.stock_id;
+        const money = Number(r.total_money || 0);
+        if (r.action === 'BUY') buyMap[sid] = (buyMap[sid] || 0) + money;
+        else if (r.action === 'SELL') sellMap[sid] = (sellMap[sid] || 0) + money;
+      });
+
+      stocks.forEach(s => {
+        const sid = s.stock_id;
+        const buys = buyMap[sid] || 0;
+        const sells = sellMap[sid] || 0;
+        const netMoney = buys - sells;
+        const marketCap = Number(s.price) * 1000;
+        let impact = netMoney / (marketCap * 2 || 1000000);
+        impact = Math.max(-0.12, Math.min(0.12, impact));
+        userTradeImpactMap[sid] = impact;
+      });
+    } catch (e) {}
+
+    // 3. 👥 커뮤니티 전체 유저 총 유동성 지표 반영
+    let communityLiquidityFactor = 0.0;
+    try {
+      const [userSummary] = await connection.query('SELECT AVG(cash) as avg_cash, AVG(bank) as avg_bank FROM users');
+      if (userSummary.length > 0) {
+        const avgTotal = Number(userSummary[0].avg_cash || 0) + Number(userSummary[0].avg_bank || 0);
+        if (avgTotal > 1000000) communityLiquidityFactor = 0.02;
+        else if (avgTotal < 50000) communityLiquidityFactor = -0.01;
+      }
+    } catch (e) {}
     
     // 50% 확률로 120개 중 랜덤 뉴스 이벤트 발생 및 DB 저장
     let eventImpactMap = {};
@@ -226,18 +270,18 @@ async function updateStockPrices() {
 
     for (const stock of stocks) {
       const currentPrice = BigInt(stock.price);
-      const baseVolatility = parseFloat(stock.volatility);
+      const baseVolatility = parseFloat(stock.volatility || '0.04');
       const stockId = stock.stock_id;
 
       const regimeDrift = currentRegime.drift;
       const eventBoost = (eventImpactMap[stockId] || 0) + (eventImpactMap['ALL'] || 0);
+      const userImpact = userTradeImpactMap[stockId] || 0;
       const adjustedVolatility = baseVolatility * currentRegime.volatilityFactor;
       const noise = (Math.random() * 2 - 1) * adjustedVolatility;
 
-      const totalDelta = regimeDrift + eventBoost + noise;
-      let newPrice = BigInt(Math.round(Number(currentPrice) * (1 + totalDelta)));
-
-      if (newPrice < 10n) newPrice = 10n;
+      // 최종 변동률 = 시황 + 공시 + 유저 실거래(수요/공급) + 유동성 + 노이즈
+      const totalDelta = regimeDrift + eventBoost + userImpact + communityLiquidityFactor + noise;
+      let newPrice = BigInt(Math.max(10, Math.round(Number(currentPrice) * (1 + totalDelta))));
 
       // 💡 초보자 입문주(SLOT)는 신규 가입자(정착금 10,000원)가 언제든 쉽게 매수할 수 있도록 50~500원 구간 안정 유지
       if (stockId === 'SLOT') {
@@ -277,7 +321,8 @@ async function updateStockPrices() {
         circuitPrefix = changeRateNum > 0 ? '🚨 [서킷브레이커 상한가 랠리] ' : '🚨 [서킷브레이커 급락 완화] ';
       }
 
-      const reasonStr = lastNews ? `${circuitPrefix}[${lastNews.title}]` : `${circuitPrefix}${currentRegime.name} 시황 변동`;
+      const userReason = userImpact !== 0 ? ` (유저 순${userImpact > 0 ? '매수' : '매도'} 반영)` : '';
+      const reasonStr = lastNews ? `${circuitPrefix}[${lastNews.title}]${userReason}` : `${circuitPrefix}${currentRegime.name} 시황 변동${userReason}`;
 
       try {
         await connection.query(`
@@ -291,7 +336,7 @@ async function updateStockPrices() {
     }
 
     await connection.commit();
-    console.log(`📈 [월덕 가상 경제 엔진] 주가 변동 갱신 완료 (${currentRegime.name}) - ${stocks.length}개 종목${lastNews ? ` | 📢 공시: ${lastNews.title}` : ''}`);
+    console.log(`📈 [월덕 가상 경제 엔진] 유저 상황 연동 주가 갱신 완료 (${currentRegime.name}) - ${stocks.length}개 종목${lastNews ? ` | 📢 공시: ${lastNews.title}` : ''}`);
 
     // 📡 SSE 실시간 브로드캐스트 (연결된 브라우저에 즉시 push)
     if (typeof global.__broadcastMarketUpdate === 'function') {
@@ -321,7 +366,7 @@ async function updateStockPrices() {
   }
 }
 
-// 💰 정기 주식 배당금 자동 지급 엔진 (1시간 주기 or 배당 이벤트 시 실행)
+// 💰 정기 주식 배당금 자동 지급 엔진 (소수점 보유량 완벽 지원)
 async function distributeStockDividends() {
   try {
     const [stocks] = await pool.query('SELECT stock_id, name, price, dividend_yield FROM stocks WHERE dividend_yield > 0');
@@ -329,7 +374,7 @@ async function distributeStockDividends() {
 
     for (const s of stocks) {
       const yieldRate = Number(s.dividend_yield || 0) / 100;
-      const hourlyDividendPerShare = BigInt(Math.max(1, Math.floor((Number(s.price) * yieldRate) / 24)));
+      const hourlyDividendPerShare = Math.max(1, Math.floor((Number(s.price) * yieldRate) / 24));
 
       const [holdings] = await pool.query(`
         SELECT us.user_id, us.amount, u.username, u.cash
@@ -339,8 +384,8 @@ async function distributeStockDividends() {
       `, [s.stock_id]);
 
       for (const h of holdings) {
-        const shareCount = BigInt(h.amount);
-        const dividendAmount = hourlyDividendPerShare * shareCount;
+        const shareCount = Number(h.amount);
+        const dividendAmount = BigInt(Math.floor(hourlyDividendPerShare * shareCount));
         if (dividendAmount <= 0n) continue;
 
         const beforeCash = BigInt(h.cash || 0);
@@ -349,21 +394,67 @@ async function distributeStockDividends() {
         await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [afterCash.toString(), h.user_id]);
 
         try {
+          const displayCount = (shareCount % 1 === 0) ? shareCount.toLocaleString() : shareCount.toFixed(4);
           await pool.query(`
             INSERT INTO economy_logs (user_id, username, type, amount, balance_before, balance_after, description)
             VALUES (?, ?, 'DIVIDEND', ?, ?, ?, ?)
           `, [
             h.user_id, h.username || `유저_${h.user_id.slice(-4)}`, dividendAmount.toString(),
             beforeCash.toString(), afterCash.toString(),
-            `💰 [${s.name}] 보유 주식(${shareCount}주) 정기 배당금 수령 (+${dividendAmount.toLocaleString()}원)`
+            `💰 [${s.name}] 보유 주식(${displayCount}주) 정기 배당금 수령 (+${dividendAmount.toLocaleString()}원)`
           ]);
         } catch (e) {}
       }
     }
-    console.log('💰 [정기 배당 엔진] 주주 대상 배당금 자동 분배 완료');
+    console.log('💰 [정기 배당 엔진] 소수점 정밀 배당금 분배 완료');
   } catch (err) {
     console.error('❌ 배당금 지급 중 오류:', err);
   }
+}
+
+// 🔧 스마트 주가 조절 시스템 (Smart Stock Price Adjustment System)
+async function adjustStockPrice(stockId, targetPrice, reason = '관리자/시스템 가격 조절') {
+  const newPrice = BigInt(targetPrice);
+  if (newPrice < 10n) throw new Error('주가는 최소 10원 이상이어야 합니다.');
+
+  const [stocks] = await pool.query('SELECT * FROM stocks WHERE stock_id = ?', [stockId]);
+  if (stocks.length === 0) throw new Error(`종목 [${stockId}]을 찾을 수 없습니다.`);
+
+  const s = stocks[0];
+  const oldPrice = BigInt(s.price);
+
+  await pool.query('UPDATE stocks SET prev_price = price, price = ?, updated_at = NOW() WHERE stock_id = ?', [newPrice.toString(), stockId]);
+  await pool.query('INSERT INTO stock_history (stock_id, price) VALUES (?, ?)', [stockId, newPrice.toString()]);
+
+  const diff = newPrice - oldPrice;
+  const rate = oldPrice > 0n ? ((Number(diff) / Number(oldPrice)) * 100).toFixed(2) : '0.00';
+
+  try {
+    await pool.query(`
+      INSERT INTO stock_price_logs (stock_id, stock_name, prev_price, new_price, change_rate, diff, regime, reason)
+      VALUES (?, ?, ?, ?, ?, ?, '가격조절시스템', ?)
+    `, [stockId, s.name, oldPrice.toString(), newPrice.toString(), rate, diff.toString(), reason]);
+  } catch (e) {}
+
+  if (typeof global.__broadcastMarketUpdate === 'function') {
+    if (typeof global.__invalidateMarketCache === 'function') global.__invalidateMarketCache();
+    setTimeout(global.__broadcastMarketUpdate, 150);
+  }
+
+  return { stockId, name: s.name, oldPrice, newPrice, rate, diff };
+}
+
+// 🔧 전 종목 일괄 비율 조절 (예: +10% 펌핑 or -10% 완화)
+async function adjustAllStocksRatio(percentMultiplier, reason = '시장 전체 유동성 조절') {
+  const [stocks] = await pool.query('SELECT * FROM stocks');
+  const results = [];
+  for (const s of stocks) {
+    const cur = Number(s.price);
+    const target = Math.max(10, Math.round(cur * (1 + percentMultiplier / 100)));
+    const res = await adjustStockPrice(s.stock_id, target, reason);
+    results.push(res);
+  }
+  return results;
 }
 
 function startStockEngine(intervalMs = 180000) {
@@ -405,6 +496,8 @@ async function getRecentNewsFeed(limit = 20) {
 module.exports = {
   updateStockPrices,
   distributeStockDividends,
+  adjustStockPrice,
+  adjustAllStocksRatio,
   startStockEngine,
   getCurrentMarketRegime,
   setMarketRegime,
