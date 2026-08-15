@@ -74,7 +74,10 @@ function createChatRoutes(getSessionUser, sseClients) {
         created_at: new Date().toISOString()
       };
 
-      // 모든 실시간 접속자에게 SSE 푸시
+      // 모든 실시간 접속자에게 SSE 및 Socket.IO 푸시
+      if (global.__io) {
+        global.__io.emit('chat:message', chatObj);
+      }
       if (typeof global.__broadcastChatMessage === 'function') {
         global.__broadcastChatMessage(chatObj);
       }
@@ -102,6 +105,9 @@ function createChatRoutes(getSessionUser, sseClients) {
       }
 
       await pool.query('DELETE FROM chat_messages WHERE id = ?', [msgId]);
+      if (global.__io) {
+        global.__io.emit('chat:deleted', { id: msgId });
+      }
       return res.json({ success: true, message: '메시지가 삭제되었습니다.' });
     } catch (e) {
       return res.status(500).json({ success: false, error: e.message });

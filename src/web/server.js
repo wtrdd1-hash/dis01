@@ -1,4 +1,6 @@
+const http = require('http');
 const express = require('express');
+const { Server } = require('socket.io');
 const axios = require('axios');
 const cookieParser = require('cookie-parser');
 const fs = require('fs');
@@ -60,6 +62,85 @@ const activeGameUsers = new Set();
 
 function startWebServer(client) {
   const app = express();
+  const server = http.createServer(app);
+  const io = new Server(server, {
+    cors: { origin: '*', methods: ['GET', 'POST'] },
+    pingTimeout: 30000,
+    pingInterval: 10000
+  });
+  global.__io = io;
+
+  // 📡 Socket.IO 실시간 양방향 통신 핸들러 (실시간 주가 갱신 및 유저 자산 동기화)
+  io.on('connection', async (socket) => {
+    // 1. 접속 시 최신 주가 및 시장 국면 스냅샷 전송
+    try {
+      const [stocks] = await pool.query('SELECT * FROM stocks');
+      const regime = getCurrentMarketRegime();
+      const news = getLastNews();
+      socket.emit('market:snapshot', {
+        stocks: stocks.map(s => ({
+          stock_id: s.stock_id,
+          name: s.name,
+          price: Number(s.price),
+          prev_price: Number(s.prev_price || s.price),
+          high_24h: Number(s.high_24h || s.price),
+          low_24h: Number(s.low_24h || s.price),
+          volume_24h: Number(s.volume_24h || 0),
+          volatility: Number(s.volatility || 0.04)
+        })),
+        regime,
+        news,
+        timestamp: Date.now()
+      });
+    } catch (e) {}
+
+    // 2. 🔄 실시간 수동 갱신 요청 수신 시 최신 데이터 즉시 반환 & 푸시
+    socket.on('market:refresh', async (payload, callback) => {
+      try {
+        const [stocks] = await pool.query('SELECT * FROM stocks');
+        const regime = getCurrentMarketRegime();
+        const news = getLastNews();
+        const data = {
+          stocks: stocks.map(s => ({
+            stock_id: s.stock_id,
+            name: s.name,
+            price: Number(s.price),
+            prev_price: Number(s.prev_price || s.price),
+            high_24h: Number(s.high_24h || s.price),
+            low_24h: Number(s.low_24h || s.price),
+            volume_24h: Number(s.volume_24h || 0),
+            volatility: Number(s.volatility || 0.04)
+          })),
+          regime,
+          news,
+          timestamp: Date.now()
+        };
+        socket.emit('market:update', data);
+        if (typeof callback === 'function') callback({ success: true, data });
+      } catch (e) {
+        if (typeof callback === 'function') callback({ success: false, error: e.message });
+      }
+    });
+
+    // 3. 👤 실시간 유저 자산 동기화 요청
+    socket.on('user:sync', async (payload, callback) => {
+      if (!payload || !payload.userId) return;
+      try {
+        const [users] = await pool.query('SELECT cash, bank, clicker_level, auto_miner_level, total_clicks FROM users WHERE discord_id = ?', [payload.userId]);
+        if (users.length > 0) {
+          const u = users[0];
+          socket.emit('user:balance', {
+            cash: u.cash.toString(),
+            bank: u.bank.toString(),
+            clicker_level: u.clicker_level,
+            auto_miner_level: u.auto_miner_level,
+            total_clicks: Number(u.total_clicks || 0)
+          });
+        }
+      } catch (e) {}
+    });
+  });
+
   const PORT = config.port || 8080;
 
   // 🚀 서버 성능 및 보안 최적화
@@ -2512,6 +2593,7 @@ function startWebServer(client) {
           <link rel="preconnect" href="https://fonts.googleapis.com">
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+          <script src="/socket.io/socket.io.js"></script>
           <style>
             :root {
               --bg-dark: #0b0f19;
@@ -5887,11 +5969,58 @@ function startWebServer(client) {
               });
             }
 
-            // ── SSE 연결 (자동 재연결 포함) ────────────
+            // ── ⚡ Socket.IO 실시간 양방향 웹소켓 연결 & SSE 폴백 ────────────
+            let socket = null;
+            if (typeof io !== 'undefined') {
+              try {
+                socket = io({
+                  reconnectionAttempts: 15,
+                  reconnectionDelay: 1500,
+                  timeout: 8000
+                });
+
+                socket.on('connect', function() {
+                  setLive(true);
+                  if (currentChatUserId) {
+                    socket.emit('user:sync', { userId: currentChatUserId });
+                  }
+                });
+
+                socket.on('disconnect', function() {
+                  setLive(false);
+                });
+
+                socket.on('market:snapshot', function(data) {
+                  applyMarketUpdate(data);
+                });
+
+                socket.on('market:update', function(data) {
+                  applyMarketUpdate(data);
+                });
+
+                socket.on('chat:message', function(msg) {
+                  appendLiveChatMessage(msg, true);
+                });
+
+                socket.on('chat:deleted', function(data) {
+                  if (data && data.id) {
+                    const el = document.getElementById('chat-msg-' + data.id);
+                    if (el) el.remove();
+                    const fEl = document.getElementById('fchat-msg-' + data.id);
+                    if (fEl) fEl.remove();
+                  }
+                });
+              } catch (e) {
+                console.warn('Socket.IO 초기화 실패, SSE 폴백으로 전환합니다.');
+              }
+            }
+
+            // ── SSE 연결 (보조 폴백) ────────────
             let es;
             let retryDelay = 3000;
 
-            function connect() {
+            function connectSSE() {
+              if (socket && socket.connected) return; // Socket.IO 활성 시 SSE 중복 방지
               es = new EventSource('/api/stream');
 
               es.onmessage = function(e) {
@@ -5902,7 +6031,7 @@ function startWebServer(client) {
                   } else if (data.type === 'CHAT_MESSAGE' && data.message) {
                     appendLiveChatMessage(data.message, true);
                   }
-                  retryDelay = 3000; // 성공 시 재시도 간격 초기화
+                  retryDelay = 3000;
                   setLive(true);
                 } catch (err) {}
               };
@@ -5910,16 +6039,38 @@ function startWebServer(client) {
               es.onerror = function() {
                 setLive(false);
                 es.close();
-                setTimeout(connect, retryDelay);
-                retryDelay = Math.min(retryDelay * 1.5, 30000); // 최대 30초
+                setTimeout(connectSSE, retryDelay);
+                retryDelay = Math.min(retryDelay * 1.5, 30000);
               };
 
               es.onopen = function() { setLive(true); };
             }
 
+            // 🔄 실시간 주가 & 시장 데이터 원터치 갱신 함수
+            window.refreshStockPricesLive = function(isManual = false) {
+              if (socket && socket.connected) {
+                socket.emit('market:refresh', {}, function(res) {
+                  if (res && res.success && res.data) {
+                    applyMarketUpdate(res.data);
+                    if (isManual) showToast('success', '🔄 실시간 갱신 완료', '최신 주가 및 시장 국면이 동기화되었습니다.');
+                  }
+                });
+              } else {
+                fetch('/api/stocks')
+                  .then(r => r.json())
+                  .then(d => {
+                    if (d.success) {
+                      applyMarketUpdate({ stocks: d.stocks });
+                      if (isManual) showToast('success', '🔄 실시간 갱신 완료', '최신 주가가 갱신되었습니다.');
+                    }
+                  }).catch(() => {});
+              }
+              loadChatMessages();
+            };
+
             // 페이지 로드 후 바로 연결 및 채팅 로드
-            if (typeof EventSource !== 'undefined') {
-              connect();
+            if (!socket && typeof EventSource !== 'undefined') {
+              connectSSE();
             }
             loadChatMessages();
           })();
@@ -7830,8 +7981,8 @@ function startWebServer(client) {
     }
   });
 
-  app.listen(PORT, () => {
-    console.log(`🌐 디스코드 경제 & OAuth2 웹 서버가 실행되었습니다 (포트: ${PORT})`);
+  server.listen(PORT, () => {
+    console.log(`🌐 디스코드 경제 & OAuth2 웹 서버 + Socket.IO가 실행되었습니다 (포트: ${PORT})`);
     console.log(`🔗 메인 웹사이트: http://localhost:${PORT}`);
     console.log(`🔗 관리자 관제 패널: http://localhost:${PORT}/admin`);
     console.log(`🔗 Discord OAuth2 Redirect URI: ${config.discord.redirectUri}`);

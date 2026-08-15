@@ -340,9 +340,34 @@ async function updateStockPrices() {
     await connection.commit();
     console.log(`📈 [월덕 가상 경제 엔진] 유저 상황 연동 주가 갱신 완료 (${currentRegime.name}) - ${stocks.length}개 종목${lastNews ? ` | 📢 공시: ${lastNews.title}` : ''}`);
 
-    // 📡 SSE 실시간 브로드캐스트 (연결된 브라우저에 즉시 push)
+    // 📡 ⚡ Socket.IO 및 SSE 실시간 양방향 브로드캐스트 (연결된 모든 웹 클라이언트에 0초 즉시 push)
+    if (global.__io) {
+      const [latestStocks] = await pool.query('SELECT stock_id, name, price, prev_price, high_24h, low_24h, volume_24h, volatility FROM stocks');
+      global.__io.emit('market:update', {
+        stocks: latestStocks.map(s => {
+          const curP = Number(s.price);
+          const prevP = Number(s.prev_price || s.price);
+          const diffP = curP - prevP;
+          const rateP = prevP > 0 ? (diffP / prevP) * 100 : 0;
+          return {
+            stock_id: s.stock_id,
+            name: s.name,
+            price: curP,
+            prev_price: prevP,
+            rate: rateP,
+            high_24h: Number(s.high_24h || curP),
+            low_24h: Number(s.low_24h || curP),
+            volume_24h: Number(s.volume_24h || 0),
+            volatility: Number(s.volatility || 0.04)
+          };
+        }),
+        regime: currentRegime,
+        news: lastNews,
+        timestamp: Date.now()
+      });
+    }
+
     if (typeof global.__broadcastMarketUpdate === 'function') {
-      // 캐시 무효화 후 즉시 전송
       if (typeof global.__invalidateMarketCache === 'function') global.__invalidateMarketCache();
       setTimeout(global.__broadcastMarketUpdate, 200);
     }
@@ -437,6 +462,28 @@ async function adjustStockPrice(stockId, targetPrice, reason = '관리자/시스
       VALUES (?, ?, ?, ?, ?, ?, '가격조절시스템', ?)
     `, [stockId, s.name, oldPrice.toString(), newPrice.toString(), rate, diff.toString(), reason]);
   } catch (e) {}
+
+  if (global.__io) {
+    const [latestStocks] = await pool.query('SELECT stock_id, name, price, prev_price, high_24h, low_24h, volume_24h, volatility FROM stocks');
+    global.__io.emit('market:update', {
+      stocks: latestStocks.map(st => {
+        const cp = Number(st.price);
+        const pp = Number(st.prev_price || st.price);
+        return {
+          stock_id: st.stock_id,
+          name: st.name,
+          price: cp,
+          prev_price: pp,
+          rate: pp > 0 ? ((cp - pp) / pp) * 100 : 0,
+          high_24h: Number(st.high_24h || cp),
+          low_24h: Number(st.low_24h || cp),
+          volume_24h: Number(st.volume_24h || 0),
+          volatility: Number(st.volatility || 0.04)
+        };
+      }),
+      timestamp: Date.now()
+    });
+  }
 
   if (typeof global.__broadcastMarketUpdate === 'function') {
     if (typeof global.__invalidateMarketCache === 'function') global.__invalidateMarketCache();
