@@ -1800,6 +1800,118 @@ function startWebServer(client) {
     });
   });
 
+  // 💬 실시간 채팅 SSE 브로드캐스트 함수
+  global.__broadcastChatMessage = (msgData) => {
+    try {
+      const payload = JSON.stringify({
+        type: 'CHAT_MESSAGE',
+        message: msgData,
+        timestamp: Date.now()
+      });
+      const dead = [];
+      for (const client of sseClients) {
+        try {
+          client.write(`data: ${payload}\n\n`);
+        } catch (e) {
+          dead.push(client);
+        }
+      }
+      dead.forEach(c => sseClients.delete(c));
+    } catch (e) {}
+  };
+
+  // 💬 최근 채팅 메시지 목록 조회 API (최근 60건)
+  app.get('/api/chat/messages', async (req, res) => {
+    try {
+      const [messages] = await pool.query(`
+        SELECT id, user_id, username, avatar, message, is_admin, created_at
+        FROM chat_messages
+        ORDER BY id DESC
+        LIMIT 60
+      `);
+      res.json({ success: true, messages: messages.reverse() });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 💬 실시간 채팅 메시지 전송 API (XSS 방어 + 쿨다운 + 개인정보 보호)
+  const chatCooldownMap = new Map();
+
+  app.post('/api/chat/send', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
+
+    const userId = session.id;
+    const now = Date.now();
+    const lastChatTime = chatCooldownMap.get(userId) || 0;
+
+    // 도배 방지: 1.5초 쿨다운
+    if (now - lastChatTime < 1500) {
+      return res.status(429).json({ success: false, error: '메시지를 너무 빠르게 전송하고 있습니다. 잠시 후 다시 시도하세요.' });
+    }
+
+    let { message } = req.body;
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ success: false, error: '메시지를 입력하세요.' });
+    }
+
+    message = message.trim();
+    if (message.length === 0) return res.status(400).json({ success: false, error: '메시지를 입력하세요.' });
+    if (message.length > 200) return res.status(400).json({ success: false, error: '메시지는 최대 200자까지 입력 가능합니다.' });
+
+    // 🛡️ XSS 방어: HTML 태그 이스케이프
+    const sanitized = message
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+
+    chatCooldownMap.set(userId, now);
+    const isAdmin = config.isAdmin(userId) ? 1 : 0;
+
+    try {
+      const [result] = await pool.query(`
+        INSERT INTO chat_messages (user_id, username, avatar, message, is_admin)
+        VALUES (?, ?, ?, ?, ?)
+      `, [userId, session.username || '익명 유저', session.avatar || '', sanitized, isAdmin]);
+
+      const chatObj = {
+        id: result.insertId,
+        user_id: userId,
+        username: session.username || '익명 유저',
+        avatar: session.avatar || '',
+        message: sanitized,
+        is_admin: isAdmin,
+        created_at: new Date().toISOString()
+      };
+
+      // 모든 실시간 접속자에게 SSE 푸시
+      if (typeof global.__broadcastChatMessage === 'function') {
+        global.__broadcastChatMessage(chatObj);
+      }
+
+      res.json({ success: true, message: chatObj });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 💬 관리자 불량 메시지 삭제 API
+  app.delete('/api/chat/message/:id', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) {
+      return res.status(403).json({ success: false, error: '관리자 전용' });
+    }
+    const msgId = parseInt(req.params.id, 10);
+    try {
+      await pool.query('DELETE FROM chat_messages WHERE id = ?', [msgId]);
+      res.json({ success: true, message: '메시지가 삭제되었습니다.' });
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
 
   app.get('/api/leaderboard', async (req, res) => {
     try {
@@ -2275,6 +2387,22 @@ function startWebServer(client) {
           <div style="text-align: center; padding: 30px 10px;">
             <p style="color: #9ca3af; margin-bottom: 16px;">로그인 후 내 정보와 1:1 문의를 확인하실 수 있습니다.</p>
             <a href="${discordLoginUrl}" class="btn-discord">🎮 Discord 로그인</a>
+          </div>
+        `;
+
+      const chatInputHtml = currentUser
+        ? `
+          <form id="chat-send-form" onsubmit="handleSendChat(event)" style="display: flex; gap: 10px; align-items: center;">
+            <input type="text" id="chat-input" placeholder="메시지를 입력하세요 (최대 200자)..." maxlength="200" autocomplete="off" style="flex: 1; background: #1e293b; border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 12px 16px; border-radius: 12px; font-size: 0.95rem; outline: none; transition: border-color 0.2s;">
+            <button type="submit" id="chat-submit-btn" style="background: linear-gradient(135deg, #0284c7, #38bdf8); border: none; color: #fff; font-weight: 700; padding: 12px 20px; border-radius: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 0.95rem;">
+              <span>전송</span> <span>➤</span>
+            </button>
+          </form>
+        `
+        : `
+          <div style="background: rgba(30, 41, 59, 0.7); border: 1px dashed rgba(255,255,255,0.15); border-radius: 12px; padding: 16px; text-align: center;">
+            <p style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 10px;">채팅에 참여하려면 Discord 로그인이 필요합니다.</p>
+            <a href="${discordLoginUrl}" class="btn-discord" style="display: inline-block; padding: 8px 18px; font-size: 0.9rem;">🎮 Discord 로그인 후 채팅하기</a>
           </div>
         `;
 
@@ -3086,6 +3214,32 @@ function startWebServer(client) {
             .pulse-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 1.5s infinite; }
             @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
 
+            /* 💬 실시간 광장 채팅 스타일 */
+            .chat-emoji-btn {
+              background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1);
+              color: #fff; padding: 4px 10px; border-radius: 8px; cursor: pointer; font-size: 1rem;
+              transition: all 0.15s; flex-shrink: 0;
+            }
+            .chat-emoji-btn:hover { background: rgba(255, 255, 255, 0.18); transform: translateY(-1px); }
+            .chat-bubble {
+              display: flex; gap: 10px; align-items: flex-start;
+              animation: chatFadeIn 0.25s ease-out;
+            }
+            @keyframes chatFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+            .chat-bubble.mine { flex-direction: row-reverse; }
+            .chat-bubble.mine .chat-content { background: linear-gradient(135deg, #1e3a8a, #2563eb); color: #fff; border-top-right-radius: 4px; border: none; }
+            .chat-bubble.admin .chat-content { border: 1px solid rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.15); }
+            .chat-avatar { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.15); object-fit: cover; flex-shrink: 0; }
+            .chat-content {
+              background: #1e293b; border: 1px solid rgba(255, 255, 255, 0.08);
+              padding: 8px 12px; border-radius: 14px; max-width: 75%; word-break: break-word; font-size: 0.9rem;
+            }
+            .chat-meta { font-size: 0.72rem; color: #94a3b8; margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+            .chat-bubble.mine .chat-meta { justify-content: flex-end; }
+            .badge-admin-chat { background: #d97706; color: #fff; font-size: 0.65rem; padding: 1px 5px; border-radius: 4px; font-weight: bold; }
+            .btn-del-msg { background: transparent; border: none; color: #f87171; cursor: pointer; font-size: 0.75rem; padding: 0 4px; opacity: 0.7; }
+            .btn-del-msg:hover { opacity: 1; }
+
             /* 💬 하단 24시 고객센터 문의 바 */
             .support-footer-banner {
               background: linear-gradient(135deg, rgba(30, 27, 75, 0.85) 0%, rgba(17, 24, 39, 0.95) 100%);
@@ -3266,6 +3420,7 @@ function startWebServer(client) {
             <!-- 탭 네비게이션 (시작 메뉴 허브) -->
             <div class="tabs-nav">
               <button class="tab-btn active" onclick="switchTab('tab-stocks')">📈 주식 시장 & 차트</button>
+              <button class="tab-btn" style="border-color: rgba(56, 189, 248, 0.4); color: #38bdf8;" onclick="switchTab('tab-chat')">💬 실시간 광장 채팅</button>
               <button class="tab-btn" style="border-color: rgba(245, 158, 11, 0.4); color: #fbbf24;" onclick="switchTab('tab-horse')">🏇 월덕 그랑프리 경마</button>
               <button class="tab-btn" onclick="switchTab('tab-casino')">🎰 웹 카지노 & 미니게임</button>
               <button class="tab-btn" onclick="switchTab('tab-news')">📰 시장 뉴스 & 경제 공시</button>
@@ -3310,6 +3465,42 @@ function startWebServer(client) {
               <h2 class="section-title">📊 실시간 가상 주식 시세 & 차트 분석</h2>
               <div class="stocks-grid">
                 ${stockCardsHtml}
+              </div>
+            </div>
+
+            <!-- 💬 탭: 실시간 광장 채팅 (Real-time Live Community Chat) -->
+            <div id="tab-chat" class="tab-pane">
+              <div class="card" style="border: 1px solid rgba(56, 189, 248, 0.3); background: rgba(15, 23, 42, 0.95); padding: 22px; border-radius: 18px; max-width: 900px; margin: 0 auto;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+                  <div>
+                    <h2 style="font-size: 1.3rem; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+                      💬 월덕 실시간 광장 채팅
+                      <span style="font-size: 0.75rem; background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.4);">● 실시간 LIVE</span>
+                    </h2>
+                    <p style="font-size: 0.82rem; color: #9ca3af; margin-top: 2px;">🔒 HTTPS 보안 암호화 및 24시간 후 자동 파기 개인정보 보호 정책이 적용됩니다.</p>
+                  </div>
+                  <button onclick="loadChatMessages()" style="background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: #94a3b8; font-size: 0.8rem; padding: 6px 12px; border-radius: 8px; cursor: pointer;">🔄 새로고침</button>
+                </div>
+
+                <!-- 메시지 스크롤 영역 -->
+                <div id="chat-messages-container" style="height: 420px; overflow-y: auto; padding: 12px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; scroll-behavior: smooth;">
+                  <div style="text-align: center; color: #64748b; font-size: 0.85rem; padding: 40px 0;">💬 채팅 메시지를 불러오는 중...</div>
+                </div>
+
+                <!-- 이모지 퀵 입력 바 -->
+                <div style="display: flex; gap: 6px; margin-bottom: 10px; overflow-x: auto; padding-bottom: 4px;">
+                  <button type="button" class="chat-emoji-btn" onclick="insertEmoji('🦆')">🦆</button>
+                  <button type="button" class="chat-emoji-btn" onclick="insertEmoji('💎')">💎</button>
+                  <button type="button" class="chat-emoji-btn" onclick="insertEmoji('📈')">📈</button>
+                  <button type="button" class="chat-emoji-btn" onclick="insertEmoji('🚀')">🚀</button>
+                  <button type="button" class="chat-emoji-btn" onclick="insertEmoji('💰')">💰</button>
+                  <button type="button" class="chat-emoji-btn" onclick="insertEmoji('🔥')">🔥</button>
+                  <button type="button" class="chat-emoji-btn" onclick="insertEmoji('🎰')">🎰</button>
+                  <button type="button" class="chat-emoji-btn" onclick="insertEmoji('🏆')">🏆</button>
+                </div>
+
+                <!-- 입력 폼 -->
+                ${chatInputHtml}
               </div>
             </div>
 
@@ -5289,24 +5480,12 @@ function startWebServer(client) {
 
             // 펄스 애니메이션 CSS
             const styleTag = document.createElement('style');
-            styleTag.textContent = \`
-              @keyframes pulse-dot {
-                0%,100%{opacity:1;transform:scale(1)}
-                50%{opacity:0.5;transform:scale(0.7)}
-              }
-              @keyframes price-flash-up {
-                0%{background:rgba(0,230,118,0.3)} 100%{background:transparent}
-              }
-              @keyframes price-flash-down {
-                0%{background:rgba(255,82,82,0.3)} 100%{background:transparent}
-              }
-              .flash-up   { animation: price-flash-up   0.9s ease-out; }
-              .flash-down { animation: price-flash-down 0.9s ease-out; }
-              #live-indicator.disconnected {
-                border-color:#ff5252; color:#ff5252;
-                background:rgba(255,82,82,0.12);
-              }
-            \`;
+            styleTag.textContent = '@keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.7)} } ' +
+              '@keyframes price-flash-up { 0%{background:rgba(0,230,118,0.3)} 100%{background:transparent} } ' +
+              '@keyframes price-flash-down { 0%{background:rgba(255,82,82,0.3)} 100%{background:transparent} } ' +
+              '.flash-up { animation: price-flash-up 0.9s ease-out; } ' +
+              '.flash-down { animation: price-flash-down 0.9s ease-out; } ' +
+              '#live-indicator.disconnected { border-color:#ff5252; color:#ff5252; background:rgba(255,82,82,0.12); }';
             document.head.appendChild(styleTag);
 
             function setLive(connected) {
@@ -5390,9 +5569,11 @@ function startWebServer(client) {
                   const data = JSON.parse(e.data);
                   if (data.type === 'MARKET_UPDATE') {
                     applyMarketUpdate(data);
-                    retryDelay = 3000; // 성공 시 재시도 간격 초기화
-                    setLive(true);
+                  } else if (data.type === 'CHAT_MESSAGE' && data.message) {
+                    appendLiveChatMessage(data.message, true);
                   }
+                  retryDelay = 3000; // 성공 시 재시도 간격 초기화
+                  setLive(true);
                 } catch (err) {}
               };
 
@@ -5406,11 +5587,125 @@ function startWebServer(client) {
               es.onopen = function() { setLive(true); };
             }
 
-            // 페이지 로드 후 바로 연결
+            // 페이지 로드 후 바로 연결 및 채팅 로드
             if (typeof EventSource !== 'undefined') {
               connect();
             }
+            loadChatMessages();
           })();
+
+          // 💬 실시간 광장 채팅 스크립트
+          let currentChatUserId = ${JSON.stringify(currentUser ? String(currentUser.id) : '')};
+          let currentIsAdmin = ${isAdminUser ? true : false};
+
+          async function loadChatMessages() {
+            const container = document.getElementById('chat-messages-container');
+            if (!container) return;
+            try {
+              const res = await fetch('/api/chat/messages');
+              const data = await res.json();
+              if (data.success && Array.isArray(data.messages)) {
+                if (data.messages.length === 0) {
+                  container.innerHTML = '<div style="text-align: center; color: #64748b; font-size: 0.85rem; padding: 40px 0;">아직 작성된 채팅이 없습니다. 첫 메시지를 남겨보세요! 💬</div>';
+                  return;
+                }
+                container.innerHTML = '';
+                data.messages.forEach(msg => appendLiveChatMessage(msg, false));
+                container.scrollTop = container.scrollHeight;
+              }
+            } catch (e) {
+              if (container) container.innerHTML = '<div style="text-align: center; color: #ef4444; font-size: 0.85rem;">채팅 메시지를 불러오지 못했습니다.</div>';
+            }
+          }
+
+          function appendLiveChatMessage(msg, shouldScroll = true) {
+            const container = document.getElementById('chat-messages-container');
+            if (!container) return;
+
+            // 중복 렌더링 방지
+            if (document.getElementById('chat-msg-' + msg.id)) return;
+
+            const isMine = currentChatUserId && String(msg.user_id) === String(currentChatUserId);
+            const isAdmin = msg.is_admin === 1 || msg.is_admin === true;
+            const timeStr = msg.created_at ? new Date(msg.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '';
+            const avatarUrl = msg.avatar ? ('https://cdn.discordapp.com/avatars/' + msg.user_id + '/' + msg.avatar + '.png') : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+            const bubble = document.createElement('div');
+            bubble.id = 'chat-msg-' + msg.id;
+            bubble.className = 'chat-bubble ' + (isMine ? 'mine' : '') + ' ' + (isAdmin ? 'admin' : '');
+
+            const delBtn = (currentIsAdmin || isMine) ? '<button class="btn-del-msg" onclick="deleteChatMessage(' + msg.id + ')" title="메시지 삭제">✕</button>' : '';
+            const adminBadge = isAdmin ? '<span class="badge-admin-chat">👑 관리자</span>' : '';
+
+            bubble.innerHTML = 
+              '<img src="' + avatarUrl + '" class="chat-avatar" onerror="this.src=\'https://cdn.discordapp.com/embed/avatars/0.png\'">' +
+              '<div class="chat-content">' +
+                '<div class="chat-meta">' +
+                  '<b>@' + (msg.username || '익명') + '</b> ' +
+                  adminBadge + ' ' +
+                  '<span>' + timeStr + '</span> ' +
+                  delBtn +
+                '</div>' +
+                '<div>' + msg.message + '</div>' +
+              '</div>';
+
+            container.appendChild(bubble);
+            if (shouldScroll) {
+              container.scrollTop = container.scrollHeight;
+            }
+          }
+
+          function insertEmoji(emoji) {
+            const input = document.getElementById('chat-input');
+            if (input) {
+              input.value += emoji;
+              input.focus();
+            }
+          }
+
+          async function handleSendChat(e) {
+            if (e) e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const btn = document.getElementById('chat-submit-btn');
+            if (!input) return;
+
+            const text = input.value.trim();
+            if (!text) return;
+
+            if (btn) btn.disabled = true;
+            try {
+              const res = await fetch('/api/chat/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text })
+              });
+              const data = await res.json();
+              if (!data.success) {
+                alert(data.error || '채팅 전송에 실패했습니다.');
+              } else {
+                input.value = '';
+              }
+            } catch (err) {
+              alert('채팅 전송 중 네트워크 오류가 발생했습니다.');
+            } finally {
+              if (btn) btn.disabled = false;
+              input.focus();
+            }
+          }
+
+          async function deleteChatMessage(msgId) {
+            if (!confirm('이 메시지를 삭제하시겠습니까?')) return;
+            try {
+              const res = await fetch('/api/chat/message/' + msgId, { method: 'DELETE' });
+              const data = await res.json();
+              if (data.success) {
+                const el = document.getElementById('chat-msg-' + msgId);
+                if (el) el.remove();
+              } else {
+                alert(data.error || '삭제 권한이 없습니다.');
+              }
+            } catch (e) {}
+          }
           </script>
         </body>
         </html>

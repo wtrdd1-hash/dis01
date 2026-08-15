@@ -407,6 +407,21 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
+    // 💬 실시간 유저 커뮤니티 채팅 메시지 테이블
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id VARCHAR(32) NOT NULL,
+        username VARCHAR(64) NOT NULL,
+        avatar VARCHAR(255) NULL,
+        message VARCHAR(500) NOT NULL,
+        is_admin TINYINT(1) NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_created_at (created_at),
+        INDEX idx_user_id (user_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
     // 우리만의 독창적인 가상 커뮤니티 기업/종목 초기화 시드
     const defaultStocks = [
       { 
@@ -548,9 +563,10 @@ async function cleanupOldDatabaseLogs() {
     await pool.query("UPDATE security_events SET ip = 'DELETED' WHERE created_at < NOW() - INTERVAL 1 HOUR AND ip != 'DELETED'");
     await pool.query("UPDATE admin_logs SET ip = 'DELETED' WHERE created_at < NOW() - INTERVAL 1 HOUR AND ip != 'DELETED'");
 
-    // 웹 접속 로그 및 보안 이벤트 전체 데이터는 1일(24시간) 후 삭제
+    // 웹 접속 로그, 보안 이벤트 및 실시간 채팅 데이터는 1일(24시간) 후 삭제 (개인정보 보호)
     await pool.query('DELETE FROM web_access_logs WHERE created_at < NOW() - INTERVAL 1 DAY');
     await pool.query('DELETE FROM security_events WHERE created_at < NOW() - INTERVAL 1 DAY');
+    await pool.query('DELETE FROM chat_messages WHERE created_at < NOW() - INTERVAL 1 DAY');
 
     // 일반 시스템/경제 로그 30일 보관
     await pool.query('DELETE FROM command_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
