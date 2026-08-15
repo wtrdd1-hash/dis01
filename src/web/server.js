@@ -2276,7 +2276,11 @@ function startWebServer(client) {
         <html lang="ko">
         <head>
           <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+          <meta name="theme-color" content="#0b0f19">
+          <meta name="mobile-web-app-capable" content="yes">
+          <meta name="apple-mobile-web-app-capable" content="yes">
+          <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
           <title>💎 월덕 주식 차트 & 클리커 카지노</title>
           <link rel="preconnect" href="https://fonts.googleapis.com">
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -3155,20 +3159,56 @@ function startWebServer(client) {
             }
             .btn-submit-inquiry:hover { filter: brightness(1.1); transform: translateY(-1px); }
 
-            /* 📱 모바일 & 태블릿 반응형 완벽 최적화 */
+            /* 📱💻🖥️ 모든 기기 자동 화면 조절 반응형 최적화 */
+            @media (min-width: 1200px) {
+              .container { max-width: 1280px; margin: 0 auto; }
+            }
+
+            @media (max-width: 1024px) {
+              .stocks-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+              .casino-hub-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+              .portfolio-cards-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+            }
+
             @media (max-width: 768px) {
-              .navbar { padding: 12px 18px; }
-              .logo { font-size: 1.15rem; }
-              .container { padding: 16px 12px 60px; }
-              .hero { padding: 22px 16px; margin-bottom: 20px; }
-              .hero h1 { font-size: 1.65rem; }
-              .personal-asset-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-              .personal-asset-grid .asset-card { padding: 12px; }
-              .asset-val { font-size: 1.05rem; }
-              .tabs-nav { gap: 6px; padding-bottom: 8px; }
-              .tab-btn { font-size: 0.85rem; padding: 8px 12px; }
-              .casino-hub-grid, .stocks-grid, .gainers-grid { grid-template-columns: 1fr; }
-              .modal-box { padding: 20px 16px; border-radius: 18px; }
+              .navbar { padding: 10px 14px; flex-direction: column; gap: 8px; align-items: stretch; text-align: center; }
+              .logo { font-size: 1.1rem; justify-content: center; }
+              .container { padding: 12px 8px 60px; }
+              .hero { padding: 18px 12px; margin-bottom: 16px; border-radius: 16px; }
+              .hero h1 { font-size: 1.45rem; line-height: 1.3; }
+              .personal-asset-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+              .personal-asset-grid .asset-card { padding: 10px; }
+              .asset-val { font-size: 0.95rem; }
+              .tabs-nav { 
+                gap: 6px; padding-bottom: 8px; overflow-x: auto; 
+                flex-wrap: nowrap; -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+              }
+              .tabs-nav::-webkit-scrollbar { display: none; }
+              .tab-btn { font-size: 0.8rem; padding: 7px 12px; white-space: nowrap; flex-shrink: 0; }
+              .casino-hub-grid, .stocks-grid, .gainers-grid { grid-template-columns: 1fr; gap: 12px; }
+              .modal-box { padding: 18px 14px; border-radius: 16px; max-width: 95vw; }
+              .market-trends-panel, .portfolio-panel { padding: 14px; }
+              .trends-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+              .hero-quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+              .hero-quick-actions .btn-quick { width: 100%; font-size: 0.78rem; padding: 8px 4px; text-align: center; justify-content: center; }
+              table { font-size: 0.75rem; }
+              th, td { padding: 8px 6px; }
+            }
+
+            @media (max-width: 480px) {
+              .navbar { padding: 8px 10px; }
+              .logo { font-size: 0.95rem; }
+              .hero h1 { font-size: 1.25rem; }
+              .personal-asset-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+              .personal-asset-grid .asset-card { padding: 8px; }
+              .asset-lbl { font-size: 0.72rem; }
+              .asset-val { font-size: 0.88rem; }
+              .btn-chip-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
+              .btn-chip { padding: 6px 4px; font-size: 0.72rem; }
+              .hero-quick-actions { grid-template-columns: 1fr; }
+              .modal-box { padding: 14px 10px; }
+              .slot-reel { font-size: 2.2rem; width: 60px; height: 60px; }
             }
 
             /* 🌐 사이트 푸터 & 정책 링크 */
@@ -5621,6 +5661,18 @@ function startWebServer(client) {
             .badge-admin { background: #d97706; color: #fff; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
             .btn-rollback { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; font-weight: 700; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-size: 0.75rem; }
             .btn-rollback:hover { background: #ef4444; color: #fff; }
+
+            /* 📱 관리자 패널 모바일/태블릿 자동 반응형 최적화 */
+            @media (max-width: 768px) {
+              body { padding: 12px 10px; }
+              .header { flex-direction: column; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
+              .header h1 { font-size: 1.35rem; }
+              .card { padding: 14px; margin-bottom: 20px; border-radius: 12px; }
+              .api-links { gap: 8px; }
+              .btn-json { font-size: 0.75rem; padding: 6px 10px; }
+              table { font-size: 0.75rem; }
+              th, td { padding: 8px 6px; }
+            }
           </style>
         </head>
         <body>
