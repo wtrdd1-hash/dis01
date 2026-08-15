@@ -5469,6 +5469,7 @@ function startWebServer(client) {
         ORDER BY net_worth DESC
         LIMIT 100
       `);
+      const totalUsers = allUsersWealth.length;
 
       let userWealthRowsHtml = '';
       for (const u of allUsersWealth) {

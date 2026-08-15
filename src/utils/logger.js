@@ -240,8 +240,29 @@ function logComponentInteraction(interaction) {
 /**
  * 관리자 전용 작업 감사 로그 (DB + JSONL + 콘솔)
  */
-async function logAdminAction(adminId, adminUsername, action, targetUserId = null, details = {}, ip = '127.0.0.1', country = 'LOCAL') {
-  const timestamp = getFormattedTimestamp();
+async function logAdminAction(adminId, adminUsername, action, targetUserId = null, details = {}, req = null) {
+  const timestamp = getKstTimeString();
+  let ip = 'N/A';
+  let country = 'N/A';
+
+  if (req) {
+    try {
+      const { getClientIp, getCountryFromIp } = require('../web/security');
+      ip = getClientIp(req);
+      country = getCountryFromIp(ip);
+    } catch (e) {
+      ip = req.headers ? (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'N/A') : 'N/A';
+    }
+  }
+
+  // Circular reference safe serializer for details
+  let safeDetails = {};
+  try {
+    safeDetails = JSON.parse(JSON.stringify(details));
+  } catch (e) {
+    safeDetails = { summary: String(details) };
+  }
+
   const logPayload = {
     type: 'ADMIN_AUDIT',
     timestamp,
@@ -249,13 +270,13 @@ async function logAdminAction(adminId, adminUsername, action, targetUserId = nul
     adminUsername,
     action,
     targetUserId,
-    details,
+    details: safeDetails,
     ip,
     country
   };
 
   appendJsonLog(ADMIN_JSONL_FILE, logPayload);
-  console.log(`👑 [관리자 작업 감사] @${adminUsername}(${adminId}) -> ${action} | 대상: ${targetUserId || 'N/A'} | 상세: ${JSON.stringify(details)}`);
+  console.log(`👑 [관리자 작업 감사] @${adminUsername}(${adminId}) -> ${action} | 대상: ${targetUserId || 'N/A'} | 상세: ${JSON.stringify(safeDetails)}`);
 
   try {
     await pool.query(`
@@ -266,7 +287,7 @@ async function logAdminAction(adminId, adminUsername, action, targetUserId = nul
       adminUsername,
       action,
       targetUserId,
-      JSON.stringify(details),
+      JSON.stringify(safeDetails),
       ip,
       country
     ]);
