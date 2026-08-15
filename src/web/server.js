@@ -6215,12 +6215,13 @@ function startWebServer(client) {
             try {
               const res = await fetch('/api/chat/send', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: text })
               });
               const data = await res.json();
               if (!data.success) {
-                showToast('error', '채팅 실패', data.error || '채팅 전송에 실패했습니다.');
+                showToast('error', '채팅 실패', data.error || '채팅 전송에 실패했습니다. (Discord 로그인이 필요할 수 있습니다)');
               } else {
                 input.value = '';
                 if (data.message) {
@@ -6228,7 +6229,7 @@ function startWebServer(client) {
                 }
               }
             } catch (err) {
-              showToast('error', '통신 오류', '채팅 서버와 연결할 수 없습니다.');
+              showToast('error', '통신 오류', '채팅 서버와 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.');
             } finally {
               if (btn) btn.disabled = false;
               input.focus();
@@ -6250,12 +6251,13 @@ function startWebServer(client) {
             try {
               const res = await fetch('/api/chat/send', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: text })
               });
               const data = await res.json();
               if (!data.success) {
-                showToast('error', '채팅 실패', data.error || '채팅 전송에 실패했습니다.');
+                showToast('error', '채팅 실패', data.error || '채팅 전송에 실패했습니다. (Discord 로그인이 필요할 수 있습니다)');
               } else {
                 input.value = '';
                 if (data.message) {
@@ -6263,7 +6265,7 @@ function startWebServer(client) {
                 }
               }
             } catch (err) {
-              showToast('error', '통신 오류', '채팅 서버와 연결할 수 없습니다.');
+              showToast('error', '통신 오류', '채팅 서버와 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.');
             } finally {
               if (btn) btn.disabled = false;
               input.focus();
@@ -7069,7 +7071,7 @@ function startWebServer(client) {
         id: discordUser.id,
         username: username,
         avatar: avatarUrl
-      }), { maxAge: 7 * 24 * 3600 * 1000, httpOnly: true });
+      }), { maxAge: 30 * 24 * 3600 * 1000, httpOnly: false, path: '/', sameSite: 'lax' });
 
       res.redirect('/');
     } catch (err) {
@@ -7079,7 +7081,7 @@ function startWebServer(client) {
   });
 
   app.get('/auth/logout', (req, res) => {
-    res.clearCookie('discord_user');
+    res.clearCookie('discord_user', { path: '/' });
     res.redirect('/');
   });
 
