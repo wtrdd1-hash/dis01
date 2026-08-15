@@ -81,6 +81,29 @@ const BLOCKED_PATHS = [
   /credentials/i,
 ];
 
+// ── 🤖 차단할 무단 크롤러 및 스캐너 봇 User-Agent ───────────
+const BLOCKED_BOT_AGENTS = [
+  /sqlmap/i,
+  /nikto/i,
+  /nmap/i,
+  /masscan/i,
+  /zgrab/i,
+  /gobuster/i,
+  /dirbuster/i,
+  /wpscan/i,
+  /censys/i,
+  /shodan/i,
+  /SemrushBot/i,
+  /AhrefsBot/i,
+  /MJ12bot/i,
+  /DotBot/i,
+  /PetalBot/i,
+  /Bytespider/i,
+  /GPTBot/i,
+  /CCBot/i,
+  /DataForSeoBot/i
+];
+
 // ── 🛡️ 화이트리스트 IP 목록 (절대 차단 불가) ──────────────
 const WHITELIST_IPS = new Set([
   '14.49.239.61',
@@ -306,25 +329,20 @@ function createSecurityMiddleware(client) {
       return res.status(404).end();
     }
 
-    // ── 4. 의심스러운 User-Agent 감지 ─────────────────
-    const suspiciousUA = [
-      /sqlmap/i, /nikto/i, /nmap/i, /masscan/i, /zgrab/i,
-      /dirbuster/i, /gobuster/i, /wfuzz/i, /hydra/i,
-      /python-requests\/2\.[0-9]\./i,
-      /curl\/[0-9]/i,
-      /go-http-client/i,
-    ];
-    for (const uaPattern of suspiciousUA) {
-      if (uaPattern.test(ua)) {
-        rc.suspicious = (rc.suspicious || 0) + 2;
-        logSecurityEvent(ip, 'SUSPICIOUS_UA', urlPath, `의심스러운 UA: ${ua}`, country, countryName);
-        if (rc.suspicious >= SUSPICIOUS_THRESHOLD) {
-          memoryBanList.set(ip, { reason: `의심 UA: ${ua}`, bannedAt: now, expires: now + 30 * 60 * 1000 });
-          securityStats.totalBanned++;
-          alertAdmins(client, 'IP_BANNED', { ip, country, countryName, method, path: urlPath, reason: `의심 스캐너 감지 → 30분 자동 차단 (UA: ${ua.substring(0,50)})`, count: rc.suspicious });
+    // ── 4. 의심스러운 User-Agent 및 무단 크롤러 감지 (robots.txt 제외) ─────────────────
+    if (urlPath !== '/robots.txt' && urlPath !== '/favicon.ico' && urlPath !== '/favicon.svg') {
+      for (const uaPattern of BLOCKED_BOT_AGENTS) {
+        if (uaPattern.test(ua)) {
+          rc.suspicious = (rc.suspicious || 0) + 1;
+          logSecurityEvent(ip, 'SUSPICIOUS_UA', urlPath, `차단된 봇/스캐너 UA: ${ua}`, country, countryName);
+          if (rc.suspicious >= SUSPICIOUS_THRESHOLD) {
+            memoryBanList.set(ip, { reason: `의심 봇/스캐너 UA: ${ua}`, bannedAt: now, expires: now + 30 * 60 * 1000 });
+            securityStats.totalBanned++;
+            alertAdmins(client, 'IP_BANNED', { ip, country, countryName, method, path: urlPath, reason: `의심 봇/스캐너 감지 → 30분 자동 차단 (UA: ${ua.substring(0,50)})`, count: rc.suspicious });
+          }
+          res.setHeader('X-Security', 'Bot-Blocked');
           return res.status(403).end();
         }
-        break;
       }
     }
 

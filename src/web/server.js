@@ -105,6 +105,13 @@ function startWebServer(client) {
     res.send(FAVICON_SVG);
   });
 
+  // 🤖 모든 검색엔진/크롤러/스크래퍼 봇 접근 완전 차단 (robots.txt)
+  app.get('/robots.txt', (req, res) => {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send('User-agent: *\nDisallow: /\n');
+  });
+
   function getDynamicBaseUrl(req) {
     const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'easy-scraping.com';
