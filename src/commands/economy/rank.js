@@ -15,7 +15,9 @@ module.exports = {
     const [rows] = await pool.query(`
       SELECT 
         u.discord_id, 
-        (u.cash + u.bank + COALESCE(SUM(us.amount * s.price), 0)) AS net
+        u.cash, 
+        u.bank,
+        CAST(ROUND(u.cash + u.bank + COALESCE(SUM(us.amount * s.price), 0)) AS SIGNED) AS net
       FROM users u
       LEFT JOIN user_stocks us ON u.discord_id = us.user_id AND us.amount > 0
       LEFT JOIN stocks s ON us.stock_id = s.stock_id
@@ -36,13 +38,13 @@ module.exports = {
     for (let i = 0; i < top10.length; i++) {
       const row = top10[i];
       const emoji = rankEmojis[i] || '🔹';
-      const net = BigInt(row.net || 0);
+      const net = BigInt(Math.floor(Number(row.net || 0)));
       description += `${emoji} <@${row.discord_id}> - **${formatMoney(net)}**\n`;
     }
 
     const myRankIndex = rows.findIndex(r => r.discord_id === interaction.user.id);
     if (myRankIndex !== -1) {
-      const myNet = BigInt(rows[myRankIndex].net || 0);
+      const myNet = BigInt(Math.floor(Number(rows[myRankIndex].net || 0)));
       description += `\n─────────────────────\n👤 **내 순위:** **${myRankIndex + 1}위** / ${rows.length}명 (${formatMoney(myNet)})`;
     }
 

@@ -224,7 +224,7 @@ function startWebServer(client) {
         u.avatar,
         u.cash,
         u.bank,
-        (u.cash + u.bank + COALESCE(SUM(us.amount * s.price), 0)) AS net
+        CAST(ROUND(u.cash + u.bank + COALESCE(SUM(us.amount * s.price), 0)) AS SIGNED) AS net
       FROM users u
       LEFT JOIN user_stocks us ON u.discord_id = us.user_id AND us.amount > 0
       LEFT JOIN stocks s ON us.stock_id = s.stock_id
@@ -254,15 +254,15 @@ function startWebServer(client) {
 
       let stockVal = 0n;
       const formattedStocks = userStocks.map(us => {
-        const amt = BigInt(us.amount);
+        const amtNum = Number(us.amount);
         const curPrice = BigInt(us.price);
-        const spent = BigInt(us.total_spent);
-        const evalVal = amt * curPrice;
+        const spent = BigInt(us.total_spent || 0);
+        const evalVal = BigInt(Math.floor(amtNum * Number(curPrice)));
         stockVal += evalVal;
         return {
           stock_id: us.stock_id,
           name: us.name,
-          amount: amt.toString(),
+          amount: amtNum.toString(),
           price: curPrice.toString(),
           spent: spent.toString(),
           evalVal: evalVal.toString(),
@@ -1600,7 +1600,7 @@ function startWebServer(client) {
           WHERE h.user_id = ?
         `, [session.id]);
         for (const h of holdings) {
-          stockVal += BigInt(h.amount) * BigInt(h.price);
+          stockVal += BigInt(Math.floor(Number(h.amount) * Number(h.price)));
         }
       } catch (e) {}
 
@@ -2027,7 +2027,7 @@ function startWebServer(client) {
 
           let stockVal = 0n;
           for (const item of stocksRows) {
-            stockVal += BigInt(item.amount) * BigInt(item.price);
+            stockVal += BigInt(Math.floor(Number(item.amount) * Number(item.price)));
           }
 
           const cash = BigInt(userData.cash || 0);
@@ -2063,15 +2063,16 @@ function startWebServer(client) {
           let totalPortfolioCurrent = 0n;
 
           for (const item of portfolioRows) {
-            const amount = BigInt(item.amount);
-            const spent = BigInt(item.total_spent);
+            const amountNum = Number(item.amount);
+            const spent = BigInt(item.total_spent || 0);
             const currentPrice = BigInt(item.price);
-            const val = amount * currentPrice;
-            const avg = amount > 0n ? spent / amount : 0n;
+            const val = BigInt(Math.floor(amountNum * Number(currentPrice)));
+            const avg = amountNum > 0 ? BigInt(Math.round(Number(spent) / amountNum)) : 0n;
             const profit = val - spent;
             const profitRate = spent > 0n ? ((Number(profit) / Number(spent)) * 100).toFixed(2) : '0.00';
             const isProfit = profit >= 0n;
-            const userHolding = Number(item.amount);
+            const userHolding = amountNum;
+            const displayHolding = (amountNum % 1 === 0) ? amountNum.toLocaleString() : amountNum.toFixed(4);
 
             totalPortfolioInvested += spent;
             totalPortfolioCurrent += val;
@@ -2086,7 +2087,7 @@ function startWebServer(client) {
                   <span class="badge ${isProfit ? 'badge-up' : 'badge-down'}">${isProfit ? '▲ +' : '▼ '}${profitRate}%</span>
                 </div>
                 <div class="portfolio-grid-stats">
-                  <div class="port-stat"><span>보유 수량</span><b>${Number(amount).toLocaleString()}주</b></div>
+                  <div class="port-stat"><span>보유 수량</span><b>${displayHolding}주</b></div>
                   <div class="port-stat"><span>매수 평단가</span><b>${formatMoney(avg)}</b></div>
                   <div class="port-stat"><span>현재 평가액</span><b style="color: #38bdf8;">${formatMoney(val)}</b></div>
                   <div class="port-stat"><span>평가 손익</span><b class="${isProfit ? 'text-up' : 'text-down'}">${isProfit ? '+' : ''}${formatMoney(profit)}</b></div>
@@ -2259,7 +2260,7 @@ function startWebServer(client) {
       for (let i = 0; i < leaderboardRows.length; i++) {
         const row = leaderboardRows[i];
         const emoji = rankEmojis[i] || '🔹';
-        const net = BigInt(row.net || 0);
+        const net = BigInt(Math.floor(Number(row.net || 0)));
 
         let displayName = row.username;
         if (!displayName && client && client.users) {
