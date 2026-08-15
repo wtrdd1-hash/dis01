@@ -2,6 +2,7 @@ const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const config = require('./config/config');
+require('./web/autoRefreshPatch');
 
 if (!config.token) {
   console.error('❌ .env 파일에 디스코드 봇 토큰(DISCORD_TOKEN 또는 t)이 설정되어 있지 않습니다.');
