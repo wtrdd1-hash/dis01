@@ -124,19 +124,88 @@ const SOCKET_CHAT_CLIENT_BRIDGE = `
   if (window.__socketChatSendBridgeInstalled) return;
   window.__socketChatSendBridgeInstalled = true;
 
-  let chatSendSocket = null;
+  let chatSocket = null;
+  let chatFallback = null;
 
-  function getChatSendSocket() {
-    if (chatSendSocket) return chatSendSocket;
-    if (typeof window.io !== 'function') return null;
+  function handleIncomingChat(msg) {
+    if (msg && typeof window.appendLiveChatMessage === 'function') {
+      window.appendLiveChatMessage(msg, true);
+    }
+  }
 
-    chatSendSocket = window.io({
-      reconnectionAttempts: 15,
-      reconnectionDelay: 1500,
+  function handleDeletedChat(data) {
+    if (!data || !data.id) return;
+
+    const el = document.getElementById('chat-msg-' + data.id);
+    if (el) el.remove();
+
+    const floatingEl = document.getElementById('fchat-msg-' + data.id);
+    if (floatingEl) floatingEl.remove();
+  }
+
+  function startChatFallback() {
+    if (chatFallback || typeof window.EventSource === 'undefined') return;
+
+    chatFallback = new EventSource('/api/stream');
+
+    chatFallback.onmessage = function(event) {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'CHAT_MESSAGE' && data.message) {
+          handleIncomingChat(data.message);
+        }
+      } catch (e) {}
+    };
+
+    chatFallback.onerror = function() {
+      if (chatFallback) {
+        chatFallback.close();
+        chatFallback = null;
+      }
+    };
+  }
+
+  function stopChatFallback() {
+    if (!chatFallback) return;
+    chatFallback.close();
+    chatFallback = null;
+  }
+
+  function getChatSocket() {
+    if (chatSocket) return chatSocket;
+    if (typeof window.io !== 'function') {
+      startChatFallback();
+      return null;
+    }
+
+    chatSocket = window.io({
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
       timeout: 8000
     });
 
-    return chatSendSocket;
+    chatSocket.on('connect', function() {
+      stopChatFallback();
+      console.info('[chat] Socket.IO connected:', chatSocket.id);
+    });
+
+    chatSocket.on('connect_error', function(err) {
+      console.warn('[chat] Socket.IO connect_error:', err && err.message ? err.message : err);
+      startChatFallback();
+    });
+
+    chatSocket.on('disconnect', function(reason) {
+      console.warn('[chat] Socket.IO disconnected:', reason);
+      startChatFallback();
+    });
+
+    chatSocket.on('chat:message', handleIncomingChat);
+    chatSocket.on('chat:deleted', handleDeletedChat);
+
+    return chatSocket;
   }
 
   async function sendChatViaHttp(text) {
@@ -150,7 +219,7 @@ const SOCKET_CHAT_CLIENT_BRIDGE = `
   }
 
   function sendChatMessage(text) {
-    const socket = getChatSendSocket();
+    const socket = getChatSocket();
 
     if (!socket || !socket.connected) {
       return sendChatViaHttp(text);
@@ -191,20 +260,20 @@ const SOCKET_CHAT_CLIENT_BRIDGE = `
       const data = await sendChatMessage(text);
 
       if (!data.success) {
-        if (typeof showToast === 'function') {
-          showToast('error', '채팅 실패', data.error || '채팅 전송에 실패했습니다.');
+        if (typeof window.showToast === 'function') {
+          window.showToast('error', '채팅 실패', data.error || '채팅 전송에 실패했습니다.');
         }
         return;
       }
 
       input.value = '';
 
-      if (data.message && typeof appendLiveChatMessage === 'function') {
-        appendLiveChatMessage(data.message, true);
+      if (data.message) {
+        handleIncomingChat(data.message);
       }
     } catch (err) {
-      if (typeof showToast === 'function') {
-        showToast('error', '통신 오류', '채팅 서버와 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.');
+      if (typeof window.showToast === 'function') {
+        window.showToast('error', '통신 오류', '채팅 서버와 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.');
       }
     } finally {
       if (btn) btn.disabled = false;
@@ -212,7 +281,7 @@ const SOCKET_CHAT_CLIENT_BRIDGE = `
     }
   }
 
-  getChatSendSocket();
+  getChatSocket();
 
   window.handleSendChat = function(e) {
     if (e) e.preventDefault();
@@ -253,7 +322,6 @@ function createChatRoutes(getSessionUser, sseClients) {
   installSocketChatHandler();
   installSocketChatClientBridge();
 
-  // 💬 최근 채팅 메시지 목록 조회 API (최근 60건)
   router.get('/messages', async (req, res) => {
     try {
       const [messages] = await pool.query(`
@@ -268,8 +336,6 @@ function createChatRoutes(getSessionUser, sseClients) {
     }
   });
 
-  // 💬 채팅 메시지 전송 API
-  // Socket.IO 연결이 불가능한 클라이언트를 위한 폴백으로 유지한다.
   router.post('/send', async (req, res) => {
     const session = getSessionUser(req);
     const result = await createChatMessage(session, req.body?.message);
@@ -277,7 +343,6 @@ function createChatRoutes(getSessionUser, sseClients) {
     return res.status(status).json(response);
   });
 
-  // 💬 관리자 / 본인 메시지 삭제 API
   router.delete('/message/:id', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: '로그인이 필요합니다.' });
