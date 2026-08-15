@@ -458,9 +458,9 @@ function startWebServer(client) {
       let clickerLevel = userData.clicker_level || 1;
       let autoLevel = userData.auto_miner_level || 0;
 
-      if (type === 'power') {
+      if (type === 'power' || type === 'clicker') {
         const cost = BigInt(clickerLevel * 4500);
-        if (userCash < cost) return res.status(400).json({ success: false, error: `현금이 부족합니다! (필요: ${formatMoney(cost)})` });
+        if (userCash < cost) return res.json({ success: false, error: `현금이 부족합니다! (필요: ${formatMoney(cost)} / 보유: ${formatMoney(userCash)})` });
 
         userCash -= cost;
         clickerLevel += 1;
@@ -473,7 +473,7 @@ function startWebServer(client) {
         });
       } else if (type === 'auto') {
         const cost = BigInt((autoLevel + 1) * 12000);
-        if (userCash < cost) return res.status(400).json({ success: false, error: `현금이 부족합니다! (필요: ${formatMoney(cost)})` });
+        if (userCash < cost) return res.json({ success: false, error: `현금이 부족합니다! (필요: ${formatMoney(cost)} / 보유: ${formatMoney(userCash)})` });
 
         userCash -= cost;
         autoLevel += 1;
@@ -485,7 +485,7 @@ function startWebServer(client) {
           autoLevel
         });
       } else {
-        return res.status(400).json({ success: false, error: '유효하지 않은 업그레이드입니다.' });
+        return res.json({ success: false, error: '유효하지 않은 업그레이드입니다.' });
       }
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });

@@ -30,40 +30,51 @@ function createEconomyRoutes(getSessionUser) {
   // 2. 클리커 레벨 강화
   router.post('/clicker/upgrade', async (req, res) => {
     const session = getSessionUser(req);
-    if (!session) return res.status(401).json({ success: false, error: '로그인이 필요합니다.' });
+    if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
 
     const { type } = req.body;
-    const userData = await getOrCreateUser(session.id, session.username, session.avatar);
-    const userCash = BigInt(userData.cash || 0);
+    try {
+      const userData = await getOrCreateUser(session.id, session.username, session.avatar);
+      let userCash = BigInt(userData.cash || 0);
+      let clickerLevel = userData.clicker_level || 1;
+      let autoLevel = userData.auto_miner_level || 0;
 
-    if (type === 'clicker') {
-      const clickerLevel = (userData.clicker_level || 1) + 1;
-      const cost = BigInt(Math.floor(1000 * Math.pow(1.5, clickerLevel - 2)));
-      if (userCash < cost) return res.status(400).json({ success: false, error: `현금이 부족합니다! (필요: ${formatMoney(cost)})` });
+      if (type === 'clicker' || type === 'power') {
+        const cost = BigInt(clickerLevel * 4500);
+        if (userCash < cost) {
+          return res.json({ success: false, error: `현금이 부족합니다! (필요: ${formatMoney(cost)} / 보유: ${formatMoney(userCash)})` });
+        }
 
-      const newCash = userCash - cost;
-      await pool.query('UPDATE users SET cash = ?, clicker_level = ? WHERE discord_id = ?', [newCash.toString(), clickerLevel, session.id]);
-      return res.json({
-        success: true,
-        newCash: newCash.toString(),
-        newLevel: clickerLevel,
-        message: `🔨 클릭 파워 Lv.${clickerLevel} 강화 완료! (클릭당 +${formatMoney(clickerLevel * 10)})`
-      });
-    } else if (type === 'auto') {
-      const autoLevel = (userData.auto_miner_level || 0) + 1;
-      const cost = BigInt(Math.floor(3000 * Math.pow(1.6, autoLevel - 1)));
-      if (userCash < cost) return res.status(400).json({ success: false, error: `현금이 부족합니다! (필요: ${formatMoney(cost)})` });
+        userCash -= cost;
+        clickerLevel += 1;
+        await pool.query('UPDATE users SET cash = ?, clicker_level = ? WHERE discord_id = ?', [userCash.toString(), clickerLevel, session.id]);
+        return res.json({
+          success: true,
+          message: `🔨 클릭 파워 Lv.${clickerLevel} 강화 완료! (클릭당 +${formatMoney(clickerLevel * 10)})`,
+          newCash: userCash.toString(),
+          clickerLevel
+        });
+      } else if (type === 'auto') {
+        const cost = BigInt((autoLevel + 1) * 12000);
+        if (userCash < cost) {
+          return res.json({ success: false, error: `현금이 부족합니다! (필요: ${formatMoney(cost)} / 보유: ${formatMoney(userCash)})` });
+        }
 
-      const newCash = userCash - cost;
-      await pool.query('UPDATE users SET cash = ?, auto_miner_level = ? WHERE discord_id = ?', [newCash.toString(), autoLevel, session.id]);
-      return res.json({
-        success: true,
-        newCash: newCash.toString(),
-        newLevel: autoLevel,
-        message: `🤖 자동 채굴 봇 Lv.${autoLevel} 가동! (초당 +${formatMoney(autoLevel * 15)})`
-      });
+        userCash -= cost;
+        autoLevel += 1;
+        await pool.query('UPDATE users SET cash = ?, auto_miner_level = ? WHERE discord_id = ?', [userCash.toString(), autoLevel, session.id]);
+        return res.json({
+          success: true,
+          message: `🤖 자동 채굴 봇 Lv.${autoLevel} 가동! (초당 +${formatMoney(autoLevel * 15)})`,
+          newCash: userCash.toString(),
+          autoLevel
+        });
+      } else {
+        return res.json({ success: false, error: '유효하지 않은 업그레이드 유형입니다.' });
+      }
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
     }
-    return res.status(400).json({ success: false, error: '유효하지 않은 업그레이드 유형입니다.' });
   });
 
   // 3. 일일 출석체크
