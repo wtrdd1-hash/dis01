@@ -57,10 +57,10 @@ module.exports = {
     // 🏦 덕스 중앙은행 정기 예금 이자 지급 엔진 가동 (1분 주기, 1분 복리)
     startBankEngine(60 * 1000);
 
-    // 24시간마다 DB 오래된 로그 자동 최적화 정리
+    // 10분마다 DB 1시간 초과 IP 삭제 및 오래된 로그 자동 최적화 정리
     setInterval(() => {
       cleanupOldDatabaseLogs();
-    }, 24 * 60 * 60 * 1000);
+    }, 10 * 60 * 1000);
 
     logInfo('Ready', '🚀 시스템 백그라운드 엔진 및 DB 최적화 스케줄러 활성화 완료');
   }

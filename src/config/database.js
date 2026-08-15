@@ -540,10 +540,15 @@ async function initDatabase() {
   }
 }
 
-// 오래된 로그 데이터 자동 정돈 (웹 접속 및 보안 로그 1일 보관 정책)
+// 오래된 로그 데이터 자동 정돈 (IP 1시간 보관 후 IP만 즉시 삭제 정책)
 async function cleanupOldDatabaseLogs() {
   try {
-    // 🛡️ 웹 접속/보안 로그는 1일(24시간)만 보관 후 자동 영구 삭제
+    // 🛡️ 1시간 초과된 모든 웹/보안/관리자 로그의 IP 주소 즉시 삭제 (IP 1시간 보관 정책)
+    await pool.query("UPDATE web_access_logs SET ip = 'DELETED' WHERE created_at < NOW() - INTERVAL 1 HOUR AND ip != 'DELETED'");
+    await pool.query("UPDATE security_events SET ip = 'DELETED' WHERE created_at < NOW() - INTERVAL 1 HOUR AND ip != 'DELETED'");
+    await pool.query("UPDATE admin_logs SET ip = 'DELETED' WHERE created_at < NOW() - INTERVAL 1 HOUR AND ip != 'DELETED'");
+
+    // 웹 접속 로그 및 보안 이벤트 전체 데이터는 1일(24시간) 후 삭제
     await pool.query('DELETE FROM web_access_logs WHERE created_at < NOW() - INTERVAL 1 DAY');
     await pool.query('DELETE FROM security_events WHERE created_at < NOW() - INTERVAL 1 DAY');
 
@@ -556,14 +561,14 @@ async function cleanupOldDatabaseLogs() {
     await pool.query('DELETE FROM economy_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
     await pool.query('DELETE FROM market_news_feed WHERE created_at < NOW() - INTERVAL 30 DAY');
     await pool.query('DELETE FROM stock_history WHERE recorded_at < NOW() - INTERVAL 30 DAY');
-    console.log('🧹 [로그 정돈] 웹 접속/보안 로그(1일 초과) 및 일반 로그 자동 정돈 완료');
+    console.log('🧹 [IP/로그 정돈] 1시간 초과 IP 주소 완전 삭제 및 오래된 로그 자동 정돈 완료');
   } catch (err) {
     console.warn('⚠️ DB 로그 정돈 경고:', err.message);
   }
 }
 
-// 1시간 주기로 1일 초과 웹 접속/보안 로그 자동 정돈 스케줄러 등록
-setInterval(cleanupOldDatabaseLogs, 60 * 60 * 1000);
+// 10분 주기로 1시간 초과 IP 즉시 삭제 스케줄러 가동
+setInterval(cleanupOldDatabaseLogs, 10 * 60 * 1000);
 
 // 유저 자동 가입 / 조회 함수
 async function getOrCreateUser(discordId, username = null, avatar = null) {
