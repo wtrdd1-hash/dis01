@@ -31,20 +31,21 @@ module.exports = {
     let fieldsText = '';
 
     for (const r of rows) {
-      const amount = BigInt(r.amount);
-      const spent = BigInt(r.total_spent);
+      const amountNum = Number(r.amount);
+      const spent = BigInt(r.total_spent || 0);
       const currentPrice = BigInt(r.price);
-      const evalValue = amount * currentPrice;
+      const evalValue = BigInt(Math.floor(amountNum * Number(currentPrice)));
 
       totalInvestment += spent;
       totalEvaluation += evalValue;
 
-      const avgPrice = amount > 0n ? spent / amount : 0n;
+      const avgPrice = amountNum > 0 ? BigInt(Math.round(Number(spent) / amountNum)) : 0n;
       const profitLoss = evalValue - spent;
       const roiPercent = spent > 0n ? (Number(profitLoss) / Number(spent)) * 100 : 0;
+      const displayAmount = (amountNum % 1 === 0) ? amountNum.toLocaleString() : amountNum.toFixed(4);
 
       fieldsText += `**\`[${r.stock_id}]\` ${r.name}**\n` +
-        `• 보유 수량: ${formatNumber(amount)}주\n` +
+        `• 보유 수량: ${displayAmount}주\n` +
         `• 평단가: ${formatMoney(avgPrice)} | 현재가: ${formatMoney(currentPrice)}\n` +
         `• 매수금액: ${formatMoney(spent)} | 평가금액: ${formatMoney(evalValue)}\n` +
         `• 손익: **${formatMoney(profitLoss)}** (${formatPercent(roiPercent)})\n` +

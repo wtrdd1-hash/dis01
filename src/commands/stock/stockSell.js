@@ -39,40 +39,42 @@ module.exports = {
     }
 
     const holding = userStocks[0];
-    const currentAmount = BigInt(holding.amount);
+    const currentAmount = Number(holding.amount);
     const stockPrice = BigInt(holding.price);
-    const totalSpent = BigInt(holding.total_spent);
+    const totalSpent = BigInt(holding.total_spent || 0);
 
-    let sellAmount = 0n;
+    let sellAmount = 0;
     const lowerInput = amountInput.toLowerCase();
     if (lowerInput === '전량' || lowerInput === '올인' || lowerInput === '최대' || lowerInput === '전체' || lowerInput === 'all' || lowerInput === 'max') {
       sellAmount = currentAmount;
     } else {
-      const parsed = parseInt(amountInput, 10);
-      if (isNaN(parsed) || parsed <= 0) {
+      const parsed = parseFloat(amountInput);
+      if (isNaN(parsed) || parsed < 0.0001) {
         return interaction.reply({
-          embeds: [createErrorEmbed('입력 오류', '매도 수량은 1 이상의 정수 또는 "전량" / "최대"이어야 합니다.')],
+          embeds: [createErrorEmbed('입력 오류', '매도 수량은 0.0001 이상의 수 또는 "전량" / "최대"이어야 합니다.')],
           flags: MessageFlags.Ephemeral
         });
       }
-      sellAmount = BigInt(parsed);
+      sellAmount = Math.round(parsed * 10000) / 10000;
     }
 
-    if (sellAmount > currentAmount) {
+    if (sellAmount > currentAmount + 0.00001) {
+      const displayHolding = (currentAmount % 1 === 0) ? currentAmount.toLocaleString() : currentAmount.toFixed(4);
       return interaction.reply({
-        embeds: [createErrorEmbed('수량 초과', `보유 수량(${formatNumber(currentAmount)}주)보다 많은 수량을 매도할 수 없습니다.`)],
+        embeds: [createErrorEmbed('수량 초과', `보유 수량(${displayHolding}주)보다 많은 수량을 매도할 수 없습니다.`)],
         flags: MessageFlags.Ephemeral
       });
     }
 
-    const totalProceeds = stockPrice * sellAmount;
+    const totalProceeds = BigInt(Math.floor(Number(stockPrice) * sellAmount));
     const userData = await getOrCreateUser(userId);
-    const newCash = BigInt(userData.cash) + totalProceeds;
+    const newCash = BigInt(userData.cash || 0) + totalProceeds;
 
     // 비례하여 total_spent 감소
-    const spentRatio = Number(sellAmount) / Number(currentAmount);
+    const spentRatio = Math.min(1.0, sellAmount / (currentAmount || 1));
     const spentDeduction = BigInt(Math.round(Number(totalSpent) * spentRatio));
-    const newTotalSpent = totalSpent - spentDeduction;
+    const newTotalSpent = totalSpent > spentDeduction ? totalSpent - spentDeduction : 0n;
+    const newAmountNum = Math.max(0, Math.round((currentAmount - sellAmount) * 10000) / 10000);
 
     const connection = await pool.getConnection();
     try {
@@ -80,31 +82,34 @@ module.exports = {
 
       await connection.query('UPDATE users SET cash = ? WHERE discord_id = ?', [newCash.toString(), userId]);
 
-      const remainingAmount = currentAmount - sellAmount;
-      if (remainingAmount <= 0n) {
+      if (newAmountNum <= 0.00001) {
         await connection.query('DELETE FROM user_stocks WHERE user_id = ? AND stock_id = ?', [userId, stockIdInput]);
       } else {
         await connection.query(
           'UPDATE user_stocks SET amount = ?, total_spent = ? WHERE user_id = ? AND stock_id = ?',
-          [remainingAmount.toString(), newTotalSpent.toString(), userId, stockIdInput]
+          [newAmountNum.toFixed(4), newTotalSpent.toString(), userId, stockIdInput]
         );
       }
 
       await connection.commit();
-    } catch (err) {
+    } catch (error) {
       await connection.rollback();
-      throw err;
+      throw error;
     } finally {
       connection.release();
     }
 
+    const displaySellAmount = (sellAmount % 1 === 0) ? sellAmount.toLocaleString() : sellAmount.toFixed(4);
+    const displayRemainAmount = (newAmountNum % 1 === 0) ? newAmountNum.toLocaleString() : newAmountNum.toFixed(4);
+
     const embed = createSuccessEmbed(
-      '주식 매도 완료 📉',
-      `**종목:** ${holding.name} (\`${holding.stock_id}\`)\n` +
-      `**매도 수량:** **${formatNumber(sellAmount)}주**\n` +
-      `**주당 매도 가격:** ${formatMoney(stockPrice)}\n` +
-      `**총 수령 정산금:** **${formatMoney(totalProceeds)}**\n\n` +
-      `💳 **매도 후 현금:** **${formatMoney(newCash)}**`
+      '주식 매도 완료',
+      `**종목:** \`[${holding.stock_id}]\` ${holding.name}\n` +
+      `**매도 수량:** **${displaySellAmount}주**\n` +
+      `**체결 단가:** ${formatMoney(stockPrice)}\n` +
+      `**총 정산 금액:** **+${formatMoney(totalProceeds)}**\n\n` +
+      `💳 **현재 보유 현금:** ${formatMoney(newCash)}\n` +
+      `📦 **남은 주식 수량:** ${displayRemainAmount}주`
     );
 
     await interaction.reply({ embeds: [embed] });

@@ -35,18 +35,19 @@ module.exports = {
     let stockListText = '';
 
     for (const item of stocksRows) {
-      const amount = BigInt(item.amount);
-      const spent = BigInt(item.total_spent);
+      const amountNum = Number(item.amount);
+      const spent = BigInt(item.total_spent || 0);
       const currentPrice = BigInt(item.price);
-      const evalValue = amount * currentPrice;
+      const evalValue = BigInt(Math.floor(amountNum * Number(currentPrice)));
       const profitLoss = evalValue - spent;
       const roiPercent = spent > 0n ? (Number(profitLoss) / Number(spent)) * 100 : 0;
 
       stockValue += evalValue;
       totalSpent += spent;
 
-      const avgPrice = amount > 0n ? spent / amount : 0n;
-      stockListText += `• **\`[${item.stock_id}]\` ${item.name}**: ${formatNumber(amount)}주 (평단 ${formatMoney(avgPrice)})\n` +
+      const avgPrice = amountNum > 0 ? BigInt(Math.round(Number(spent) / amountNum)) : 0n;
+      const displayAmount = (amountNum % 1 === 0) ? amountNum.toLocaleString() : amountNum.toFixed(4);
+      stockListText += `• **\`[${item.stock_id}]\` ${item.name}**: ${displayAmount}주 (평단 ${formatMoney(avgPrice)})\n` +
         `  └ 매수 ${formatMoney(spent)} ➔ 평가 ${formatMoney(evalValue)} | 손익 **${formatMoney(profitLoss)}** (${formatPercent(roiPercent)})\n`;
     }
 

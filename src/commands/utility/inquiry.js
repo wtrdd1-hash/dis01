@@ -76,7 +76,7 @@ module.exports = {
           WHERE h.user_id = ?
         `, [userId]);
         for (const h of holdings) {
-          stockVal += BigInt(h.amount) * BigInt(h.price);
+          stockVal += BigInt(Math.floor(Number(h.amount) * Number(h.price)));
         }
       } catch (e) {}
 

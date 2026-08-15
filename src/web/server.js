@@ -10,6 +10,11 @@ const { formatMoney, formatPercent, formatNumber } = require('../utils/formatter
 const { getCurrentMarketRegime, getLastNews, getRecentNewsFeed } = require('../utils/stockEngine');
 const { logWebAccess, logAdminAction } = require('../utils/logger');
 const { createSecurityMiddleware, getSecurityStats, banIp, unbanIp } = require('./security');
+const { createChatRoutes } = require('./routes/chatRoutes');
+const { createGameRoutes } = require('./routes/gameRoutes');
+const { createEconomyRoutes } = require('./routes/economyRoutes');
+const { createStockRoutes } = require('./routes/stockRoutes');
+const { createAdminRoutes } = require('./routes/adminRoutes');
 
 // 📁 문의 첨부 이미지 업로드 저장 디렉토리
 const UPLOAD_DIR = path.join(__dirname, '../../uploads/inquiries');
@@ -146,6 +151,9 @@ function startWebServer(client) {
     });
     next();
   });
+
+  // 📡 SSE 실시간 접속자 클라이언트 Set
+  const sseClients = new Set();
 
   // 3초 TTL 메모리 캐시
   let marketCache = { data: null, timestamp: 0 };
@@ -296,7 +304,12 @@ function startWebServer(client) {
     }
   });
 
-  // 2. ⛏️ 클리커 클릭 액션 API (경제 밸런스 조정: 클릭당 레벨*10원, 10% 확률 3배 크리티컬)
+  // ── 📦 분리된 모듈형 라우터 마운트 ────────────────────────
+  app.use('/api/chat', createChatRoutes(getSessionUser, sseClients));
+  app.use('/api/game', createGameRoutes(getSessionUser));
+  app.use('/api', createEconomyRoutes(getSessionUser));
+  app.use('/api', createStockRoutes(getSessionUser));
+  app.use('/api/admin', createAdminRoutes(getSessionUser));
   app.post('/api/clicker/click', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
@@ -1786,8 +1799,6 @@ function startWebServer(client) {
 
   // ── 📡 SSE 실시간 스트림 (Server-Sent Events) ────────────
   // 주가 변동이 생길 때마다 연결된 모든 브라우저에 즉시 push
-  const sseClients = new Set();
-
   // stockEngine 주가 갱신 후 여기를 호출하면 전체 broadcast
   global.__broadcastMarketUpdate = async function () {
     if (sseClients.size === 0) return;
@@ -4436,19 +4447,47 @@ function startWebServer(client) {
             }
 
             function switchTab(tabId) {
+              if (!tabId || !document.getElementById(tabId)) return;
+
               document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
               document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
-              if (event && event.currentTarget) {
-                event.currentTarget.classList.add('active');
-              } else {
-                const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick')?.includes(tabId));
-                if (targetBtn) targetBtn.classList.add('active');
-              }
-              document.getElementById(tabId).classList.add('active');
+              
+              const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick')?.includes(tabId));
+              if (targetBtn) targetBtn.classList.add('active');
+
+              const targetPane = document.getElementById(tabId);
+              if (targetPane) targetPane.classList.add('active');
+
+              // 🔥 새로고침 시에도 현재 메뉴 상태 유지 (localStorage + URL Hash)
+              try {
+                localStorage.setItem('duck_active_tab', tabId);
+                if (history.replaceState) {
+                  history.replaceState(null, '', '#' + tabId);
+                }
+              } catch (e) {}
 
               if (tabId === 'tab-feed') {
                 fetchLiveActivityFeed();
+              } else if (tabId === 'tab-chat') {
+                loadChatMessages();
+                const chatInput = document.getElementById('chat-input');
+                if (chatInput) setTimeout(() => chatInput.focus(), 150);
               }
+            }
+
+            // 🚀 페이지 로드 시 이전에 열어둔 탭 복원
+            function restoreActiveTabOnLoad() {
+              try {
+                const hash = window.location.hash ? window.location.hash.replace('#', '') : '';
+                const savedTab = hash || localStorage.getItem('duck_active_tab');
+                if (savedTab && document.getElementById(savedTab)) {
+                  switchTab(savedTab);
+                }
+              } catch (e) {}
+            }
+            window.addEventListener('DOMContentLoaded', restoreActiveTabOnLoad);
+            if (document.readyState === 'complete' || document.readyState === 'interactive') {
+              restoreActiveTabOnLoad();
             }
 
             // ⚡ 실시간 모든 로그 (라이브 피드) 비동기 호출 & 렌더링
