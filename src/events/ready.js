@@ -1,8 +1,9 @@
 const { REST, Routes, Events } = require('discord.js');
 const { initDatabase, cleanupOldDatabaseLogs } = require('../config/database');
-const { startStockEngine, updateStockPrices } = require('../utils/stockEngine');
+const { startStockEngine, updateStockPrices, setMarketRegime } = require('../utils/stockEngine');
 const { startWebServer } = require('../web/server');
 const { logInfo, logError } = require('../utils/logger');
+const { startAutoBalancer } = require('../utils/economyBalancer');
 
 module.exports = {
   name: Events.ClientReady,
@@ -48,6 +49,9 @@ module.exports = {
 
     // 백그라운드 주가 실시간 변동 엔진 및 배당 스케줄러 (3분 주기)
     startStockEngine(3 * 60 * 1000);
+
+    // 🏦 자동 경제 조절 시스템 가동 (10분 주기 분석, 관리자 DM 발송)
+    startAutoBalancer(client, setMarketRegime);
 
     // 24시간마다 DB 오래된 로그 자동 최적화 정리
     setInterval(() => {

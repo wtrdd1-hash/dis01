@@ -91,12 +91,12 @@ async function logWebAccess(req, res, durationMs = 0, currentUser = null) {
     appendJsonLog(ADMIN_JSONL_FILE, logPayload);
   }
 
-  // 2. 콘솔 출력
+  // 2. 콘솔 출력 (IP 정보는 콘솔에 출력하지 않고 국가/상태만 표시)
   const statusEmoji = statusCode >= 400 ? '⚠️' : '🌐';
   if (isAdmin) {
-    console.log(`👑 [웹 관리자 접속] ${geo.flag} ${geo.countryName}(${geo.ip}) | ${username} (ID: ${userId}) | ${method} ${url} | ${statusCode} (${durationMs}ms)`);
+    console.log(`👑 [웹 관리자 접속] ${geo.flag} ${geo.countryName || '대한민국'} | ${username} (ID: ${userId}) | ${method} ${url} | ${statusCode} (${durationMs}ms)`);
   } else {
-    console.log(`${statusEmoji} [웹 접속] ${geo.flag} ${geo.countryName}(${geo.ip}) | ${username} | ${method} ${url} | ${statusCode} (${durationMs}ms)`);
+    console.log(`${statusEmoji} [웹 접속] ${geo.flag} ${geo.countryName || '대한민국'} | ${username} | ${method} ${url} | ${statusCode} (${durationMs}ms)`);
   }
 
   // 3. MySQL DB 비동기 저장

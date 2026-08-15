@@ -9,6 +9,7 @@ const { pool, getOrCreateUser } = require('../config/database');
 const { formatMoney, formatPercent, formatNumber } = require('../utils/formatters');
 const { getCurrentMarketRegime, getLastNews, getRecentNewsFeed } = require('../utils/stockEngine');
 const { logWebAccess, logAdminAction } = require('../utils/logger');
+const { createSecurityMiddleware, getSecurityStats, banIp, unbanIp } = require('./security');
 
 // 📁 문의 첨부 이미지 업로드 저장 디렉토리
 const UPLOAD_DIR = path.join(__dirname, '../../uploads/inquiries');
@@ -56,12 +57,53 @@ function startWebServer(client) {
   const app = express();
   const PORT = config.port || 8080;
 
+  // 🚀 서버 성능 및 보안 최적화
+  app.disable('x-powered-by');
   app.set('trust proxy', true);
+
+  // 🎨 EJS 템플릿 엔진 설정
+  app.set('views', path.join(__dirname, 'views'));
+  app.set('view engine', 'ejs');
+
+  // 🛡️ 웹 보안 시스템 - 가장 먼저 적용 (악성 경로/IP 차단)
+  app.use(createSecurityMiddleware(client));
 
   app.use(express.json({ limit: '15mb' }));
   app.use(express.urlencoded({ extended: true, limit: '15mb' }));
   app.use(cookieParser());
-  app.use('/uploads', express.static(path.join(__dirname, '../../uploads')));
+
+  // ⚡ 정적 자원 캐싱 최적화 (7일 브라우저 캐시)
+  app.use('/uploads', express.static(path.join(__dirname, '../../uploads'), { maxAge: '7d' }));
+  if (fs.existsSync(path.join(__dirname, 'public'))) {
+    app.use('/static', express.static(path.join(__dirname, 'public'), { maxAge: '7d' }));
+  }
+
+
+  // 파비콘 라우트 - 브라우저 기본 /favicon.ico 요청 처리
+  const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#1a73e8"/>
+        <stop offset="100%" stop-color="#0d47a1"/>
+      </linearGradient>
+    </defs>
+    <circle cx="50" cy="50" r="48" fill="url(#bg)"/>
+    <circle cx="50" cy="50" r="48" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+    <text x="50" y="67" font-family="Arial,sans-serif" font-size="52" font-weight="bold"
+          fill="white" text-anchor="middle">✦</text>
+  </svg>`;
+
+  app.get('/favicon.ico', (req, res) => {
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+    res.send(FAVICON_SVG);
+  });
+
+  app.get('/favicon.svg', (req, res) => {
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+    res.send(FAVICON_SVG);
+  });
 
   function getDynamicBaseUrl(req) {
     const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
@@ -102,6 +144,9 @@ function startWebServer(client) {
   let marketCache = { data: null, timestamp: 0 };
   let leaderboardCache = { data: null, timestamp: 0 };
   const CACHE_TTL_MS = 2500;
+
+  // stockEngine에서 주가 갱신 후 캐시 즉시 무효화
+  global.__invalidateMarketCache = () => { marketCache.timestamp = 0; };
 
   async function getCachedMarketStocks() {
     const now = Date.now();
@@ -156,6 +201,7 @@ function startWebServer(client) {
     if (leaderboardCache.data && (now - leaderboardCache.timestamp < CACHE_TTL_MS)) {
       return leaderboardCache.data;
     }
+    const adminIds = config.adminIds && config.adminIds.length > 0 ? config.adminIds : ['0'];
     const [rows] = await pool.query(`
       SELECT 
         u.discord_id, 
@@ -167,10 +213,11 @@ function startWebServer(client) {
       FROM users u
       LEFT JOIN user_stocks us ON u.discord_id = us.user_id AND us.amount > 0
       LEFT JOIN stocks s ON us.stock_id = s.stock_id
+      WHERE u.discord_id NOT IN (?)
       GROUP BY u.discord_id, u.username, u.avatar, u.cash, u.bank
       ORDER BY net DESC
       LIMIT 10
-    `);
+    `, [adminIds]);
     leaderboardCache = { data: rows, timestamp: now };
     return rows;
   }
@@ -1569,6 +1616,80 @@ function startWebServer(client) {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
+  // ── 📡 SSE 실시간 스트림 (Server-Sent Events) ────────────
+  // 주가 변동이 생길 때마다 연결된 모든 브라우저에 즉시 push
+  const sseClients = new Set();
+
+  // stockEngine 주가 갱신 후 여기를 호출하면 전체 broadcast
+  global.__broadcastMarketUpdate = async function () {
+    if (sseClients.size === 0) return;
+    try {
+      const stocks = await getCachedMarketStocks();
+      const regime = getCurrentMarketRegime();
+      const news   = getLastNews();
+      const upCount   = stocks.filter(s => s.rate > 0).length;
+      const downCount = stocks.filter(s => s.rate < 0).length;
+      const avgRate   = stocks.reduce((acc, s) => acc + s.rate, 0) / (stocks.length || 1);
+
+      const payload = JSON.stringify({
+        type: 'MARKET_UPDATE',
+        stocks,
+        marketSummary: { upCount, downCount, avgRate: avgRate.toFixed(2), isMarketBull: avgRate >= 0 },
+        regime,
+        news,
+        timestamp: Date.now(),
+      });
+
+      const dead = [];
+      for (const client of sseClients) {
+        try {
+          client.write(`data: ${payload}\n\n`);
+        } catch (e) {
+          dead.push(client);
+        }
+      }
+      dead.forEach(c => sseClients.delete(c));
+    } catch (e) {}
+  };
+
+  // GET /api/stream  – 클라이언트가 이 URL을 구독하면 실시간 데이터 수신
+  app.get('/api/stream', (req, res) => {
+    res.setHeader('Content-Type',  'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection',    'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // nginx proxy buffering 비활성화
+    res.flushHeaders();
+
+    // 연결 즉시 현재 시장 데이터 전송
+    getCachedMarketStocks().then(stocks => {
+      const regime  = getCurrentMarketRegime();
+      const news    = getLastNews();
+      const upCount = stocks.filter(s => s.rate > 0).length;
+      const downCount = stocks.filter(s => s.rate < 0).length;
+      const avgRate = stocks.reduce((acc, s) => acc + s.rate, 0) / (stocks.length || 1);
+      const payload = JSON.stringify({
+        type: 'MARKET_UPDATE',
+        stocks, regime, news,
+        marketSummary: { upCount, downCount, avgRate: avgRate.toFixed(2), isMarketBull: avgRate >= 0 },
+        timestamp: Date.now(),
+      });
+      res.write(`data: ${payload}\n\n`);
+    }).catch(() => {});
+
+    // 30초마다 heartbeat (연결 유지)
+    const heartbeat = setInterval(() => {
+      try { res.write(`: heartbeat\n\n`); } catch (e) { clearInterval(heartbeat); }
+    }, 30000);
+
+    sseClients.add(res);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      sseClients.delete(res);
+    });
+  });
+
+
   app.get('/api/leaderboard', async (req, res) => {
     try {
       const rows = await getCachedLeaderboard();
@@ -2069,6 +2190,21 @@ function startWebServer(client) {
               --text-muted: #9ca3af;
             }
             * { box-sizing: border-box; margin: 0; padding: 0; }
+            /* 🚫 웹사이트 복사 및 텍스트 드래그 방지 */
+            body, div, p, span, h1, h2, h3, h4, h5, h6, table, tr, td, th, a, button, section, header, footer {
+              -webkit-user-select: none !important;
+              -moz-user-select: none !important;
+              -ms-user-select: none !important;
+              user-select: none !important;
+              -webkit-touch-callout: none !important;
+            }
+            input, textarea {
+              -webkit-user-select: text !important;
+              -moz-user-select: text !important;
+              -ms-user-select: text !important;
+              user-select: text !important;
+            }
+
             body {
               font-family: 'Inter', sans-serif;
               background-color: var(--bg-dark);
@@ -4677,6 +4813,185 @@ function startWebServer(client) {
                 document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
               }
             });
+
+            // 🚫 웹사이트 무단 복사, 우클릭, 텍스트 드래그 및 단축키 차단
+            document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+            document.addEventListener('selectstart', function(e) { if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return true; e.preventDefault(); return false; });
+            document.addEventListener('copy', function(e) { if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return true; e.preventDefault(); return false; });
+            document.addEventListener('cut', function(e) { if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return true; e.preventDefault(); return false; });
+            document.addEventListener('keydown', function(e) {
+              const isInput = ['INPUT', 'TEXTAREA'].includes(e.target.tagName);
+              if (e.keyCode === 123) { e.preventDefault(); return false; } // F12
+              if (e.ctrlKey || e.metaKey) {
+                const k = (e.key || '').toLowerCase();
+                if (!isInput && (k === 'c' || k === 'a')) { e.preventDefault(); return false; } // Ctrl+C, Ctrl+A
+                if (k === 'u' || k === 's') { e.preventDefault(); return false; } // Ctrl+U, Ctrl+S
+                if (e.shiftKey && (k === 'i' || k === 'j' || k === 'c')) { e.preventDefault(); return false; } // Ctrl+Shift+I/J/C
+              }
+            });
+          </script>
+
+          <!-- 📡 실시간 주가 자동 업데이트 (SSE) -->
+          <script>
+          (function() {
+            // ── 숫자 포맷 헬퍼 ─────────────────────────
+            function fmtMoney(n) {
+              const abs = Math.abs(Number(n));
+              if (abs >= 1e8)  return (n/1e8).toFixed(1)  + '억원';
+              if (abs >= 1e4)  return (n/1e4).toFixed(1)  + '만원';
+              return Number(n).toLocaleString('ko-KR') + '원';
+            }
+
+            // ── 숫자 튀어오르는 플립 애니메이션 ────────
+            function flashEl(el, isUp) {
+              el.style.transition = 'color 0.3s, transform 0.25s';
+              el.style.color    = isUp ? '#00e676' : '#ff5252';
+              el.style.transform = 'scale(1.12)';
+              setTimeout(() => {
+                el.style.color    = '';
+                el.style.transform = '';
+              }, 800);
+            }
+
+            // ── 실시간 인디케이터 배지 ─────────────────
+            const liveBadge = document.createElement('div');
+            liveBadge.id = 'live-indicator';
+            liveBadge.style.cssText = [
+              'position:fixed','bottom:20px','right:20px','z-index:9999',
+              'background:rgba(0,230,118,0.15)','border:1px solid #00e676',
+              'color:#00e676','padding:6px 14px','border-radius:999px',
+              'font-size:12px','font-weight:700','letter-spacing:0.5px',
+              'display:flex','align-items:center','gap:6px',
+              'backdrop-filter:blur(10px)','box-shadow:0 2px 16px rgba(0,230,118,0.2)',
+              'transition:all 0.3s ease',
+            ].join(';');
+            liveBadge.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#00e676;display:inline-block;animation:pulse-dot 1.4s infinite"></span> LIVE';
+            document.body.appendChild(liveBadge);
+
+            // 펄스 애니메이션 CSS
+            const styleTag = document.createElement('style');
+            styleTag.textContent = \`
+              @keyframes pulse-dot {
+                0%,100%{opacity:1;transform:scale(1)}
+                50%{opacity:0.5;transform:scale(0.7)}
+              }
+              @keyframes price-flash-up {
+                0%{background:rgba(0,230,118,0.3)} 100%{background:transparent}
+              }
+              @keyframes price-flash-down {
+                0%{background:rgba(255,82,82,0.3)} 100%{background:transparent}
+              }
+              .flash-up   { animation: price-flash-up   0.9s ease-out; }
+              .flash-down { animation: price-flash-down 0.9s ease-out; }
+              #live-indicator.disconnected {
+                border-color:#ff5252; color:#ff5252;
+                background:rgba(255,82,82,0.12);
+              }
+            \`;
+            document.head.appendChild(styleTag);
+
+            function setLive(connected) {
+              if (connected) {
+                liveBadge.classList.remove('disconnected');
+                liveBadge.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#00e676;display:inline-block;animation:pulse-dot 1.4s infinite"></span> LIVE';
+              } else {
+                liveBadge.classList.add('disconnected');
+                liveBadge.innerHTML = '<span style="width:7px;height:7px;border-radius:50%;background:#ff5252;display:inline-block"></span> 재연결 중...';
+              }
+            }
+
+            // ── 메인 업데이트 함수 ──────────────────────
+            function applyMarketUpdate(data) {
+              if (!data.stocks) return;
+
+              data.stocks.forEach(s => {
+                const price    = Number(s.price);
+                const prevPrice = Number(s.prev_price);
+                const rate     = s.rate || 0;
+                const isUp     = rate >= 0;
+                const arrow    = isUp ? '▲' : '▼';
+                const sign     = isUp ? '+' : '';
+
+                // 가격 요소 업데이트
+                const priceEl = document.getElementById('price-' + s.stock_id);
+                if (priceEl) {
+                  const oldTxt = priceEl.textContent;
+                  const newTxt = fmtMoney(price);
+                  if (oldTxt !== newTxt) {
+                    priceEl.textContent = newTxt;
+                    flashEl(priceEl, isUp);
+                    // 카드 전체 플래시
+                    const card = document.getElementById('stock-' + s.stock_id);
+                    if (card) {
+                      card.classList.remove('flash-up', 'flash-down');
+                      void card.offsetWidth; // reflow
+                      card.classList.add(isUp ? 'flash-up' : 'flash-down');
+                    }
+                  }
+                }
+
+                // 배지(등락률) 업데이트
+                const badgeEl = document.querySelector('#stock-' + s.stock_id + ' .badge');
+                if (badgeEl) {
+                  badgeEl.textContent = arrow + ' ' + sign + Math.abs(rate).toFixed(2) + '%';
+                  badgeEl.className   = 'badge ' + (isUp ? 'badge-up' : 'badge-down');
+                }
+
+                // 이전가 업데이트
+                const footerEls = document.querySelectorAll('#stock-' + s.stock_id + ' .stock-footer span');
+                if (footerEls[0]) footerEls[0].textContent = '이전가: ' + fmtMoney(prevPrice);
+                if (footerEls[1]) {
+                  footerEls[1].textContent = isUp ? '📈 상승세' : '📉 하락세';
+                  footerEls[1].className   = 'trend-text ' + (isUp ? 'text-up' : 'text-down');
+                }
+              });
+
+              // 시장 국면 업데이트
+              if (data.regime) {
+                const regimeEls = document.querySelectorAll('[data-regime]');
+                regimeEls.forEach(el => el.textContent = data.regime.name);
+              }
+
+              // 마지막 업데이트 시각 표시
+              const updatedEls = document.querySelectorAll('[data-last-updated]');
+              updatedEls.forEach(el => {
+                el.textContent = '업데이트: ' + new Date().toLocaleTimeString('ko-KR');
+              });
+            }
+
+            // ── SSE 연결 (자동 재연결 포함) ────────────
+            let es;
+            let retryDelay = 3000;
+
+            function connect() {
+              es = new EventSource('/api/stream');
+
+              es.onmessage = function(e) {
+                try {
+                  const data = JSON.parse(e.data);
+                  if (data.type === 'MARKET_UPDATE') {
+                    applyMarketUpdate(data);
+                    retryDelay = 3000; // 성공 시 재시도 간격 초기화
+                    setLive(true);
+                  }
+                } catch (err) {}
+              };
+
+              es.onerror = function() {
+                setLive(false);
+                es.close();
+                setTimeout(connect, retryDelay);
+                retryDelay = Math.min(retryDelay * 1.5, 30000); // 최대 30초
+              };
+
+              es.onopen = function() { setLive(true); };
+            }
+
+            // 페이지 로드 후 바로 연결
+            if (typeof EventSource !== 'undefined') {
+              connect();
+            }
+          })();
           </script>
         </body>
         </html>
@@ -5807,6 +6122,51 @@ function startWebServer(client) {
   app.get('/privacy-policy', renderPrivacyPolicy);
   app.get('/terms', renderTermsOfService);
   app.get('/terms-of-service', renderTermsOfService);
+
+  // ── 🛡️ 보안 현황 관리자 API ──────────────────────────
+  // GET /api/admin/security - 보안 현황 조회
+  app.get('/api/admin/security', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) {
+      return res.status(403).json({ error: '관리자 전용' });
+    }
+    try {
+      const stats = getSecurityStats();
+      const [recentEvents] = await pool.query(`
+        SELECT ip, event_type, path, reason, country, country_name, created_at
+        FROM security_events
+        ORDER BY created_at DESC
+        LIMIT 50
+      `);
+      return res.json({ success: true, stats, recentEvents });
+    } catch (e) {
+      return res.json({ success: true, stats: getSecurityStats(), recentEvents: [] });
+    }
+  });
+
+  // POST /api/admin/security/ban - IP 수동 차단
+  app.post('/api/admin/security/ban', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) {
+      return res.status(403).json({ error: '관리자 전용' });
+    }
+    const { ip, reason, durationMinutes } = req.body;
+    if (!ip) return res.status(400).json({ error: 'IP 필요' });
+    banIp(ip, reason || '관리자 수동 차단', Number(durationMinutes) || 1440);
+    return res.json({ success: true, message: `${ip} 차단 완료` });
+  });
+
+  // POST /api/admin/security/unban - IP 차단 해제
+  app.post('/api/admin/security/unban', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session || !config.isAdmin(session.id)) {
+      return res.status(403).json({ error: '관리자 전용' });
+    }
+    const { ip } = req.body;
+    if (!ip) return res.status(400).json({ error: 'IP 필요' });
+    const ok = unbanIp(ip);
+    return res.json({ success: ok, message: ok ? `${ip} 차단 해제` : `${ip}는 차단 목록에 없음` });
+  });
 
   app.listen(PORT, () => {
     console.log(`🌐 디스코드 경제 & OAuth2 웹 서버가 실행되었습니다 (포트: ${PORT})`);

@@ -41,8 +41,17 @@ module.exports = {
 
     // 작업 선택 및 무작위 급여
     const scenario = WORK_SCENARIOS[Math.floor(Math.random() * WORK_SCENARIOS.length)];
-    const earned = Math.floor(Math.random() * (scenario.max - scenario.min + 1)) + scenario.min;
+    const rawEarned = Math.floor(Math.random() * (scenario.max - scenario.min + 1)) + scenario.min;
 
+    // 🏦 자동 경제 조절 장치: 현재 경제 상황에 맞춘 동적 배율 적용
+    let mult = 1.0;
+    try {
+      const { getDynamicSettings } = require('../../utils/economyBalancer');
+      const dyn = getDynamicSettings();
+      if (dyn && dyn.workRewardMultiplier) mult = dyn.workRewardMultiplier;
+    } catch (e) {}
+
+    const earned = Math.max(100, Math.round(rawEarned * mult));
     const newCash = BigInt(userData.cash) + BigInt(earned);
 
     await pool.query(

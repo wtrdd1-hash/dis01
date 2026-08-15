@@ -40,7 +40,17 @@ module.exports = {
     // 보상 계산: 기본 보상 + (연속출석 * 연속 보너스) (최대 10일 연속 보너스 적용)
     const cappedStreak = Math.min(streak, 10);
     const streakBonus = (cappedStreak - 1) * config.dailyStreakBonus;
-    const totalReward = config.dailyReward + streakBonus;
+
+    // 🏦 자동 경제 조절 장치: 현재 경제 상황에 맞춘 동적 배율 적용
+    let mult = 1.0;
+    try {
+      const { getDynamicSettings } = require('../../utils/economyBalancer');
+      const dyn = getDynamicSettings();
+      if (dyn && dyn.dailyRewardMultiplier) mult = dyn.dailyRewardMultiplier;
+    } catch (e) {}
+
+    const baseReward = config.dailyReward + streakBonus;
+    const totalReward = Math.max(100, Math.round(baseReward * mult));
 
     const newCash = BigInt(userData.cash) + BigInt(totalReward);
 

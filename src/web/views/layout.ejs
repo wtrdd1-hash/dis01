@@ -2,10 +2,27 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23007bff'/%3E%3Cpath d='M30 55 L45 70 L70 35' stroke='%23fff' stroke-width='10' fill='none'/%3E%3C/svg%3E" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="shortcut icon" href="/favicon.ico" />
   <title><%= typeof title !== 'undefined' ? title : 'Easy Scraping' %></title>
   <link rel="stylesheet" href="/static/css/main.css">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    /* 🚫 복사 및 텍스트 드래그 방지 */
+    body, div, p, span, h1, h2, h3, h4, h5, h6, table, tr, td, th, a, button, section, header, footer {
+      -webkit-user-select: none !important;
+      -moz-user-select: none !important;
+      -ms-user-select: none !important;
+      user-select: none !important;
+      -webkit-touch-callout: none !important;
+    }
+    input, textarea {
+      -webkit-user-select: text !important;
+      -moz-user-select: text !important;
+      -ms-user-select: text !important;
+      user-select: text !important;
+    }
+  </style>
 </head>
 <body>
   <header class="site-header">
@@ -24,5 +41,23 @@
   <footer class="site-footer">
     <p>&copy; <%= new Date().getFullYear() %> Easy Scraping. All rights reserved.</p>
   </footer>
+
+  <!-- 🚫 복사, 우클릭, 개발자도구 단축키 차단 스크립트 -->
+  <script>
+    document.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+    document.addEventListener('selectstart', function(e) { if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return true; e.preventDefault(); return false; });
+    document.addEventListener('copy', function(e) { if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return true; e.preventDefault(); return false; });
+    document.addEventListener('cut', function(e) { if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return true; e.preventDefault(); return false; });
+    document.addEventListener('keydown', function(e) {
+      const isInput = ['INPUT', 'TEXTAREA'].includes(e.target.tagName);
+      if (e.keyCode === 123) { e.preventDefault(); return false; }
+      if (e.ctrlKey || e.metaKey) {
+        const k = (e.key || '').toLowerCase();
+        if (!isInput && (k === 'c' || k === 'a')) { e.preventDefault(); return false; }
+        if (k === 'u' || k === 's') { e.preventDefault(); return false; }
+        if (e.shiftKey && (k === 'i' || k === 'j' || k === 'c')) { e.preventDefault(); return false; }
+      }
+    });
+  </script>
 </body>
 </html>

@@ -361,6 +361,52 @@ async function initDatabase() {
       console.log('✅ inquiries 테이블에 image_url 컬럼이 추가되었습니다.');
     }
 
+    // ========== 자동 경제 조절 시스템 테이블 ==========
+    // 동적 경제 설정값 (자동 조절로 런타임에 덮어씀)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS economy_settings (
+        key_name VARCHAR(64) PRIMARY KEY,
+        value VARCHAR(255) NOT NULL DEFAULT '1.0',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
+    // 경제 건강 분석 이력 로그
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS economy_health_log (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        total_money BIGINT NOT NULL DEFAULT 0,
+        avg_wealth BIGINT NOT NULL DEFAULT 0,
+        gini_coefficient DECIMAL(5,4) NOT NULL DEFAULT 0.0000,
+        top10_ratio DECIMAL(5,4) NOT NULL DEFAULT 0.0000,
+        avg_gamble_profit_rate DECIMAL(8,4) NOT NULL DEFAULT 0.0000,
+        health_score INT NOT NULL DEFAULT 100,
+        status VARCHAR(32) NOT NULL DEFAULT 'HEALTHY',
+        actions_taken TEXT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_created_at (created_at),
+        INDEX idx_status (status)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    // ====================================================
+
+    // 🛡️ 보안 이벤트 로그 테이블
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS security_events (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        ip VARCHAR(64) NOT NULL,
+        event_type VARCHAR(32) NOT NULL,
+        path VARCHAR(500) NOT NULL,
+        reason VARCHAR(255) NOT NULL,
+        country VARCHAR(10) NULL,
+        country_name VARCHAR(100) NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_ip (ip),
+        INDEX idx_event_type (event_type),
+        INDEX idx_created_at (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+
     // 우리만의 독창적인 가상 커뮤니티 기업/종목 초기화 시드
     const defaultStocks = [
       { 
@@ -437,15 +483,15 @@ async function initDatabase() {
       },
       { 
         stock_id: 'SLOT', 
-        name: '럭키세븐 다이아 복권 (복권/테마)', 
-        price: 1000, 
-        prev_price: 1000, 
-        volatility: 0.08,
-        sector: '복권 & 럭키박스',
-        description: '1,000원의 저렴한 가격으로 누구나 매수할 수 있으며, 100배 잭팟 복권 발행 및 초대형 럭키박스를 유통하는 테마주입니다.',
-        market_cap: 120000000000,
-        pe_ratio: 30.00,
-        dividend_yield: 1.00
+        name: '럭키세븐 다이아 복권 (초보입문/국민주)', 
+        price: 100,  
+        prev_price: 100, 
+        volatility: 0.06,
+        sector: '초보자 입문 & 복권/테마',
+        description: '💡 [신규 유저 추천] 1주당 100원의 국민 입문주! 가입 직후 초기 자금으로도 부담 없이 수십 주를 즉시 매수하여 주식 투자를 시작할 수 있습니다.',
+        market_cap: 50000000000,
+        pe_ratio: 15.00,
+        dividend_yield: 1.50
       },
       { 
         stock_id: 'SCRP', 
@@ -494,26 +540,30 @@ async function initDatabase() {
   }
 }
 
-// 오래된 로그 데이터 자동 정돈 (모든 로그 최대 30일/1개월 보관 정책)
+// 오래된 로그 데이터 자동 정돈 (웹 접속 및 보안 로그 1일 보관 정책)
 async function cleanupOldDatabaseLogs() {
   try {
+    // 🛡️ 웹 접속/보안 로그는 1일(24시간)만 보관 후 자동 영구 삭제
+    await pool.query('DELETE FROM web_access_logs WHERE created_at < NOW() - INTERVAL 1 DAY');
+    await pool.query('DELETE FROM security_events WHERE created_at < NOW() - INTERVAL 1 DAY');
+
+    // 일반 시스템/경제 로그 30일 보관
     await pool.query('DELETE FROM command_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
     await pool.query('DELETE FROM gambling_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
-    await pool.query('DELETE FROM web_access_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
     await pool.query('DELETE FROM admin_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
     await pool.query('DELETE FROM stock_price_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
     await pool.query('DELETE FROM stock_transactions WHERE created_at < NOW() - INTERVAL 30 DAY');
     await pool.query('DELETE FROM economy_logs WHERE created_at < NOW() - INTERVAL 30 DAY');
     await pool.query('DELETE FROM market_news_feed WHERE created_at < NOW() - INTERVAL 30 DAY');
     await pool.query('DELETE FROM stock_history WHERE recorded_at < NOW() - INTERVAL 30 DAY');
-    console.log('🧹 [30일 로그 보관 정책] 30일(1개월) 초과 오래된 로그 데이터 자동 정돈 완료');
+    console.log('🧹 [로그 정돈] 웹 접속/보안 로그(1일 초과) 및 일반 로그 자동 정돈 완료');
   } catch (err) {
     console.warn('⚠️ DB 로그 정돈 경고:', err.message);
   }
 }
 
-// 24시간 주기로 30일 초과 로그 자동 정돈 스케줄러 등록
-setInterval(cleanupOldDatabaseLogs, 24 * 60 * 60 * 1000);
+// 1시간 주기로 1일 초과 웹 접속/보안 로그 자동 정돈 스케줄러 등록
+setInterval(cleanupOldDatabaseLogs, 60 * 60 * 1000);
 
 // 유저 자동 가입 / 조회 함수
 async function getOrCreateUser(discordId, username = null, avatar = null) {

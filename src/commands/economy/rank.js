@@ -1,14 +1,17 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { pool } = require('../../config/database');
+const config = require('../../config/config');
 const { createEconomyEmbed } = require('../../utils/embedBuilder');
 const { formatMoney } = require('../../utils/formatters');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('순위')
-    .setDescription('서버 내 종합 순자산 TOP 10 부자 순위표를 확인합니다.'),
+    .setDescription('서버 내 일반 유저 종합 순자산 TOP 10 부자 순위표를 확인합니다.'),
 
   async execute(interaction) {
+    const adminIds = config.adminIds && config.adminIds.length > 0 ? config.adminIds : ['0'];
+
     const [rows] = await pool.query(`
       SELECT 
         u.discord_id, 
@@ -16,9 +19,10 @@ module.exports = {
       FROM users u
       LEFT JOIN user_stocks us ON u.discord_id = us.user_id AND us.amount > 0
       LEFT JOIN stocks s ON us.stock_id = s.stock_id
+      WHERE u.discord_id NOT IN (?)
       GROUP BY u.discord_id, u.cash, u.bank
       ORDER BY net DESC
-    `);
+    `, [adminIds]);
 
     if (rows.length === 0) {
       const embed = createEconomyEmbed('🏆 종합 자산가 순위표', '등록된 유저가 없습니다.');

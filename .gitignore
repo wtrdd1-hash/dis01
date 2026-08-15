@@ -17,6 +17,7 @@ id_*
 *.key
 logs/
 *.tar.gz
+*.zip
 
 # Scratch & temporary files
 scratch/

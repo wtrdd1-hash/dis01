@@ -39,7 +39,17 @@ module.exports = {
       }
     }
 
-    const reward = isBroke ? 3000 : (config.subsidyAmount || 2000);
+    const baseAmount = isBroke ? 3000 : (config.subsidyAmount || 2000);
+
+    // 🏦 자동 경제 조절 장치: 현재 경제 상황에 맞춘 동적 배율 적용
+    let mult = 1.0;
+    try {
+      const { getDynamicSettings } = require('../../utils/economyBalancer');
+      const dyn = getDynamicSettings();
+      if (dyn && dyn.subsidyMultiplier) mult = dyn.subsidyMultiplier;
+    } catch (e) {}
+
+    const reward = Math.max(500, Math.round(baseAmount * mult));
     const newCash = userCash + BigInt(reward);
 
     await pool.query(

@@ -171,13 +171,19 @@ let currentRegimeIndex = 0;
 let regimeCyclesLeft = 10;
 let lastNews = null;
 let historyCleanupCounter = 0;
+let forcedRegimeIndex = null; // 자동 경제 조절 시스템에 의해 강제 지정된 국면 인덱스
 
 // 📈 3분 주기 가상 주식 가격 변동 엔진
 async function updateStockPrices() {
   const connection = await pool.getConnection();
   try {
     regimeCyclesLeft--;
-    if (regimeCyclesLeft <= 0 || Math.random() < 0.20) {
+    // 자동 경제 조절 시스템이 강제 국면을 지정한 경우 우선 적용
+    if (forcedRegimeIndex !== null) {
+      currentRegimeIndex = forcedRegimeIndex;
+      regimeCyclesLeft = 3; // 3사이클 후 자동 해제
+      forcedRegimeIndex = null;
+    } else if (regimeCyclesLeft <= 0 || Math.random() < 0.20) {
       currentRegimeIndex = Math.floor(Math.random() * MARKET_REGIMES.length);
       regimeCyclesLeft = Math.floor(Math.random() * 8) + 8;
     }
@@ -233,6 +239,12 @@ async function updateStockPrices() {
 
       if (newPrice < 10n) newPrice = 10n;
 
+      // 💡 초보자 입문주(SLOT)는 신규 가입자(정착금 10,000원)가 언제든 쉽게 매수할 수 있도록 50~500원 구간 안정 유지
+      if (stockId === 'SLOT') {
+        if (newPrice > 500n) newPrice = 500n;
+        if (newPrice < 50n) newPrice = 50n;
+      }
+
       // 24시간 고가 / 저가 갱신
       let high24h = BigInt(stock.high_24h || 0);
       let low24h = BigInt(stock.low_24h || 0);
@@ -280,6 +292,13 @@ async function updateStockPrices() {
 
     await connection.commit();
     console.log(`📈 [월덕 가상 경제 엔진] 주가 변동 갱신 완료 (${currentRegime.name}) - ${stocks.length}개 종목${lastNews ? ` | 📢 공시: ${lastNews.title}` : ''}`);
+
+    // 📡 SSE 실시간 브로드캐스트 (연결된 브라우저에 즉시 push)
+    if (typeof global.__broadcastMarketUpdate === 'function') {
+      // 캐시 무효화 후 즉시 전송
+      if (typeof global.__invalidateMarketCache === 'function') global.__invalidateMarketCache();
+      setTimeout(global.__broadcastMarketUpdate, 200);
+    }
 
     historyCleanupCounter++;
     if (historyCleanupCounter >= 10) {
@@ -362,6 +381,14 @@ function getCurrentMarketRegime() {
   return MARKET_REGIMES[currentRegimeIndex];
 }
 
+// 자동 경제 조절 시스템에서 호출 - 시장 국면 강제 변경
+function setMarketRegime(index) {
+  if (index >= 0 && index < MARKET_REGIMES.length) {
+    forcedRegimeIndex = index;
+    console.log(`🔧 [자동경제조절] 시장 국면 강제 전환 예약: ${MARKET_REGIMES[index].name}`);
+  }
+}
+
 function getLastNews() {
   return lastNews;
 }
@@ -380,6 +407,7 @@ module.exports = {
   distributeStockDividends,
   startStockEngine,
   getCurrentMarketRegime,
+  setMarketRegime,
   getLastNews,
   getRecentNewsFeed,
   MARKET_REGIMES,
