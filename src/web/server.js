@@ -2119,6 +2119,8 @@ function startWebServer(client) {
             </div>
           `;
 
+        const holdingStackStr = userHolding > 0 ? (userHolding / 10).toFixed(1) + '스택' : '0스택';
+
         stockCardsHtml += `
           <div class="stock-card" id="stock-${s.stock_id}">
             <div class="stock-header">
@@ -2132,6 +2134,12 @@ function startWebServer(client) {
             <div class="stock-mid-row" onclick="openDetailModal('${s.stock_id}')" style="cursor: pointer;">
               <div class="stock-price" id="price-${s.stock_id}">${formatMoney(price)}</div>
               <div class="sparkline-box">${sparklineSvg}</div>
+            </div>
+
+            <!-- 📊 주식 재무 스펙 & 보유 스택 바 -->
+            <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 6px 10px; margin: 8px 0; font-size: 0.76rem; display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: #9ca3af;">PER <b>${s.pe_ratio || 15.0}x</b> · 배당 <b>${s.dividend_yield || 3.5}%</b></span>
+              <span style="color: #38bdf8; font-weight: 700;">보유: ${userHolding.toLocaleString()}주 <small style="color:#a5b4fc;">(${holdingStackStr})</small></span>
             </div>
 
             <div class="stock-footer">
@@ -4002,14 +4010,14 @@ function startWebServer(client) {
                   <button type="button" class="btn-chip" style="background: rgba(99, 102, 241, 0.35); border-color: #818cf8; color: #fff; font-weight: 800;" onclick="setTradePercent(100)">🔥 100% (전량)</button>
                 </div>
 
-                <!-- 수량 직접 가산 칩 -->
+                <!-- 수량 & 스택(Stack) 직접 가산 칩 -->
                 <div class="btn-chip-grid" style="margin-top: 6px;">
                   <button type="button" class="btn-chip" onclick="addTradeAmount(1)">+1주</button>
-                  <button type="button" class="btn-chip" onclick="addTradeAmount(5)">+5주</button>
-                  <button type="button" class="btn-chip" onclick="addTradeAmount(10)">+10주</button>
-                  <button type="button" class="btn-chip" onclick="addTradeAmount(50)">+50주</button>
-                  <button type="button" class="btn-chip" onclick="addTradeAmount(100)">+100주</button>
-                  <button type="button" class="btn-chip" style="background: rgba(239, 68, 68, 0.15); border-color: #ef4444; color: #fca5a5;" onclick="resetTradeAmount()">↺ 1주</button>
+                  <button type="button" class="btn-chip" onclick="addTradeAmount(10)">+10주 (1스택)</button>
+                  <button type="button" class="btn-chip" onclick="addTradeAmount(50)">+50주 (5스택)</button>
+                  <button type="button" class="btn-chip" onclick="addTradeAmount(100)">+100주 (10스택)</button>
+                  <button type="button" class="btn-chip" onclick="addTradeAmount(500)">+500주 (50스택)</button>
+                  <button type="button" class="btn-chip" style="background: rgba(239, 68, 68, 0.15); border-color: #ef4444; color: #fca5a5;" onclick="resetTradeAmount()">↺ 1주 리셋</button>
                 </div>
               </div>
 
@@ -4461,8 +4469,10 @@ function startWebServer(client) {
                 document.getElementById('detail-cap').innerText = formatCap(s.market_cap);
                 document.getElementById('detail-pe-div').innerText = s.pe_ratio + '배 / ' + s.dividend_yield + '%';
                 
+                const userHoldNum = Number(s.userHolding || 0);
+                const stackStr = userHoldNum > 0 ? (userHoldNum / 10).toFixed(1) + '스택' : '0스택';
                 const holdingElem = document.getElementById('detail-my-holding');
-                if (holdingElem) holdingElem.innerText = (s.userHolding || 0) + '주';
+                if (holdingElem) holdingElem.innerText = userHoldNum.toLocaleString() + '주 (' + stackStr + ')';
                 const avgElem = document.getElementById('detail-my-avg');
                 if (avgElem) avgElem.innerText = (s.userAvgPrice ? Number(s.userAvgPrice).toLocaleString() : '0') + '원';
 
@@ -7171,33 +7181,65 @@ function startWebServer(client) {
   // 👑 웹 관리자 명령어 실행 API (Discord 관리자 명령어 웹 연동)
   // ════════════════════════════════════════════════════════════
 
+  // 유저 ID, 멘션, 닉네임 자동 해석 헬퍼
+  async function resolveTargetUser(inputStr) {
+    if (!inputStr) return null;
+    const cleaned = String(inputStr).trim().replace(/<@!?>/g, '').replace(/[@<>\s]/g, '');
+    if (!cleaned) return null;
+
+    // 1. 숫자 ID로 검색
+    if (/^\d{16,22}$/.test(cleaned)) {
+      return await getOrCreateUser(cleaned);
+    }
+
+    // 2. 닉네임 / 유저명으로 DB 검색
+    const [rows] = await pool.query(
+      'SELECT * FROM users WHERE discord_id = ? OR username = ? OR username LIKE ? ORDER BY id DESC LIMIT 1',
+      [cleaned, cleaned, `%${cleaned}%`]
+    );
+    if (rows && rows.length > 0) return rows[0];
+
+    // 3. 숫자 문자열이면 새 유저로 생성/반환
+    if (/^\d+$/.test(cleaned)) {
+      return await getOrCreateUser(cleaned);
+    }
+    return null;
+  }
+
   // 1. 유저 돈 지급 (/admin_give 웹 버전)
   app.post('/api/admin/action/give', async (req, res) => {
     const session = getSessionUser(req);
     if (!session || !config.isAdmin(session.id)) return res.status(403).json({ success: false, error: '관리자 전용' });
 
     const { userId, amount, reason } = req.body;
-    if (!userId || !amount) return res.status(400).json({ success: false, error: '유저 ID와 금액을 입력하세요.' });
+    if (!userId || amount === undefined || amount === null || String(amount).trim() === '') {
+      return res.status(400).json({ success: false, error: '유저 ID(또는 닉네임)와 금액을 입력하세요.' });
+    }
 
-    const parsedAmount = BigInt(amount);
+    const cleanAmtStr = String(amount).replace(/[,원\s]/g, '');
+    const parsedAmount = BigInt(cleanAmtStr || '0');
     if (parsedAmount <= 0n) return res.status(400).json({ success: false, error: '금액은 1원 이상이어야 합니다.' });
 
     try {
-      const targetUser = await getOrCreateUser(userId);
+      const targetUser = await resolveTargetUser(userId);
+      if (!targetUser) return res.status(404).json({ success: false, error: `유저 '${userId}'를 찾을 수 없습니다.` });
+
+      const targetId = targetUser.discord_id;
+      const targetName = targetUser.username || `유저_${targetId.slice(-4)}`;
       const beforeCash = BigInt(targetUser.cash || 0);
       const afterCash = beforeCash + parsedAmount;
 
-      await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [afterCash.toString(), userId]);
+      await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [afterCash.toString(), targetId]);
 
-      // 경제 로그 및 관리자 로그
+      // 경제 로그 및 관리자 감사 로그 기록
       await pool.query(`
         INSERT INTO economy_logs (user_id, username, type, amount, balance_before, balance_after, description)
         VALUES (?, ?, 'ADMIN_GIVE', ?, ?, ?, ?)
-      `, [userId, targetUser.username || `유저_${userId.slice(-4)}`, parsedAmount.toString(), beforeCash.toString(), afterCash.toString(), `👑 [웹 관리자 지급] +${formatMoney(parsedAmount)} (사유: ${reason || '관리자 수동 지급'})`]);
+      `, [targetId, targetName, parsedAmount.toString(), beforeCash.toString(), afterCash.toString(), `👑 [웹 관리자 지급] +${formatMoney(parsedAmount)} (사유: ${reason || '관리자 수동 지급'})`]);
 
-      await logAdminAction(session.id, session.username || '관리자', 'WEB_GIVE_MONEY', userId, { amount: parsedAmount.toString(), reason: reason || '관리자 수동 지급' }, req);
+      await logAdminAction(session.id, session.username || '관리자', 'WEB_GIVE_MONEY', targetId, { amount: parsedAmount.toString(), targetName, reason: reason || '관리자 수동 지급' }, req);
 
-      return res.json({ success: true, message: `✅ 유저 <@${userId}>에게 ${formatMoney(parsedAmount)}이 지급되었습니다. (잔액: ${formatMoney(afterCash)})` });
+      return res.json({ success: true, message: `✅ [@${targetName}]님에게 ${formatMoney(parsedAmount)}이 성공적으로 지급되었습니다! (잔액: ${formatMoney(afterCash)})` });
     } catch (e) {
       return res.status(500).json({ success: false, error: e.message });
     }
@@ -7209,27 +7251,34 @@ function startWebServer(client) {
     if (!session || !config.isAdmin(session.id)) return res.status(403).json({ success: false, error: '관리자 전용' });
 
     const { userId, amount, reason } = req.body;
-    if (!userId || !amount) return res.status(400).json({ success: false, error: '유저 ID와 금액을 입력하세요.' });
+    if (!userId || amount === undefined || amount === null || String(amount).trim() === '') {
+      return res.status(400).json({ success: false, error: '유저 ID(또는 닉네임)와 금액을 입력하세요.' });
+    }
 
-    const parsedAmount = BigInt(amount);
+    const cleanAmtStr = String(amount).replace(/[,원\s]/g, '');
+    const parsedAmount = BigInt(cleanAmtStr || '0');
     if (parsedAmount <= 0n) return res.status(400).json({ success: false, error: '금액은 1원 이상이어야 합니다.' });
 
     try {
-      const targetUser = await getOrCreateUser(userId);
+      const targetUser = await resolveTargetUser(userId);
+      if (!targetUser) return res.status(404).json({ success: false, error: `유저 '${userId}'를 찾을 수 없습니다.` });
+
+      const targetId = targetUser.discord_id;
+      const targetName = targetUser.username || `유저_${targetId.slice(-4)}`;
       const beforeCash = BigInt(targetUser.cash || 0);
       const afterCash = beforeCash > parsedAmount ? beforeCash - parsedAmount : 0n;
 
-      await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [afterCash.toString(), userId]);
+      await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [afterCash.toString(), targetId]);
 
-      // 경제 로그 및 관리자 로그
+      // 경제 로그 및 관리자 감사 로그
       await pool.query(`
         INSERT INTO economy_logs (user_id, username, type, amount, balance_before, balance_after, description)
         VALUES (?, ?, 'ADMIN_TAKE', ?, ?, ?, ?)
-      `, [userId, targetUser.username || `유저_${userId.slice(-4)}`, parsedAmount.toString(), beforeCash.toString(), afterCash.toString(), `👑 [웹 관리자 회수] -${formatMoney(parsedAmount)} (사유: ${reason || '관리자 수동 회수'})`]);
+      `, [targetId, targetName, parsedAmount.toString(), beforeCash.toString(), afterCash.toString(), `👑 [웹 관리자 회수] -${formatMoney(parsedAmount)} (사유: ${reason || '관리자 수동 회수'})`]);
 
-      await logAdminAction(session.id, session.username || '관리자', 'WEB_TAKE_MONEY', userId, { amount: parsedAmount.toString(), reason: reason || '관리자 수동 회수' }, req);
+      await logAdminAction(session.id, session.username || '관리자', 'WEB_TAKE_MONEY', targetId, { amount: parsedAmount.toString(), targetName, reason: reason || '관리자 수동 회수' }, req);
 
-      return res.json({ success: true, message: `✅ 유저 <@${userId}>의 자금 ${formatMoney(parsedAmount)}이 회수되었습니다. (잔액: ${formatMoney(afterCash)})` });
+      return res.json({ success: true, message: `✅ [@${targetName}]님의 자금 ${formatMoney(parsedAmount)}이 회수되었습니다. (잔액: ${formatMoney(afterCash)})` });
     } catch (e) {
       return res.status(500).json({ success: false, error: e.message });
     }
@@ -7241,21 +7290,27 @@ function startWebServer(client) {
     if (!session || !config.isAdmin(session.id)) return res.status(403).json({ success: false, error: '관리자 전용' });
 
     const { userId } = req.body;
-    if (!userId) return res.status(400).json({ success: false, error: '유저 ID를 입력하세요.' });
+    if (!userId) return res.status(400).json({ success: false, error: '유저 ID(또는 닉네임)를 입력하세요.' });
 
     try {
+      const targetUser = await resolveTargetUser(userId);
+      if (!targetUser) return res.status(404).json({ success: false, error: `유저 '${userId}'를 찾을 수 없습니다.` });
+
+      const targetId = targetUser.discord_id;
+      const targetName = targetUser.username || `유저_${targetId.slice(-4)}`;
+
       await pool.query(`
         UPDATE users 
         SET cash = ?, bank = 0, clicker_level = 1, auto_miner_level = 0, total_clicks = 0,
             daily_streak = 0, last_daily = NULL, last_work = NULL, last_subsidy = NULL
         WHERE discord_id = ?
-      `, [config.initialBalance || 10000, userId]);
+      `, [config.initialBalance || 10000, targetId]);
 
-      await pool.query('DELETE FROM user_stocks WHERE user_id = ?', [userId]);
+      await pool.query('DELETE FROM user_stocks WHERE user_id = ?', [targetId]);
 
-      await logAdminAction(session.id, session.username || '관리자', 'WEB_RESET_USER', userId, {}, req);
+      await logAdminAction(session.id, session.username || '관리자', 'WEB_RESET_USER', targetId, { targetName }, req);
 
-      return res.json({ success: true, message: `✅ 유저 <@${userId}>의 모든 경제 데이터가 초기화되었습니다.` });
+      return res.json({ success: true, message: `✅ [@${targetName}]님의 모든 경제/주식 데이터가 초기화되었습니다.` });
     } catch (e) {
       return res.status(500).json({ success: false, error: e.message });
     }
