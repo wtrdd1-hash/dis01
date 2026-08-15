@@ -6040,7 +6040,10 @@ function startWebServer(client) {
             const btn = document.getElementById('chat-submit-btn');
             if (!input) return;
             const text = input.value.trim();
-            if (!text) return;
+            if (!text) {
+              input.focus();
+              return;
+            }
 
             if (btn) btn.disabled = true;
             try {
@@ -6051,12 +6054,15 @@ function startWebServer(client) {
               });
               const data = await res.json();
               if (!data.success) {
-                alert(data.error || '채팅 전송에 실패했습니다.');
+                showToast('error', '채팅 실패', data.error || '채팅 전송에 실패했습니다.');
               } else {
                 input.value = '';
+                if (data.message) {
+                  appendLiveChatMessage(data.message, true);
+                }
               }
             } catch (err) {
-              alert('채팅 전송 중 네트워크 오류가 발생했습니다.');
+              showToast('error', '통신 오류', '채팅 서버와 연결할 수 없습니다.');
             } finally {
               if (btn) btn.disabled = false;
               input.focus();
@@ -6069,7 +6075,10 @@ function startWebServer(client) {
             const btn = document.getElementById('floating-chat-submit-btn');
             if (!input) return;
             const text = input.value.trim();
-            if (!text) return;
+            if (!text) {
+              input.focus();
+              return;
+            }
 
             if (btn) btn.disabled = true;
             try {
@@ -6080,12 +6089,15 @@ function startWebServer(client) {
               });
               const data = await res.json();
               if (!data.success) {
-                alert(data.error || '채팅 전송에 실패했습니다.');
+                showToast('error', '채팅 실패', data.error || '채팅 전송에 실패했습니다.');
               } else {
                 input.value = '';
+                if (data.message) {
+                  appendLiveChatMessage(data.message, true);
+                }
               }
             } catch (err) {
-              alert('채팅 전송 중 네트워크 오류가 발생했습니다.');
+              showToast('error', '통신 오류', '채팅 서버와 연결할 수 없습니다.');
             } finally {
               if (btn) btn.disabled = false;
               input.focus();
