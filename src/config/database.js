@@ -167,18 +167,22 @@ async function initDatabase() {
       `);
     }
 
-    // 유저 보유 주식 테이블
+    // 유저 보유 주식 테이블 (소수점 거래 지원 DECIMAL(18, 4))
     await connection.query(`
       CREATE TABLE IF NOT EXISTS user_stocks (
         user_id VARCHAR(32) NOT NULL,
         stock_id VARCHAR(16) NOT NULL,
-        amount BIGINT NOT NULL DEFAULT 0,
+        amount DECIMAL(18, 4) NOT NULL DEFAULT 0.0000,
         total_spent BIGINT NOT NULL DEFAULT 0,
         PRIMARY KEY (user_id, stock_id),
         INDEX idx_user_id (user_id),
         INDEX idx_stock_id (stock_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    try {
+      await connection.query(`ALTER TABLE user_stocks MODIFY COLUMN amount DECIMAL(18, 4) NOT NULL DEFAULT 0.0000;`);
+    } catch (e) {}
 
     // 도박 및 이력 로그 테이블 (자산 스냅샷 및 롤백 복구 지원)
     await connection.query(`
@@ -251,7 +255,7 @@ async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
-    // 주식 매수/매도 실시간 체결 로그 테이블
+    // 주식 매수/매도 실시간 체결 로그 테이블 (소수점 거래 지원 DECIMAL(18, 4))
     await connection.query(`
       CREATE TABLE IF NOT EXISTS stock_transactions (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -260,7 +264,7 @@ async function initDatabase() {
         stock_id VARCHAR(16) NOT NULL,
         stock_name VARCHAR(64) NOT NULL,
         action VARCHAR(16) NOT NULL,
-        amount BIGINT NOT NULL,
+        amount DECIMAL(18, 4) NOT NULL,
         price BIGINT NOT NULL,
         total_price BIGINT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -269,6 +273,10 @@ async function initDatabase() {
         INDEX idx_created_at (created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    try {
+      await connection.query(`ALTER TABLE stock_transactions MODIFY COLUMN amount DECIMAL(18, 4) NOT NULL;`);
+    } catch (e) {}
 
     // 출석체크, 지원금, 은행 이체 등 경제 이벤트 로그 테이블
     await connection.query(`

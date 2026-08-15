@@ -1023,32 +1023,39 @@ function startWebServer(client) {
       if (isAll) {
         if (action === 'sell') {
           const [holdingRows] = await pool.query('SELECT amount FROM user_stocks WHERE user_id = ? AND stock_id = ?', [session.id, stockId]);
-          if (holdingRows.length === 0 || BigInt(holdingRows[0].amount) <= 0n) {
+          if (holdingRows.length === 0 || Number(holdingRows[0].amount) <= 0) {
             return res.status(400).json({ success: false, error: '매도할 수 있는 주식을 보유하고 있지 않습니다.' });
           }
           count = Number(holdingRows[0].amount);
         } else if (action === 'buy') {
-          const maxCanBuy = stockPrice > 0n ? Number(userCash / stockPrice) : 0;
-          if (maxCanBuy <= 0) {
-            return res.status(400).json({ success: false, error: '현재 보유 현금으로 1주도 매수할 수 없습니다.' });
+          const maxCanBuy = stockPrice > 0n ? (Number(userCash) / Number(stockPrice)) : 0;
+          if (maxCanBuy <= 0.0001) {
+            return res.status(400).json({ success: false, error: '현재 보유 현금으로 매수할 수 없습니다.' });
           }
-          count = maxCanBuy;
+          count = Math.floor(maxCanBuy * 10000) / 10000;
         }
       } else {
-        count = parseInt(amount, 10);
-        // 만약 매수 시 호가 변동/오차로 현금이 미세하게 부족한 경우 가용 현금 최대치로 스마트 보정
-        if (action === 'buy' && userCash < (stockPrice * BigInt(count)) && userCash >= stockPrice) {
-          const adjustedMax = Number(userCash / stockPrice);
-          if (adjustedMax > 0 && Math.abs(adjustedMax - count) <= 10) {
-            count = adjustedMax;
+        count = parseFloat(amount);
+        // 만약 매수 시 가용 현금보다 미세하게 초과된 경우 가능한 최대치로 자동 보정
+        if (action === 'buy') {
+          const neededCash = BigInt(Math.floor(Number(stockPrice) * count));
+          if (userCash < neededCash && userCash > 0n) {
+            const adjustedMax = Math.floor((Number(userCash) / Number(stockPrice)) * 10000) / 10000;
+            if (adjustedMax > 0.0001 && Math.abs(adjustedMax - count) <= 1.0) {
+              count = adjustedMax;
+            }
           }
         }
       }
 
-      if (!count || count <= 0) return res.status(400).json({ success: false, error: '거래 수량은 1주 이상이어야 합니다.' });
+      if (isNaN(count) || count < 0.0001) {
+        return res.status(400).json({ success: false, error: '거래 수량은 최소 0.0001주 이상이어야 합니다.' });
+      }
 
-      const tradeCount = BigInt(count);
-      const totalTradePrice = stockPrice * tradeCount;
+      // 소수점 4자리로 정밀 라운딩
+      count = Math.round(count * 10000) / 10000;
+      const countDecStr = count.toFixed(4);
+      const totalTradePrice = BigInt(Math.floor(Number(stockPrice) * count));
 
       if (action === 'buy') {
         if (userCash < totalTradePrice) {
@@ -1064,16 +1071,17 @@ function startWebServer(client) {
           ON DUPLICATE KEY UPDATE
             amount = amount + VALUES(amount),
             total_spent = total_spent + VALUES(total_spent)
-        `, [session.id, stockId, tradeCount.toString(), totalTradePrice.toString()]);
+        `, [session.id, stockId, countDecStr, totalTradePrice.toString()]);
 
         // 체결 로그 영구 기록
         try {
           await pool.query(`
             INSERT INTO stock_transactions (user_id, username, stock_id, stock_name, action, amount, price, total_price)
             VALUES (?, ?, ?, ?, 'BUY', ?, ?, ?)
-          `, [session.id, session.username, stockId, stock.name, tradeCount.toString(), stockPrice.toString(), totalTradePrice.toString()]);
+          `, [session.id, session.username, stockId, stock.name, countDecStr, stockPrice.toString(), totalTradePrice.toString()]);
         } catch (e) {}
 
+        const displayCount = (count % 1 === 0) ? count.toLocaleString() : count.toFixed(4);
         return res.json({
           success: true,
           action: 'buy',
@@ -1083,31 +1091,32 @@ function startWebServer(client) {
           price: stockPrice.toString(),
           totalPrice: totalTradePrice.toString(),
           newCash: userCash.toString(),
-          message: `🛒 [${stock.name}] ${formatNumber(count)}주 매수 완료 (-${formatMoney(totalTradePrice)})`
+          message: `🛒 [${stock.name}] ${displayCount}주 매수 완료 (-${formatMoney(totalTradePrice)})`
         });
       } else if (action === 'sell') {
         const [holdingRows] = await pool.query('SELECT * FROM user_stocks WHERE user_id = ? AND stock_id = ?', [session.id, stockId]);
-        if (holdingRows.length === 0 || BigInt(holdingRows[0].amount) < tradeCount) {
-          const currentHolding = holdingRows[0] ? holdingRows[0].amount : 0;
-          return res.status(400).json({ success: false, error: `보유 주식이 부족합니다! (현재 보유: ${currentHolding}주)` });
+        const currentHoldingNum = holdingRows.length > 0 ? Number(holdingRows[0].amount) : 0;
+
+        if (holdingRows.length === 0 || currentHoldingNum < (count - 0.00001)) {
+          const displayHolding = (currentHoldingNum % 1 === 0) ? currentHoldingNum.toLocaleString() : currentHoldingNum.toFixed(4);
+          return res.status(400).json({ success: false, error: `보유 주식이 부족합니다! (현재 보유: ${displayHolding}주)` });
         }
 
         const holding = holdingRows[0];
-        const holdingAmount = BigInt(holding.amount);
-        const holdingSpent = BigInt(holding.total_spent);
-
-        const spentDeduction = (holdingSpent * tradeCount) / holdingAmount;
-        const newHoldingAmount = holdingAmount - tradeCount;
-        const newHoldingSpent = holdingSpent - spentDeduction;
+        const holdingSpent = BigInt(holding.total_spent || 0);
+        const ratio = Math.min(1.0, count / (currentHoldingNum || 1));
+        const spentDeduction = BigInt(Math.floor(Number(holdingSpent) * ratio));
+        const newHoldingAmountNum = Math.max(0, Math.round((currentHoldingNum - count) * 10000) / 10000);
+        const newHoldingSpent = holdingSpent > spentDeduction ? holdingSpent - spentDeduction : 0n;
 
         userCash += totalTradePrice;
         await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [userCash.toString(), session.id]);
 
-        if (newHoldingAmount === 0n) {
+        if (newHoldingAmountNum <= 0.00001) {
           await pool.query('DELETE FROM user_stocks WHERE user_id = ? AND stock_id = ?', [session.id, stockId]);
         } else {
           await pool.query('UPDATE user_stocks SET amount = ?, total_spent = ? WHERE user_id = ? AND stock_id = ?', [
-            newHoldingAmount.toString(), newHoldingSpent.toString(), session.id, stockId
+            newHoldingAmountNum.toFixed(4), newHoldingSpent.toString(), session.id, stockId
           ]);
         }
 
@@ -1116,9 +1125,10 @@ function startWebServer(client) {
           await pool.query(`
             INSERT INTO stock_transactions (user_id, username, stock_id, stock_name, action, amount, price, total_price)
             VALUES (?, ?, ?, ?, 'SELL', ?, ?, ?)
-          `, [session.id, session.username, stockId, stock.name, tradeCount.toString(), stockPrice.toString(), totalTradePrice.toString()]);
+          `, [session.id, session.username, stockId, stock.name, countDecStr, stockPrice.toString(), totalTradePrice.toString()]);
         } catch (e) {}
 
+        const displayCount = (count % 1 === 0) ? count.toLocaleString() : count.toFixed(4);
         return res.json({
           success: true,
           action: 'sell',
@@ -1128,7 +1138,7 @@ function startWebServer(client) {
           price: stockPrice.toString(),
           totalPrice: totalTradePrice.toString(),
           newCash: userCash.toString(),
-          message: `💰 [${stock.name}] ${formatNumber(count)}주 매도 완료 (+${formatMoney(totalTradePrice)})`
+          message: `💰 [${stock.name}] ${displayCount}주 매도 완료 (+${formatMoney(totalTradePrice)})`
         });
       } else {
         return res.status(400).json({ success: false, error: '유효하지 않은 거래 유형입니다.' });
@@ -1395,6 +1405,53 @@ function startWebServer(client) {
       });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 13.5 🔄 실시간 유저 자산/경제 상태 요약 API (비동기 실시간 자동 동기화용)
+  app.get('/api/user/summary', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session) return res.json({ success: false, loggedIn: false });
+
+    try {
+      const [userRows] = await pool.query('SELECT cash, bank, clicker_level, auto_miner_level, daily_streak FROM users WHERE discord_id = ?', [session.id]);
+      if (userRows.length === 0) return res.json({ success: false, loggedIn: false });
+
+      const u = userRows[0];
+      const [stockRows] = await pool.query(`
+        SELECT us.stock_id, us.amount, s.price
+        FROM user_stocks us
+        JOIN stocks s ON us.stock_id = s.stock_id
+        WHERE us.user_id = ?
+      `, [session.id]);
+
+      let totalStockVal = 0n;
+      const holdings = {};
+      stockRows.forEach(sr => {
+        const amt = Number(sr.amount);
+        const pr = BigInt(sr.price);
+        totalStockVal += BigInt(Math.floor(Number(pr) * amt));
+        holdings[sr.stock_id] = amt;
+      });
+
+      const cash = BigInt(u.cash || 0);
+      const bank = BigInt(u.bank || 0);
+      const netWorth = cash + bank + totalStockVal;
+
+      return res.json({
+        success: true,
+        loggedIn: true,
+        cash: cash.toString(),
+        bank: bank.toString(),
+        stockVal: totalStockVal.toString(),
+        netWorth: netWorth.toString(),
+        clickerLevel: u.clicker_level || 1,
+        autoLevel: u.auto_miner_level || 0,
+        streak: u.daily_streak || 0,
+        holdings
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
     }
   });
 
@@ -2414,6 +2471,21 @@ function startWebServer(client) {
           </div>
         `;
 
+      const floatingChatInputHtml = currentUser
+        ? `
+          <form id="floating-chat-send-form" onsubmit="handleSendFloatingChat(event)" style="display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="floating-chat-input" placeholder="실시간 메시지 입력..." maxlength="200" autocomplete="off" style="flex: 1; background: #0f172a; border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 10px 14px; border-radius: 10px; font-size: 0.88rem; outline: none;">
+            <button type="submit" id="floating-chat-submit-btn" style="background: linear-gradient(135deg, #0284c7, #38bdf8); border: none; color: #fff; font-weight: 700; padding: 10px 14px; border-radius: 10px; cursor: pointer; white-space: nowrap; font-size: 0.88rem;">
+              전송
+            </button>
+          </form>
+        `
+        : `
+          <div style="text-align: center; padding: 6px;">
+            <a href="${discordLoginUrl}" class="btn-discord" style="display: block; padding: 8px 12px; font-size: 0.82rem;">🎮 Discord 로그인 후 채팅</a>
+          </div>
+        `;
+
       res.send(`
         <!DOCTYPE html>
         <html lang="ko">
@@ -3248,6 +3320,115 @@ function startWebServer(client) {
             .btn-del-msg { background: transparent; border: none; color: #f87171; cursor: pointer; font-size: 0.75rem; padding: 0 4px; opacity: 0.7; }
             .btn-del-msg:hover { opacity: 1; }
 
+            /* 💬 플로팅 전역 실시간 채팅 위젯 (Floating Global Chat Dock) */
+            #floating-chat-container {
+              position: fixed;
+              bottom: 24px;
+              right: 24px;
+              z-index: 9998;
+              font-family: 'Inter', sans-serif;
+            }
+            #btn-floating-chat-toggle {
+              background: linear-gradient(135deg, #0284c7, #0369a1);
+              border: 1px solid rgba(56, 189, 248, 0.5);
+              color: #fff;
+              padding: 10px 18px;
+              border-radius: 999px;
+              font-weight: 700;
+              font-size: 0.92rem;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              box-shadow: 0 8px 24px rgba(2, 132, 199, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+              transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            #btn-floating-chat-toggle:hover {
+              transform: translateY(-3px) scale(1.03);
+              box-shadow: 0 12px 30px rgba(2, 132, 199, 0.6);
+            }
+            .chat-unread-badge {
+              background: #ef4444;
+              color: #fff;
+              font-size: 0.7rem;
+              font-weight: 800;
+              padding: 2px 6px;
+              border-radius: 999px;
+              animation: pulse-dot 1.2s infinite;
+            }
+            #floating-chat-drawer {
+              position: fixed;
+              bottom: 80px;
+              right: 24px;
+              width: 380px;
+              max-width: calc(100vw - 32px);
+              height: 520px;
+              max-height: calc(100vh - 120px);
+              background: #0f172a;
+              border: 1px solid rgba(56, 189, 248, 0.35);
+              border-radius: 20px;
+              box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6), 0 0 20px rgba(2, 132, 199, 0.2);
+              display: flex;
+              flex-direction: column;
+              overflow: hidden;
+              z-index: 9999;
+              animation: slideUpChat 0.25s ease-out;
+            }
+            @keyframes slideUpChat {
+              from { opacity: 0; transform: translateY(20px) scale(0.96); }
+              to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            .floating-chat-header {
+              background: linear-gradient(135deg, #1e293b, #0f172a);
+              padding: 12px 16px;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            }
+            .floating-chat-body {
+              flex: 1;
+              overflow-y: auto;
+              padding: 12px 14px;
+              display: flex;
+              flex-direction: column;
+              gap: 8px;
+              background: rgba(15, 23, 42, 0.95);
+            }
+            .floating-chat-footer {
+              padding: 10px 12px;
+              background: #1e293b;
+              border-top: 1px solid rgba(255, 255, 255, 0.08);
+            }
+            .btn-chat-min {
+              background: rgba(255, 255, 255, 0.1);
+              border: none;
+              color: #94a3b8;
+              width: 26px;
+              height: 26px;
+              border-radius: 50%;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 0.85rem;
+              transition: all 0.15s;
+            }
+            .btn-chat-min:hover { background: rgba(239, 68, 68, 0.25); color: #f87171; }
+            @media (max-width: 480px) {
+              #floating-chat-drawer {
+                right: 12px;
+                left: 12px;
+                width: auto;
+                bottom: 75px;
+                height: 480px;
+              }
+              #floating-chat-container {
+                right: 16px;
+                bottom: 16px;
+              }
+            }
+
             /* 💬 하단 24시 고객센터 문의 바 */
             .support-footer-banner {
               background: linear-gradient(135deg, rgba(30, 27, 75, 0.85) 0%, rgba(17, 24, 39, 0.95) 100%);
@@ -3996,10 +4177,10 @@ function startWebServer(client) {
               
               <div class="bet-input-group">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                  <label style="margin: 0;">주문 수량 (주)</label>
-                  <span style="font-size: 0.75rem; color: #818cf8;">비중 및 전량 선택 가능</span>
+                  <label style="margin: 0;">주문 수량 (소수점 거래 가능)</label>
+                  <span style="font-size: 0.75rem; color: #818cf8;">소수점(0.1주~) 및 전량 지원</span>
                 </div>
-                <input type="number" id="trade-amount-input" class="bet-input" value="1" min="0" oninput="calcTradeTotal()">
+                <input type="number" id="trade-amount-input" class="bet-input" value="1" min="0.0001" step="0.01" oninput="calcTradeTotal()">
                 
                 <!-- 비중(퍼센트/전량) 칩 -->
                 <div class="btn-chip-grid" style="margin-top: 8px;">
@@ -4010,13 +4191,13 @@ function startWebServer(client) {
                   <button type="button" class="btn-chip" style="background: rgba(99, 102, 241, 0.35); border-color: #818cf8; color: #fff; font-weight: 800;" onclick="setTradePercent(100)">🔥 100% (전량)</button>
                 </div>
 
-                <!-- 수량 & 스택(Stack) 직접 가산 칩 -->
+                <!-- 소수점 & 정수 수량 퀵 칩 -->
                 <div class="btn-chip-grid" style="margin-top: 6px;">
+                  <button type="button" class="btn-chip" style="background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; color: #7dd3fc;" onclick="addTradeAmount(0.1)">+0.1주</button>
+                  <button type="button" class="btn-chip" style="background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; color: #7dd3fc;" onclick="addTradeAmount(0.5)">+0.5주</button>
                   <button type="button" class="btn-chip" onclick="addTradeAmount(1)">+1주</button>
                   <button type="button" class="btn-chip" onclick="addTradeAmount(10)">+10주 (1스택)</button>
-                  <button type="button" class="btn-chip" onclick="addTradeAmount(50)">+50주 (5스택)</button>
-                  <button type="button" class="btn-chip" onclick="addTradeAmount(100)">+100주 (10스택)</button>
-                  <button type="button" class="btn-chip" onclick="addTradeAmount(500)">+500주 (50스택)</button>
+                  <button type="button" class="btn-chip" onclick="addTradeAmount(100)">+100주</button>
                   <button type="button" class="btn-chip" style="background: rgba(239, 68, 68, 0.15); border-color: #ef4444; color: #fca5a5;" onclick="resetTradeAmount()">↺ 1주 리셋</button>
                 </div>
               </div>
@@ -4145,6 +4326,50 @@ function startWebServer(client) {
               </div>
 
               <button class="btn-submit-inquiry" id="btn-submit-inquiry" onclick="submitInquiryForm()">📨 관리자에게 1:1 문의 전송 (DM 알림)</button>
+            </div>
+          </div>
+
+          <!-- 💬 전역 상시 플로팅 채팅 독 (Floating Global Chat Dock) -->
+          <div id="floating-chat-container">
+            <button id="btn-floating-chat-toggle" onclick="toggleFloatingChat()" title="💬 실시간 광장 채팅 열기/닫기">
+              <span>💬</span>
+              <span>실시간 채팅</span>
+              <span id="floating-chat-badge" class="chat-unread-badge" style="display:none;">NEW</span>
+            </button>
+
+            <!-- 플로팅 채팅 드로어 창 -->
+            <div id="floating-chat-drawer" style="display: none;">
+              <div class="floating-chat-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="pulse-dot"></span>
+                  <span style="font-weight: 800; font-size: 0.95rem; color: #fff;">💬 광장 실시간 채팅</span>
+                </div>
+                <button class="btn-chat-min" onclick="toggleFloatingChat()" title="채팅창 최소화">✕</button>
+              </div>
+
+              <!-- 플로팅 메시지 뷰어 -->
+              <div id="floating-chat-messages-container" class="floating-chat-body">
+                <div style="text-align: center; color: #64748b; font-size: 0.82rem; padding: 25px 0;">
+                  <span class="pulse-dot"></span> 실시간 광장 채팅을 연결하는 중...
+                </div>
+              </div>
+
+              <!-- 빠른 이모지 바 -->
+              <div class="chat-quick-emojis" style="padding: 6px 10px; gap: 4px; background: rgba(15,23,42,0.9); border-top: 1px solid rgba(255,255,255,0.06); display: flex; overflow-x: auto;">
+                <button type="button" class="btn-emoji-quick" onclick="insertFloatingEmoji('🦆')">🦆</button>
+                <button type="button" class="btn-emoji-quick" onclick="insertFloatingEmoji('💎')">💎</button>
+                <button type="button" class="btn-emoji-quick" onclick="insertFloatingEmoji('📈')">📈</button>
+                <button type="button" class="btn-emoji-quick" onclick="insertFloatingEmoji('🚀')">🚀</button>
+                <button type="button" class="btn-emoji-quick" onclick="insertFloatingEmoji('💰')">💰</button>
+                <button type="button" class="btn-emoji-quick" onclick="insertFloatingEmoji('🔥')">🔥</button>
+                <button type="button" class="btn-emoji-quick" onclick="insertFloatingEmoji('🎰')">🎰</button>
+                <button type="button" class="btn-emoji-quick" onclick="insertFloatingEmoji('🏆')">🏆</button>
+              </div>
+
+              <!-- 플로팅 입력 폼 -->
+              <div class="floating-chat-footer">
+                ${floatingChatInputHtml}
+              </div>
             </div>
           </div>
 
@@ -4977,7 +5202,7 @@ function startWebServer(client) {
             function setTradePercent(pct) {
               const input = document.getElementById('trade-amount-input');
               const stockId = currentTrade.stockId;
-              const holding = userHoldings[stockId] || 0;
+              const holding = Number(userHoldings[stockId] || 0);
               const price = Number(currentTrade.price) || 1;
               const userCash = getCurrentUserCashNum();
 
@@ -4988,15 +5213,16 @@ function startWebServer(client) {
               }
 
               if (currentTrade.action === 'buy') {
-                const maxCanBuy = Math.floor(userCash / price);
-                if (maxCanBuy <= 0) {
+                const maxCanBuy = (userCash / price);
+                if (maxCanBuy < 0.0001) {
                   input.value = 0;
-                  showToast('info', '현금 부족', '현재 보유 현금으로 1주도 매수할 수 없습니다.');
+                  showToast('info', '현금 부족', '현재 보유 현금으로 매수할 수 없습니다.');
                 } else {
                   if (pct === 100) {
-                    input.value = maxCanBuy;
+                    input.value = Math.floor(maxCanBuy * 10000) / 10000;
                   } else {
-                    input.value = Math.max(1, Math.floor(maxCanBuy * (pct / 100)));
+                    const frac = Math.floor((maxCanBuy * (pct / 100)) * 10000) / 10000;
+                    input.value = Math.max(0.0001, frac);
                   }
                 }
               } else {
@@ -5007,7 +5233,8 @@ function startWebServer(client) {
                   if (pct === 100) {
                     input.value = holding; // 🔥 100% 전량 매도
                   } else {
-                    input.value = Math.max(1, Math.floor(holding * (pct / 100)));
+                    const frac = Math.floor((holding * (pct / 100)) * 10000) / 10000;
+                    input.value = Math.max(0.0001, frac);
                   }
                 }
               }
@@ -5021,11 +5248,12 @@ function startWebServer(client) {
             function addTradeAmount(qty) {
               currentTrade.isAll = false;
               const input = document.getElementById('trade-amount-input');
-              const current = parseInt(input.value, 10) || 0;
+              const current = parseFloat(input.value) || 0;
               const stockId = currentTrade.stockId;
-              const holding = userHoldings[stockId] || 0;
+              const holding = Number(userHoldings[stockId] || 0);
               
-              let nextVal = Math.max(1, current + qty);
+              let nextVal = Math.round((current + qty) * 10000) / 10000;
+              if (nextVal < 0.0001) nextVal = 0.0001;
               if (currentTrade.action === 'sell' && holding > 0 && nextVal > holding) {
                 nextVal = holding;
               }
@@ -5046,31 +5274,31 @@ function startWebServer(client) {
 
             function calcTradeTotal() {
               const input = document.getElementById('trade-amount-input');
-              const count = parseInt(input.value, 10) || 0;
-              const price = BigInt(currentTrade.price || 0);
-              const total = BigInt(count) * price;
+              const count = parseFloat(input.value) || 0;
+              const price = Number(currentTrade.price || 0);
+              const total = Math.floor(count * price);
               const stockId = currentTrade.stockId;
-              const holding = userHoldings[stockId] || 0;
+              const holding = Number(userHoldings[stockId] || 0);
               const userCash = getCurrentUserCashNum();
 
-              document.getElementById('modal-total-price').innerText = Number(total).toLocaleString() + '원';
+              document.getElementById('modal-total-price').innerText = total.toLocaleString() + '원';
 
               const warnBox = document.getElementById('trade-warning-msg');
               const submitBtn = document.getElementById('btn-submit-trade');
 
               if (!warnBox) return;
 
-              if (count <= 0) {
+              if (count < 0.0001) {
                 warnBox.style.display = 'block';
                 warnBox.style.color = '#fbbf24';
-                warnBox.innerText = '⚠️ 주문 수량은 최소 1주 이상이어야 합니다.';
+                warnBox.innerText = '⚠️ 주문 수량은 최소 0.0001주 이상이어야 합니다.';
                 if (submitBtn) submitBtn.disabled = true;
-              } else if (currentTrade.action === 'sell' && count > holding) {
+              } else if (currentTrade.action === 'sell' && count > (holding + 0.00001)) {
                 warnBox.style.display = 'block';
                 warnBox.style.color = '#ef4444';
                 warnBox.innerText = '⚠️ 보유 수량(' + holding.toLocaleString() + '주)을 초과하여 매도할 수 없습니다.';
                 if (submitBtn) submitBtn.disabled = true;
-              } else if (currentTrade.action === 'buy' && Number(total) > userCash) {
+              } else if (currentTrade.action === 'buy' && total > userCash) {
                 warnBox.style.display = 'block';
                 warnBox.style.color = '#ef4444';
                 warnBox.innerText = '⚠️ 보유 현금(' + userCash.toLocaleString() + '원)이 부족합니다.';
@@ -5080,6 +5308,56 @@ function startWebServer(client) {
                 if (submitBtn) submitBtn.disabled = false;
               }
             }
+
+            // 🔄 실시간 자산/상태 변경 감지 및 무중단 자동 동기화 (Silent Live Auto-Sync)
+            let lastSyncedCash = null;
+            let lastSyncedBank = null;
+            let lastSyncedNet = null;
+
+            async function syncUserDataSilently() {
+              try {
+                const res = await fetch('/api/user/summary');
+                const data = await res.json();
+                if (!data.success || !data.loggedIn) return;
+
+                const newCashNum = Number(data.cash || 0);
+                const newBankNum = Number(data.bank || 0);
+                const newNetNum = Number(data.netWorth || 0);
+                const newStockValNum = Number(data.stockVal || 0);
+
+                if (data.holdings) {
+                  userHoldings = data.holdings;
+                }
+
+                // 현금 변경 감지 시 실시간 플립 애니메이션 및 숫자 갱신
+                if (lastSyncedCash !== null && lastSyncedCash !== newCashNum) {
+                  updateUserCashDisplay(data.cash);
+                  const isUp = newCashNum > lastSyncedCash;
+                  const cashElem = document.getElementById('my-cash');
+                  if (cashElem) {
+                    cashElem.style.color = isUp ? '#34d399' : '#f87171';
+                    setTimeout(() => { cashElem.style.color = '#34d399'; }, 1500);
+                  }
+                }
+                lastSyncedCash = newCashNum;
+
+                // 은행 예금 변경 감지 시 갱신
+                if (lastSyncedBank !== null && lastSyncedBank !== newBankNum) {
+                  const bankElem = document.getElementById('my-bank');
+                  if (bankElem) {
+                    bankElem.innerText = newBankNum.toLocaleString() + '원';
+                    bankElem.style.color = '#a5b4fc';
+                    setTimeout(() => { bankElem.style.color = '#818cf8'; }, 1500);
+                  }
+                }
+                lastSyncedBank = newBankNum;
+                lastSyncedNet = newNetNum;
+
+              } catch (e) {}
+            }
+
+            // 12초마다 실시간 자산 자동 동기화 백그라운드 폴링
+            setInterval(syncUserDataSilently, 12000);
 
             // ⏱️ 3분 주기 주가 변동 카운트다운 타이머 & 라이브 갱신
             let stockCountdownSeconds = 180;
@@ -5604,50 +5882,64 @@ function startWebServer(client) {
             loadChatMessages();
           })();
 
-          // 💬 실시간 광장 채팅 스크립트
+          // 💬 실시간 광장 채팅 & 전역 플로팅 독 스크립트
           let currentChatUserId = ${JSON.stringify(currentUser ? String(currentUser.id) : '')};
           let currentIsAdmin = ${isAdminUser ? true : false};
+          let isFloatingChatOpen = false;
+
+          function toggleFloatingChat() {
+            const drawer = document.getElementById('floating-chat-drawer');
+            const badge = document.getElementById('floating-chat-badge');
+            if (!drawer) return;
+            isFloatingChatOpen = !isFloatingChatOpen;
+            drawer.style.display = isFloatingChatOpen ? 'flex' : 'none';
+            if (isFloatingChatOpen) {
+              if (badge) badge.style.display = 'none';
+              const input = document.getElementById('floating-chat-input');
+              if (input) setTimeout(() => input.focus(), 100);
+              const fContainer = document.getElementById('floating-chat-messages-container');
+              if (fContainer) fContainer.scrollTop = fContainer.scrollHeight;
+            }
+          }
 
           async function loadChatMessages() {
             const container = document.getElementById('chat-messages-container');
-            if (!container) return;
+            const fContainer = document.getElementById('floating-chat-messages-container');
             try {
               const res = await fetch('/api/chat/messages');
               const data = await res.json();
               if (data.success && Array.isArray(data.messages)) {
                 if (data.messages.length === 0) {
-                  container.innerHTML = '<div style="text-align: center; color: #64748b; font-size: 0.85rem; padding: 40px 0;">아직 작성된 채팅이 없습니다. 첫 메시지를 남겨보세요! 💬</div>';
+                  const emptyHtml = '<div style="text-align: center; color: #64748b; font-size: 0.85rem; padding: 40px 0;">아직 작성된 채팅이 없습니다. 첫 메시지를 남겨보세요! 💬</div>';
+                  if (container) container.innerHTML = emptyHtml;
+                  if (fContainer) fContainer.innerHTML = emptyHtml;
                   return;
                 }
-                container.innerHTML = '';
+                if (container) container.innerHTML = '';
+                if (fContainer) fContainer.innerHTML = '';
                 data.messages.forEach(msg => appendLiveChatMessage(msg, false));
-                container.scrollTop = container.scrollHeight;
+                if (container) container.scrollTop = container.scrollHeight;
+                if (fContainer) fContainer.scrollTop = fContainer.scrollHeight;
               }
             } catch (e) {
-              if (container) container.innerHTML = '<div style="text-align: center; color: #ef4444; font-size: 0.85rem;">채팅 메시지를 불러오지 못했습니다.</div>';
+              const errHtml = '<div style="text-align: center; color: #ef4444; font-size: 0.85rem;">채팅 메시지를 불러오지 못했습니다.</div>';
+              if (container) container.innerHTML = errHtml;
+              if (fContainer) fContainer.innerHTML = errHtml;
             }
           }
 
           function appendLiveChatMessage(msg, shouldScroll = true) {
             const container = document.getElementById('chat-messages-container');
-            if (!container) return;
-
-            // 중복 렌더링 방지
-            if (document.getElementById('chat-msg-' + msg.id)) return;
+            const fContainer = document.getElementById('floating-chat-messages-container');
 
             const isMine = currentChatUserId && String(msg.user_id) === String(currentChatUserId);
             const isAdmin = msg.is_admin === 1 || msg.is_admin === true;
             const timeStr = msg.created_at ? new Date(msg.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '';
             const avatarUrl = msg.avatar ? ('https://cdn.discordapp.com/avatars/' + msg.user_id + '/' + msg.avatar + '.png') : 'https://cdn.discordapp.com/embed/avatars/0.png';
-
-            const bubble = document.createElement('div');
-            bubble.id = 'chat-msg-' + msg.id;
-            bubble.className = 'chat-bubble ' + (isMine ? 'mine' : '') + ' ' + (isAdmin ? 'admin' : '');
-
             const delBtn = (currentIsAdmin || isMine) ? '<button class="btn-del-msg" onclick="deleteChatMessage(' + msg.id + ')" title="메시지 삭제">✕</button>' : '';
             const adminBadge = isAdmin ? '<span class="badge-admin-chat">👑 관리자</span>' : '';
 
-            bubble.innerHTML = 
+            const bubbleInnerHtml = 
               '<img src="' + avatarUrl + '" class="chat-avatar" onerror="this.src=\'https://cdn.discordapp.com/embed/avatars/0.png\'">' +
               '<div class="chat-content">' +
                 '<div class="chat-meta">' +
@@ -5659,9 +5951,30 @@ function startWebServer(client) {
                 '<div>' + msg.message + '</div>' +
               '</div>';
 
-            container.appendChild(bubble);
-            if (shouldScroll) {
-              container.scrollTop = container.scrollHeight;
+            // 1. 메인 탭 컨테이너에 추가
+            if (container && !document.getElementById('chat-msg-' + msg.id)) {
+              const bubble = document.createElement('div');
+              bubble.id = 'chat-msg-' + msg.id;
+              bubble.className = 'chat-bubble ' + (isMine ? 'mine' : '') + ' ' + (isAdmin ? 'admin' : '');
+              bubble.innerHTML = bubbleInnerHtml;
+              container.appendChild(bubble);
+              if (shouldScroll) container.scrollTop = container.scrollHeight;
+            }
+
+            // 2. 플로팅 드로어 컨테이너에 추가
+            if (fContainer && !document.getElementById('fchat-msg-' + msg.id)) {
+              const fBubble = document.createElement('div');
+              fBubble.id = 'fchat-msg-' + msg.id;
+              fBubble.className = 'chat-bubble ' + (isMine ? 'mine' : '') + ' ' + (isAdmin ? 'admin' : '');
+              fBubble.innerHTML = bubbleInnerHtml;
+              fContainer.appendChild(fBubble);
+              if (shouldScroll && isFloatingChatOpen) fContainer.scrollTop = fContainer.scrollHeight;
+            }
+
+            // 플로팅 창이 닫혀 있고 남이 보낸 메시지면 알림 뱃지 표시
+            if (!isFloatingChatOpen && !isMine && shouldScroll) {
+              const badge = document.getElementById('floating-chat-badge');
+              if (badge) badge.style.display = 'inline-block';
             }
           }
 
@@ -5673,12 +5986,48 @@ function startWebServer(client) {
             }
           }
 
+          function insertFloatingEmoji(emoji) {
+            const input = document.getElementById('floating-chat-input');
+            if (input) {
+              input.value += emoji;
+              input.focus();
+            }
+          }
+
           async function handleSendChat(e) {
             if (e) e.preventDefault();
             const input = document.getElementById('chat-input');
             const btn = document.getElementById('chat-submit-btn');
             if (!input) return;
+            const text = input.value.trim();
+            if (!text) return;
 
+            if (btn) btn.disabled = true;
+            try {
+              const res = await fetch('/api/chat/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text })
+              });
+              const data = await res.json();
+              if (!data.success) {
+                alert(data.error || '채팅 전송에 실패했습니다.');
+              } else {
+                input.value = '';
+              }
+            } catch (err) {
+              alert('채팅 전송 중 네트워크 오류가 발생했습니다.');
+            } finally {
+              if (btn) btn.disabled = false;
+              input.focus();
+            }
+          }
+
+          async function handleSendFloatingChat(e) {
+            if (e) e.preventDefault();
+            const input = document.getElementById('floating-chat-input');
+            const btn = document.getElementById('floating-chat-submit-btn');
+            if (!input) return;
             const text = input.value.trim();
             if (!text) return;
 
@@ -5711,6 +6060,8 @@ function startWebServer(client) {
               if (data.success) {
                 const el = document.getElementById('chat-msg-' + msgId);
                 if (el) el.remove();
+                const fEl = document.getElementById('fchat-msg-' + msgId);
+                if (fEl) fEl.remove();
               } else {
                 alert(data.error || '삭제 권한이 없습니다.');
               }
