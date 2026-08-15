@@ -4,6 +4,7 @@ const { startStockEngine, updateStockPrices, setMarketRegime } = require('../uti
 const { startWebServer } = require('../web/server');
 const { logInfo, logError } = require('../utils/logger');
 const { startAutoBalancer } = require('../utils/economyBalancer');
+const { startBankEngine } = require('../utils/bankEngine');
 
 module.exports = {
   name: Events.ClientReady,
@@ -52,6 +53,9 @@ module.exports = {
 
     // 🏦 자동 경제 조절 시스템 가동 (10분 주기 분석, 관리자 DM 발송)
     startAutoBalancer(client, setMarketRegime);
+
+    // 🏦 덕스 중앙은행 정기 예금 이자 지급 엔진 가동 (1시간 주기)
+    startBankEngine(60 * 60 * 1000);
 
     // 24시간마다 DB 오래된 로그 자동 최적화 정리
     setInterval(() => {

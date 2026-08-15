@@ -2126,7 +2126,7 @@ function startWebServer(client) {
                 <span class="asset-val" id="my-cash">${formatMoney(userAssets.cash)}</span>
               </div>
               <div class="asset-card">
-                <span class="asset-lbl">🏦 은행 예금</span>
+                <span class="asset-lbl">🏦 은행 예금 <small style="color: #a5b4fc; font-size: 0.72rem; font-weight: 700;">(복리 0.5%/시간)</small></span>
                 <span class="asset-val" id="my-bank">${formatMoney(userAssets.bank)}</span>
               </div>
               <div class="asset-card">
