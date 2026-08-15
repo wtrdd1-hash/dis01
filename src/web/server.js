@@ -725,6 +725,110 @@ function startWebServer(client) {
     }
   });
 
+  // 6-2. 🏇 웹 실시간 경마 도박 API (/api/game/horse-race)
+  app.post('/api/game/horse-race', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
+
+    if (activeGameUsers.has(session.id)) {
+      return res.status(429).json({ success: false, error: '이전 레이스가 아직 진행 중입니다.' });
+    }
+    activeGameUsers.add(session.id);
+
+    try {
+      const { horseId, amount, isAll } = req.body;
+      const parsedHorseId = parseInt(horseId, 10);
+      if (![1, 2, 3, 4, 5].includes(parsedHorseId)) {
+        return res.status(400).json({ success: false, error: '1번부터 5번 사이의 말을 선택하세요.' });
+      }
+
+      const HORSES_DATA = [
+        { id: 1, name: '황금번개', emoji: '⚡', odds: 2.0, weight: 45 },
+        { id: 2, name: '질풍노도', emoji: '🌪️', odds: 3.0, weight: 30 },
+        { id: 3, name: '다크호스', emoji: '🖤', odds: 5.0, weight: 18 },
+        { id: 4, name: '월덕스피릿', emoji: '🦆', odds: 8.0, weight: 10 },
+        { id: 5, name: '로또잭팟', emoji: '💎', odds: 15.0, weight: 5 }
+      ];
+
+      const chosenHorse = HORSES_DATA.find(h => h.id === parsedHorseId);
+
+      const userData = await getOrCreateUser(session.id);
+      const userCash = BigInt(userData.cash || 0);
+
+      let betAmount = 0n;
+      if (isAll === true || amount === 'all' || amount === '올인') {
+        betAmount = userCash;
+      } else {
+        const parsed = parseInt(String(amount).replace(/[^0-9]/g, ''), 10);
+        if (isNaN(parsed) || parsed <= 0) {
+          return res.status(400).json({ success: false, error: '배팅 금액은 1,000원 이상이어야 합니다.' });
+        }
+        betAmount = BigInt(parsed);
+      }
+
+      if (betAmount < 1000n) {
+        return res.status(400).json({ success: false, error: '최소 배팅 금액은 1,000원입니다.' });
+      }
+      if (userCash < betAmount) {
+        return res.status(400).json({ success: false, error: `보유 현금(${formatMoney(userCash)})이 부족합니다.` });
+      }
+
+      // 우승마 결정 (가중치 랜덤)
+      const totalWeight = HORSES_DATA.reduce((a, b) => a + b.weight, 0);
+      let rand = Math.random() * totalWeight;
+      let winner = HORSES_DATA[0];
+      for (const h of HORSES_DATA) {
+        if (rand < h.weight) { winner = h; break; }
+        rand -= h.weight;
+      }
+
+      // 자동 경제 조절 배율 적용
+      let dynMult = 1.0;
+      try {
+        const { getDynamicSettings } = require('../utils/economyBalancer');
+        const dyn = getDynamicSettings();
+        if (dyn && dyn.gamblingPayoutMultiplier) dynMult = dyn.gamblingPayoutMultiplier;
+      } catch (e) {}
+
+      const isWin = (winner.id === chosenHorse.id);
+      const finalOdds = chosenHorse.odds * dynMult;
+      const payout = isWin ? BigInt(Math.round(Number(betAmount) * finalOdds)) : 0n;
+      const profit = payout - betAmount;
+      const balanceBefore = userCash;
+      const balanceAfter = userCash + profit;
+
+      await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [balanceAfter.toString(), session.id]);
+
+      const [insertRes] = await pool.query(`
+        INSERT INTO gambling_logs (user_id, game, bet, payout, profit, balance_before, balance_after, details)
+        VALUES (?, 'WEB_HORSE_RACE', ?, ?, ?, ?, ?, ?)
+      `, [
+        session.id, betAmount.toString(), payout.toString(), profit.toString(),
+        balanceBefore.toString(), balanceAfter.toString(),
+        JSON.stringify({ chosenHorse: chosenHorse.name, winner: winner.name, odds: finalOdds, isWin })
+      ]);
+
+      res.json({
+        success: true,
+        logId: insertRes.insertId,
+        chosenHorse,
+        winner,
+        odds: finalOdds,
+        isWin,
+        bet: betAmount.toString(),
+        payout: payout.toString(),
+        profit: profit.toString(),
+        balanceBefore: balanceBefore.toString(),
+        newCash: balanceAfter.toString(),
+        horses: HORSES_DATA
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    } finally {
+      activeGameUsers.delete(session.id);
+    }
+  });
+
   // 7. 🎁 일일 출석체크 API (경제 로그 기록)
   app.post('/api/economy/daily', async (req, res) => {
     const session = getSessionUser(req);
@@ -3112,14 +3216,15 @@ function startWebServer(client) {
           <div class="container">
             ${heroSectionHtml}
 
-            <!-- 탭 네비게이션 -->
+            <!-- 탭 네비게이션 (시작 메뉴 허브) -->
             <div class="tabs-nav">
               <button class="tab-btn active" onclick="switchTab('tab-stocks')">📈 주식 시장 & 차트</button>
+              <button class="tab-btn" style="border-color: rgba(245, 158, 11, 0.4); color: #fbbf24;" onclick="switchTab('tab-horse')">🏇 월덕 그랑프리 경마</button>
+              <button class="tab-btn" onclick="switchTab('tab-casino')">🎰 웹 카지노 & 미니게임</button>
               <button class="tab-btn" onclick="switchTab('tab-news')">📰 시장 뉴스 & 경제 공시</button>
               <button class="tab-btn" onclick="switchTab('tab-clicker')">⛏️ 골드 채굴 & 클리커</button>
-              <button class="tab-btn" onclick="switchTab('tab-casino')">🎰 웹 카지노 & 도박</button>
               <button class="tab-btn" onclick="switchTab('tab-ranking')">🏆 자산가 순위표</button>
-              ${isAdminUser ? '<button class="tab-btn" style="border-color: rgba(245, 158, 11, 0.4); color: #fbbf24;" onclick="switchTab(\'tab-feed\')">⚡ 실시간 모든 로그 (관리자)</button>' : ''}
+              ${isAdminUser ? '<button class="tab-btn" style="border-color: rgba(239, 68, 68, 0.4); color: #f87171;" onclick="switchTab(\'tab-feed\')">⚡ 실시간 모든 로그 (관리자)</button>' : ''}
             </div>
 
             <!-- 탭 1: 주식 시장 & 차트 -->
@@ -3371,6 +3476,136 @@ function startWebServer(client) {
 
                   <button class="btn-play-game" id="btn-scratch-lottery" style="background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%); box-shadow: 0 4px 16px rgba(168, 85, 247, 0.4);" onclick="playInstantLottery()">🎫 즉석 복권 긁기</button>
                   <div class="game-result-box" id="lottery-result">복권 장수를 정하고 즉석 복권을 긁어보세요!</div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- 탭: 🏇 월덕 그랑프리 실시간 경마장 -->
+            <div id="tab-horse" class="tab-pane">
+              <div style="background: rgba(17, 24, 39, 0.85); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 20px; padding: 24px; margin-bottom: 30px; backdrop-filter: blur(12px);">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; border-bottom: 1px solid var(--card-border); padding-bottom: 14px;">
+                  <div>
+                    <h2 style="font-family: 'Outfit', sans-serif; font-size: 1.6rem; color: #fbbf24; display: flex; align-items: center; gap: 8px;">
+                      🏇 월덕 그랑프리 실시간 경마장
+                    </h2>
+                    <p style="color: #9ca3af; font-size: 0.85rem; margin-top: 4px;">출전마를 선택하고 배팅하세요! 출발 총성과 함께 실시간으로 결승선을 향해 질주합니다.</p>
+                  </div>
+                  <span style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 0.8rem;">
+                    🏆 최대 배당 15.0배 잭팟
+                  </span>
+                </div>
+
+                <!-- 1. 출전마 선택 카드 그리드 -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                  <div class="horse-card selected" id="horse-card-1" onclick="selectHorse(1)" style="cursor: pointer; background: rgba(0,0,0,0.4); border: 2px solid #fbbf24; border-radius: 12px; padding: 14px; text-align: center; transition: all 0.2s;">
+                    <div style="font-size: 1.8rem;">⚡</div>
+                    <div style="font-weight: 800; color: #fff; font-size: 1rem; margin-top: 4px;">1번 황금번개</div>
+                    <div style="color: #fbbf24; font-weight: 800; font-size: 1.1rem; margin: 4px 0;">2.0배</div>
+                    <div style="font-size: 0.72rem; color: #9ca3af;">정배당 / 우승 확률 45%</div>
+                  </div>
+
+                  <div class="horse-card" id="horse-card-2" onclick="selectHorse(2)" style="cursor: pointer; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px; text-align: center; transition: all 0.2s;">
+                    <div style="font-size: 1.8rem;">🌪️</div>
+                    <div style="font-weight: 800; color: #fff; font-size: 1rem; margin-top: 4px;">2번 질풍노도</div>
+                    <div style="color: #38bdf8; font-weight: 800; font-size: 1.1rem; margin: 4px 0;">3.0배</div>
+                    <div style="font-size: 0.72rem; color: #9ca3af;">균형형 / 우승 확률 30%</div>
+                  </div>
+
+                  <div class="horse-card" id="horse-card-3" onclick="selectHorse(3)" style="cursor: pointer; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px; text-align: center; transition: all 0.2s;">
+                    <div style="font-size: 1.8rem;">🖤</div>
+                    <div style="font-weight: 800; color: #fff; font-size: 1rem; margin-top: 4px;">3번 다크호스</div>
+                    <div style="color: #a855f7; font-weight: 800; font-size: 1.1rem; margin: 4px 0;">5.0배</div>
+                    <div style="font-size: 0.72rem; color: #9ca3af;">복병마 / 우승 확률 18%</div>
+                  </div>
+
+                  <div class="horse-card" id="horse-card-4" onclick="selectHorse(4)" style="cursor: pointer; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px; text-align: center; transition: all 0.2s;">
+                    <div style="font-size: 1.8rem;">🦆</div>
+                    <div style="font-weight: 800; color: #fff; font-size: 1rem; margin-top: 4px;">4번 월덕스피릿</div>
+                    <div style="color: #f43f5e; font-weight: 800; font-size: 1.1rem; margin: 4px 0;">8.0배</div>
+                    <div style="font-size: 0.72rem; color: #9ca3af;">커뮤니티 대표마 / 10%</div>
+                  </div>
+
+                  <div class="horse-card" id="horse-card-5" onclick="selectHorse(5)" style="cursor: pointer; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px; text-align: center; transition: all 0.2s;">
+                    <div style="font-size: 1.8rem;">💎</div>
+                    <div style="font-weight: 800; color: #fff; font-size: 1rem; margin-top: 4px;">5번 로또잭팟</div>
+                    <div style="color: #ec4899; font-weight: 800; font-size: 1.1rem; margin: 4px 0;">15.0배</div>
+                    <div style="font-size: 0.72rem; color: #9ca3af;">인생역전 잭팟 / 5%</div>
+                  </div>
+                </div>
+
+                <!-- 2. 배팅 금액 입력 & 칩 버튼 -->
+                <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--card-border); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <label style="font-size: 0.85rem; color: #9ca3af; font-weight: 600;">배팅 금액 (원)</label>
+                    <span style="font-size: 0.8rem; color: #34d399;">선택한 말: <b id="selected-horse-txt" style="color: #fbbf24;">1번 황금번개 (2.0배)</b></span>
+                  </div>
+                  <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                    <input type="number" id="horse-bet-input" value="5000" min="1000" step="1000" style="flex: 1; background: #111827; border: 1px solid var(--card-border); color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 1rem; font-family: inherit;">
+                    <button id="btn-start-race" onclick="startWebHorseRace()" style="background: linear-gradient(135deg, #f59e0b, #d97706); border: none; color: #000; font-weight: 800; font-size: 1rem; padding: 10px 24px; border-radius: 8px; cursor: pointer; white-space: nowrap; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);">
+                      🏇 경주 시작하기!
+                    </button>
+                  </div>
+                  <div class="btn-chip-grid">
+                    <button class="btn-chip" onclick="setHorseBet(1000)">1천원</button>
+                    <button class="btn-chip" onclick="setHorseBet(5000)">5천원</button>
+                    <button class="btn-chip" onclick="setHorseBet(10000)">1만원</button>
+                    <button class="btn-chip" onclick="setHorseBet(50000)">5만원</button>
+                    <button class="btn-chip" onclick="setHorseBet(100000)">10만원</button>
+                    <button class="btn-chip" style="background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #fca5a5;" onclick="setHorseBet('all')">🔥 올인 (ALL-IN)</button>
+                  </div>
+                </div>
+
+                <!-- 3. 실시간 그래픽 경주장 트랙 (5개 레인) -->
+                <div style="background: #090d16; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 18px; position: relative; overflow: hidden;">
+                  <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #64748b; margin-bottom: 12px; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 6px;">
+                    <span>🚩 출발선 (START)</span>
+                    <span id="race-status-banner" style="font-weight: 700; color: #fbbf24;">🏇 레이스 대기 중</span>
+                    <span>🏁 결승선 (FINISH)</span>
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 12px;" id="race-lanes-box">
+                    <!-- 레인 1 -->
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <span style="font-size: 0.8rem; font-weight: 700; color: #fbbf24; width: 85px;">1. 황금번개</span>
+                      <div style="flex: 1; background: rgba(255,255,255,0.05); height: 26px; border-radius: 6px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
+                        <div id="horse-runner-1" style="position: absolute; left: 0%; top: 2px; font-size: 1.1rem; transition: left 0.3s ease-out;">⚡🏇</div>
+                      </div>
+                    </div>
+                    <!-- 레인 2 -->
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <span style="font-size: 0.8rem; font-weight: 700; color: #38bdf8; width: 85px;">2. 질풍노도</span>
+                      <div style="flex: 1; background: rgba(255,255,255,0.05); height: 26px; border-radius: 6px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
+                        <div id="horse-runner-2" style="position: absolute; left: 0%; top: 2px; font-size: 1.1rem; transition: left 0.3s ease-out;">🌪️🏇</div>
+                      </div>
+                    </div>
+                    <!-- 레인 3 -->
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <span style="font-size: 0.8rem; font-weight: 700; color: #a855f7; width: 85px;">3. 다크호스</span>
+                      <div style="flex: 1; background: rgba(255,255,255,0.05); height: 26px; border-radius: 6px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
+                        <div id="horse-runner-3" style="position: absolute; left: 0%; top: 2px; font-size: 1.1rem; transition: left 0.3s ease-out;">🖤🏇</div>
+                      </div>
+                    </div>
+                    <!-- 레인 4 -->
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <span style="font-size: 0.8rem; font-weight: 700; color: #f43f5e; width: 85px;">4. 월덕스피릿</span>
+                      <div style="flex: 1; background: rgba(255,255,255,0.05); height: 26px; border-radius: 6px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
+                        <div id="horse-runner-4" style="position: absolute; left: 0%; top: 2px; font-size: 1.1rem; transition: left 0.3s ease-out;">🦆🏇</div>
+                      </div>
+                    </div>
+                    <!-- 레인 5 -->
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <span style="font-size: 0.8rem; font-weight: 700; color: #ec4899; width: 85px;">5. 로또잭팟</span>
+                      <div style="flex: 1; background: rgba(255,255,255,0.05); height: 26px; border-radius: 6px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
+                        <div id="horse-runner-5" style="position: absolute; left: 0%; top: 2px; font-size: 1.1rem; transition: left 0.3s ease-out;">💎🏇</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 결과 박스 -->
+                  <div id="horse-race-result-box" style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.5); border-radius: 8px; text-align: center; font-size: 0.95rem; font-weight: 700; color: #9ca3af;">
+                    말을 선택하고 배팅 후 [경주 시작하기] 버튼을 누르세요!
+                  </div>
                 </div>
 
               </div>
@@ -4278,6 +4513,143 @@ function startWebServer(client) {
                 r1.classList.remove('spinning');
                 r2.classList.remove('spinning');
                 r3.classList.remove('spinning');
+                resultBox.innerText = '서버 통신 실패';
+                showToast('error', '통신 오류', '서버와 연결할 수 없습니다.');
+              }
+            }
+
+            // 5.6 🏇 월덕 그랑프리 실시간 경마 스크립트
+            let selectedHorseId = 1;
+            const HORSES_INFO = {
+              1: { name: '1번 황금번개', odds: '2.0배', color: '#fbbf24' },
+              2: { name: '2번 질풍노도', odds: '3.0배', color: '#38bdf8' },
+              3: { name: '3번 다크호스', odds: '5.0배', color: '#a855f7' },
+              4: { name: '4번 월덕스피릿', odds: '8.0배', color: '#f43f5e' },
+              5: { name: '5번 로또잭팟', odds: '15.0배', color: '#ec4899' }
+            };
+
+            function selectHorse(id) {
+              selectedHorseId = id;
+              document.querySelectorAll('.horse-card').forEach((el, idx) => {
+                if (idx + 1 === id) {
+                  el.style.border = '2px solid #fbbf24';
+                  el.style.transform = 'scale(1.03)';
+                } else {
+                  el.style.border = '1px solid var(--card-border)';
+                  el.style.transform = 'scale(1)';
+                }
+              });
+              const info = HORSES_INFO[id];
+              const txt = document.getElementById('selected-horse-txt');
+              if (txt && info) {
+                txt.innerText = info.name + ' (' + info.odds + ')';
+                txt.style.color = info.color;
+              }
+            }
+
+            function setHorseBet(amount) {
+              const input = document.getElementById('horse-bet-input');
+              if (amount === 'all') {
+                input.value = getCurrentUserCashNum();
+              } else {
+                input.value = amount;
+              }
+            }
+
+            async function startWebHorseRace() {
+              if (isGameInProgress) return;
+              setGameLock(true);
+
+              const betInput = document.getElementById('horse-bet-input');
+              const bet = betInput.value;
+              const btn = document.getElementById('btn-start-race');
+              const banner = document.getElementById('race-status-banner');
+              const resultBox = document.getElementById('horse-race-result-box');
+
+              // 러너 초기화
+              for (let i = 1; i <= 5; i++) {
+                const el = document.getElementById('horse-runner-' + i);
+                if (el) el.style.left = '0%';
+              }
+
+              btn.innerText = '🏇 경주 진행 중...';
+              banner.innerText = '🏃💨 탕! 경주가 시작되었습니다!';
+              banner.style.color = '#fbbf24';
+              resultBox.innerText = '🏁 말들이 결승선을 향해 치열하게 질주하고 있습니다!';
+              resultBox.style.color = '#fbbf24';
+
+              try {
+                const res = await fetch('/api/game/horse-race', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ horseId: selectedHorseId, amount: bet })
+                });
+                const data = await res.json();
+
+                if (!data.success) {
+                  setGameLock(false);
+                  btn.innerText = '🏇 경주 시작하기!';
+                  banner.innerText = '⚠️ 오류 발생';
+                  resultBox.innerText = '❌ ' + (data.error || '오류 발생');
+                  resultBox.style.color = '#ef4444';
+                  showToast('error', '경마 오류', data.error);
+                  return;
+                }
+
+                // 1단계: 스타트 질주 애니메이션 (1.0초)
+                setTimeout(() => {
+                  banner.innerText = '🔥 200m 통과! 선두권 쟁탈전 치열!';
+                  for (let i = 1; i <= 5; i++) {
+                    const el = document.getElementById('horse-runner-' + i);
+                    if (el) el.style.left = (Math.random() * 25 + 15) + '%';
+                  }
+                }, 800);
+
+                // 2단계: 코너 라스트 스퍼트 (2.0초)
+                setTimeout(() => {
+                  banner.innerText = '⚡ 마지막 직선 주로 진입! 라스트 스퍼트!';
+                  for (let i = 1; i <= 5; i++) {
+                    const el = document.getElementById('horse-runner-' + i);
+                    const isWinner = (i === data.winner.id);
+                    if (el) el.style.left = isWinner ? (Math.random() * 15 + 65) + '%' : (Math.random() * 20 + 45) + '%';
+                  }
+                }, 1800);
+
+                // 3단계: 결승선 골인 및 결과 발표 (3.0초)
+                setTimeout(() => {
+                  setGameLock(false);
+                  btn.innerText = '🏇 경주 시작하기!';
+                  banner.innerText = '🏁 결승선 통과 완료!';
+
+                  for (let i = 1; i <= 5; i++) {
+                    const el = document.getElementById('horse-runner-' + i);
+                    if (el) {
+                      if (i === data.winner.id) {
+                        el.style.left = '88%';
+                        el.innerText = '🏆🏇';
+                      } else {
+                        el.style.left = (Math.random() * 15 + 60) + '%';
+                        el.innerText = (HORSES_INFO[i]?.name.slice(2, 3) || '') + '🏇';
+                      }
+                    }
+                  }
+
+                  if (data.isWin) {
+                    resultBox.innerHTML = '🎉 <b style="color:#10b981;">우승 적중!</b> 1위 우승마: <b>' + data.winner.name + '</b> (' + data.odds.toFixed(1) + '배) | 상금: <b>+' + Number(data.payout).toLocaleString() + '원</b>';
+                    resultBox.style.color = '#10b981';
+                    showToast('success', '🏇 경마 대박!', '1위 [' + data.winner.name + '] 적중! +' + Number(data.payout).toLocaleString() + '원 획득!');
+                  } else {
+                    resultBox.innerHTML = '💀 <b style="color:#f87171;">탈락!</b> 1위 우승마: <b>' + data.winner.name + '</b> (내 선택: ' + data.chosenHorse.name + ') | 손실: -' + Number(data.bet).toLocaleString() + '원';
+                    resultBox.style.color = '#f87171';
+                    showToast('info', '🏇 경마 결과', '1위는 [' + data.winner.name + '] 입니다. 다음 레이스에 도전하세요!');
+                  }
+
+                  updateUserCashDisplay(data.newCash);
+                }, 3000);
+
+              } catch (e) {
+                setGameLock(false);
+                btn.innerText = '🏇 경주 시작하기!';
                 resultBox.innerText = '서버 통신 실패';
                 showToast('error', '통신 오류', '서버와 연결할 수 없습니다.');
               }
