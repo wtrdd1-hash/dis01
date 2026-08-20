@@ -5,6 +5,7 @@ node_modules/
 .env
 .env*
 *.env
+!.env.example
 
 # Logs
 *.log
@@ -18,6 +19,23 @@ id_*
 logs/
 *.tar.gz
 *.zip
+
+# Database backups (contain sensitive user data) — ABSOLUTELY NEVER COMMIT
+backups/
+*.sql
+*.sql.gz
+*.dump
+*.sqlite
+*.sqlite3
+*.bak/*.sql
+*.pg_dump
+
+# Git internal backups (created by filter-repo or cleanup)
+.git.backup*/
+*.backup/
+
+# Local backups folder
+.bak/
 
 # Scratch & temporary files
 scratch/

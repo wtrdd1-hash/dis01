@@ -1,0 +1,206 @@
+<%- include('header', { activeMenu: 'tax', pageTitle: '세금 및 국고 관제 - 관리자', pageHeader: '세금-국고' }) %>
+
+<style>
+  .tax-stat-card {
+    background: #0f172a;
+    border-radius: 12px;
+    padding: 16px 20px;
+    border: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+  .tax-stat-label { font-size: 0.8rem; color: #94a3b8; font-weight: 600; }
+  .tax-stat-val { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; }
+
+  .rate-badge-card {
+    background: #030712;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+</style>
+
+<!-- 🌟 세금 및 국고 관제 메인 카드 -->
+<div class="card" style="border: 1px solid rgba(245, 158, 11, 0.35); background: #0b1120;">
+  
+  <!-- 상단 헤더 -->
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:16px;">
+    <div>
+      <h2 style="color:#fbbf24; margin:0; font-size:1.35rem; display:flex; align-items:center; gap:8px;">
+        <span>🏛️ 세금·국고 관제 & 세율(%) 누적 현황</span>
+      </h2>
+      <p style="font-size:0.83rem; color:#94a3b8; margin-top:4px;">
+        서버 국고 잔고, 적용 중인 세목별 세율(%), 누적 세금 징수액 및 성실 납세자 랭킹을 실시간으로 관리합니다.
+      </p>
+    </div>
+
+    <button type="button" onclick="refreshTaxOverview()" style="background:#d97706; border:none; color:#fff; padding:8px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer; display:flex; align-items:center; gap:6px;">
+      <span>↻ 국고 갱신</span>
+    </button>
+  </div>
+
+  <!-- 📊 5대 핵심 국고 및 징수 지표 타일 -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap:12px; margin-bottom:20px;">
+    <div class="tax-stat-card" style="border-left: 4px solid #f59e0b;">
+      <div class="tax-stat-label">🏛️ 현재 국고 잔고</div>
+      <div class="tax-stat-val" style="color:#fbbf24;"><%= formatMoney(treasuryBalance) %></div>
+    </div>
+    <div class="tax-stat-card" style="border-left: 4px solid #10b981;">
+      <div class="tax-stat-label">💰 총 누적 징수 세금</div>
+      <div class="tax-stat-val" style="color:#34d399;"><%= formatMoney(totalTaxAll) %></div>
+    </div>
+    <div class="tax-stat-card" style="border-left: 4px solid #c084fc;">
+      <div class="tax-stat-label">💎 누적 재산세/부유세</div>
+      <div class="tax-stat-val" style="color:#c084fc;">
+        <%= formatMoney(totalWealthTax) %>
+        <span style="font-size:0.75rem; color:#94a3b8; font-weight:500;">(<%= wealthPct %>)</span>
+      </div>
+    </div>
+    <div class="tax-stat-card" style="border-left: 4px solid #38bdf8;">
+      <div class="tax-stat-label">📈 누적 주식 거래세</div>
+      <div class="tax-stat-val" style="color:#38bdf8;">
+        <%= formatMoney(totalTradeTax) %>
+        <span style="font-size:0.75rem; color:#94a3b8; font-weight:500;">(<%= tradePct %>)</span>
+      </div>
+    </div>
+    <div class="tax-stat-card" style="border-left: 4px solid #60a5fa;">
+      <div class="tax-stat-label">💸 누적 송금/기타세</div>
+      <div class="tax-stat-val" style="color:#60a5fa;">
+        <%= formatMoney(totalTransferTax) %>
+        <span style="font-size:0.75rem; color:#94a3b8; font-weight:500;">(<%= transferPct %>)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🏛️ [신규] 관리자 국고 자금 긴급 충전 / 입금 컨트롤 카드 -->
+  <div style="background: linear-gradient(135deg, rgba(217,119,6,0.15), rgba(15,23,42,0.8)); border:1px solid rgba(245,158,11,0.4); border-radius:12px; padding:18px 22px; margin-bottom:24px; box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+      <h3 style="color:#fbbf24; margin:0; font-size:1.05rem; display:flex; align-items:center; gap:8px;">
+        <span>💰 국고 자금 긴급 입금 / 충전 (Treasury Deposit)</span>
+      </h3>
+      <span style="font-size:0.78rem; color:#fde68a; background:rgba(217,119,6,0.25); border:1px solid rgba(245,158,11,0.4); padding:3px 8px; border-radius:6px; font-weight:700;">
+        👑 최고 관리자 전용
+      </span>
+    </div>
+    <p style="font-size:0.82rem; color:#cbd5e1; margin-bottom:14px; line-height:1.5;">
+      서버 국고에 자금을 즉시 입금 충전합니다. <code>5만</code>, <code>1000만</code>, <code>10억</code>, <code>5조</code>, <code>1000경</code>, <code>5000양</code> 등의 한국어 금액 표기를 완벽 지원합니다.
+    </p>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+      <div style="flex:1; min-width:220px;">
+        <input type="text" id="treasury-deposit-amt" placeholder="입금 금액 (예: 50000, 100만, 10억, 5조)" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.2); color:#fff; font-weight:700; padding:10px 14px; border-radius:8px; font-size:0.9rem;">
+      </div>
+      <div style="flex:1.5; min-width:260px;">
+        <input type="text" id="treasury-deposit-reason" placeholder="입금/충전 사유 (예: 국가 기본소득 지원 펀드 출연)" style="width:100%; background:#0f172a; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:10px 14px; border-radius:8px; font-size:0.88rem;">
+      </div>
+      <button type="button" onclick="submitTreasuryDeposit()" style="background:linear-gradient(135deg, #d97706, #f59e0b); border:none; color:#1e1b4b; padding:10px 20px; border-radius:8px; font-weight:900; font-size:0.92rem; cursor:pointer; box-shadow:0 4px 12px rgba(245,158,11,0.35); transition:all 0.15s ease; white-space:nowrap;">
+        <span>+ 국고 즉시 입금</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 📑 실시간 적용 세율(Tax Rates) & 누진 과세 구간 안내 -->
+  <div style="background:#0f172a; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:18px; margin-bottom:24px;">
+    <h3 style="color:#a5b4fc; margin-bottom:14px; font-size:1.05rem; display:flex; align-items:center; gap:6px;">
+      <span>⚙️ 현재 적용 중인 세목별 세율(%) 규정</span>
+    </h3>
+    
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap:10px; margin-bottom:16px;">
+      <div class="rate-badge-card">
+        <span style="font-size:0.82rem; color:#94a3b8;">📈 주식 거래세율</span>
+        <span style="font-weight:800; color:#38bdf8; font-size:0.95rem;"><%= taxRates.trade %></span>
+      </div>
+      <div class="rate-badge-card">
+        <span style="font-size:0.82rem; color:#94a3b8;">💸 개인간 송금세율</span>
+        <span style="font-weight:800; color:#60a5fa; font-size:0.95rem;"><%= taxRates.transfer %></span>
+      </div>
+      <div class="rate-badge-card">
+        <span style="font-size:0.82rem; color:#94a3b8;">🎰 도박/카지노 국고세</span>
+        <span style="font-weight:800; color:#f472b6; font-size:0.95rem;"><%= taxRates.gamble %></span>
+      </div>
+      <div class="rate-badge-card">
+        <span style="font-size:0.82rem; color:#94a3b8;">💎 누진 재산세율 범위</span>
+        <span style="font-weight:800; color:#c084fc; font-size:0.95rem;"><%= taxRates.wealthMin %> ~ <%= taxRates.wealthMax %></span>
+      </div>
+    </div>
+
+    <div style="background:#030712; padding:12px 16px; border-radius:8px; font-size:0.82rem; color:#94a3b8; line-height:1.6; border:1px solid rgba(255,255,255,0.05);">
+      <b style="color:#fbbf24;">🏛️ 초과 누진 재산세 과세 구간 (10분 주기 분할 징수):</b><br>
+      • 500만 미만: <b>면제 (0%)</b> | • 500만~1,000만: <b>3.0%</b> | • 1,000만~5,000만: <b>6.0%</b> | • 5,000만~2억: <b>9.0%</b> | • 2억~10억: <b>12.0%</b> | • 10억 이상 초고액: <b>15.0%</b>
+    </div>
+  </div>
+
+  <!-- 납세자 랭킹 테이블 -->
+  <div>
+    <h3 style="color:#fbbf24; margin-bottom:12px; font-size:1.1rem; display:flex; align-items:center; gap:6px;">
+      <span>🏆 유저별 누적 세금 납부 랭킹 (성실 납세자 명예의 전당)</span>
+    </h3>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:70px;">순위</th>
+            <th style="width:200px;">납세자 계정</th>
+            <th style="text-align:right; width:180px;">총 누적 납부 세금</th>
+            <th style="text-align:right; width:160px;">누진 재산세</th>
+            <th style="text-align:right; width:160px;">거래세 / 기타</th>
+            <th style="text-align:center; width:100px;">납세 횟수</th>
+            <th style="width:160px;">최근 납부일 (KST)</th>
+          </tr>
+        </thead>
+        <tbody id="admin-tax-payers-tbody">
+          <%- taxPayersRowsHtml %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  async function refreshTaxOverview() {
+    location.reload();
+  }
+
+  // 🏛️ 국고 자금 긴급 입금 / 충전 실행
+  async function submitTreasuryDeposit() {
+    const amtInput = document.getElementById('treasury-deposit-amt');
+    const reasonInput = document.getElementById('treasury-deposit-reason');
+    const amount = String((amtInput || {}).value || '').trim();
+    const reason = String((reasonInput || {}).value || '').trim();
+
+    if (!amount) {
+      alert('입금할 금액을 입력하세요. (예: 50000, 100만, 10억, 5조)');
+      if (amtInput) amtInput.focus();
+      return;
+    }
+
+    if (!confirm(`🏛️ 정말로 [${amount}]을(를) 서버 국고에 입금 충전하시겠습니까?`)) {
+      return;
+    }
+
+    try {
+      const res = await adminFetch('/api/admin/action/treasury-deposit', {
+        method: 'POST',
+        body: { amount, reason }
+      });
+
+      if (!res.success) {
+        adminNotice(false, res.error || '국고 입금 실패');
+        return;
+      }
+
+      adminNotice(true, res.message || '국고 입금이 완료되었습니다.');
+      if (amtInput) amtInput.value = '';
+      if (reasonInput) reasonInput.value = '';
+      setTimeout(function() { location.reload(); }, 1200);
+    } catch (e) {
+      adminNotice(false, '국고 입금 처리 중 통신 오류가 발생했습니다.');
+    }
+  }
+</script>
+
+<%- include('footer') %>

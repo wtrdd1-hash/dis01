@@ -1,0 +1,552 @@
+<%- include('header', { activeMenu: 'economy', pageTitle: '실시간 자금 흐름 관제 - 관리자', pageHeader: '자금-흐름' }) %>
+
+<style>
+  .eco-chip {
+    background: #1e293b;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #94a3b8;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .eco-chip:hover { color: #fff; background: #334155; border-color: rgba(255,255,255,0.25); }
+  .eco-chip.is-active { background: #059669; color: #fff; border-color: #10b981; }
+  
+  .eco-stat-card {
+    background: #0f172a;
+    border-radius: 12px;
+    padding: 16px 20px;
+    border: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+  .eco-stat-label { font-size: 0.8rem; color: #94a3b8; font-weight: 600; }
+  .eco-stat-val { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; }
+  
+  /* 유형별 뱃지 */
+  .eco-badge { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; }
+  .eco-badge-admin { background: rgba(147, 51, 234, 0.15); color: #c084fc; border: 1px solid rgba(147, 51, 234, 0.3); }
+  .eco-badge-biz { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+  .eco-badge-in { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+  .eco-badge-out { background: rgba(248, 113, 113, 0.15); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); }
+  .eco-badge-gamble { background: rgba(236, 72, 153, 0.15); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.3); }
+  .eco-badge-stock { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+  .eco-badge-tax { background: rgba(45, 212, 191, 0.15); color: #2dd4bf; border: 1px solid rgba(45, 212, 191, 0.3); }
+  .eco-badge-loan { background: rgba(129, 140, 248, 0.15); color: #818cf8; border: 1px solid rgba(129, 140, 248, 0.3); }
+  .eco-badge-transfer { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+  .eco-badge-daily { background: rgba(168, 85, 247, 0.15); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3); }
+  .eco-badge-default { background: #374151; color: #cbd5e1; }
+
+  .eco-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 0.88rem;
+  }
+  .eco-table th {
+    background: #0f172a;
+    color: #94a3b8;
+    font-weight: 700;
+    font-size: 0.78rem;
+    padding: 12px 14px;
+    border-bottom: 2px solid rgba(255,255,255,0.08);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .eco-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    vertical-align: middle;
+  }
+  .eco-table tbody tr {
+    transition: background 0.12s ease;
+  }
+  .eco-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .pagination-btn {
+    background: #1e293b;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #cbd5e1;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .pagination-btn:hover:not(.disabled) { background: #334155; color: #fff; border-color: rgba(255,255,255,0.25); }
+  .pagination-btn.active { background: #059669; color: #fff; border-color: #10b981; }
+  .pagination-btn.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+</style>
+
+<!-- 🌟 자금 흐름 관제 메인 카드 -->
+<div class="card" style="border: 1px solid rgba(52, 211, 153, 0.35); background: #0b1120;">
+  
+  <!-- 상단 헤더 & 컨트롤 -->
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:16px;">
+    <div>
+      <h2 style="color:#6ee7b7; margin:0; font-size:1.35rem; display:flex; align-items:center; gap:8px;">
+        <span>💰 실시간 서버 자금 흐름 관제 (Economy Flow)</span>
+      </h2>
+      <p style="font-size:0.83rem; color:#94a3b8; margin-top:4px;">
+        서버 내 발생하는 모든 자금 이동(총 <b><%= totalLogCount %>건</b>)을 전수 추적하며 페이지별로 열람할 수 있습니다.
+      </p>
+    </div>
+
+    <!-- 우측 상단 옵션 컨트롤 -->
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <select id="eco-lines-select" onchange="changePageLimit(this.value)" style="background:#1e293b; border:1px solid var(--border); color:#cbd5e1; padding:7px 12px; border-radius:6px; font-size:0.85rem; font-weight:600;">
+        <option value="50" <%= currentLimit == 50 ? 'selected' : '' %>>페이지당 50건</option>
+        <option value="100" <%= currentLimit == 100 ? 'selected' : '' %>>페이지당 100건</option>
+        <option value="200" <%= currentLimit == 200 ? 'selected' : '' %>>페이지당 200건</option>
+      </select>
+
+      <button type="button" onclick="refreshEconomyPage()" style="background:#059669; border:none; color:#fff; padding:7px 14px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer; display:flex; align-items:center; gap:6px;">
+        <span>↻ 새로고침</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 📊 3대 핵심 지표 요약 타일 -->
+  <div class="admin-stat-grid">
+    <div class="admin-stat-card stock">
+      <div class="stat-label">📊 전체 자금 트랜잭션 기록</div>
+      <div class="stat-value" style="color:#fbbf24;"><%= totalLogCount %>건</div>
+      <div class="stat-sub">필터: <%= totalFiltered.toLocaleString() %>건 표시 중</div>
+    </div>
+
+    <div class="admin-stat-card">
+      <div class="stat-label" style="color:#38bdf8;">📥 최근 24h 유저 자금 유입 (+)</div>
+      <div class="stat-value" style="color:#38bdf8;">+<%= formatMoney(safeBigInt(flowStats.inflow24h || 0)) %></div>
+      <div class="stat-sub">관리자 지급 제외</div>
+    </div>
+
+    <div class="admin-stat-card warn">
+      <div class="stat-label">📤 최근 24h 유저 자금 유출 (-)</div>
+      <div class="stat-value" style="color:#f87171;">-<%= formatMoney(safeBigInt(flowStats.outflow24h || 0)) %></div>
+      <div class="stat-sub">관리자 회수 제외</div>
+    </div>
+  </div>
+
+  <!-- 🎛️ 관리자 수동 컨트롤 패널 — 자동모드 ON/OFF + 세율·금리·국면 직접 조정 -->
+  <div class="admin-stat-card" style="margin:0 16px 16px; padding:18px 22px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+      <div>
+        <div class="stat-label" style="font-size:12px;">🎛️ 경제 자동조절 모드</div>
+        <div id="auto-mode-status" style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+          <span id="auto-mode-badge" class="status-pill" style="font-weight:800; padding:4px 12px;">⏳ 로딩…</span>
+          <span id="auto-mode-info" style="font-size:11px; color:#9ca3af;">—</span>
+        </div>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <button type="button" id="btn-auto-mode-auto" onclick="setAutoMode('auto')" class="control-btn control-btn--on">🟢 자동 ON</button>
+        <button type="button" id="btn-auto-mode-manual" onclick="setAutoMode('manual')" class="control-btn control-btn--off">🟡 수동 (잠금)</button>
+        <button type="button" id="btn-auto-mode-paused" onclick="setAutoMode('paused')" class="control-btn control-btn--pause">⚪ 일시중지</button>
+        <button type="button" onclick="reloadEconomyControls()" style="background:#475569; border:1px solid rgba(255,255,255,0.18); color:#fff; padding:6px 14px; border-radius:6px; font-weight:700; font-size:12px; cursor:pointer;">🔄 새로고침</button>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px;">
+      <div class="control-tile" data-control="taxRate">
+        <div class="control-tile-label">💸 거래·송금 세율</div>
+        <div class="control-tile-value" id="ctrl-taxRate">— %</div>
+        <input type="range" id="range-taxRate" min="0" max="15" step="0.1" value="0" oninput="onRangeInput('taxRate')" onchange="commitRange('taxRate', '/admin/api/economy-controls/bulk-update', 'taxRate', this.value/100)">
+        <div class="control-tile-hint">거래 1건마다 자동 징수 (0~15%)</div>
+      </div>
+
+      <div class="control-tile" data-control="wealthTaxMultiplier">
+        <div class="control-tile-label">🏛️ 누진 부유세 배율</div>
+        <div class="control-tile-value" id="ctrl-wealthTaxMultiplier">— ×</div>
+        <input type="range" id="range-wealthTaxMultiplier" min="0.1" max="5" step="0.05" value="1" oninput="onRangeInput('wealthTaxMultiplier')" onchange="commitRange('wealthTaxMultiplier', '/admin/api/economy-controls/bulk-update', 'wealthTaxMultiplier', this.value)">
+        <div class="control-tile-hint">0.1x(감면) ~ 5x(강화)</div>
+      </div>
+
+      <div class="control-tile" data-control="bankInterestRate">
+        <div class="control-tile-label">🏦 예금 1분 금리</div>
+        <div class="control-tile-value" id="ctrl-bankInterestRate">— %/년</div>
+        <input type="range" id="range-bankInterestRate" min="0" max="100" step="1" value="5" oninput="onRangeInput('bankInterestRate')" onchange="commitRange('bankInterestRate', '/admin/api/economy-controls/bulk-update', 'bankInterestRate', (this.value/100/60/24/365).toString())">
+        <div class="control-tile-hint">연 0~100% → 분당 환산</div>
+      </div>
+
+      <div class="control-tile" data-control="subsidyMultiplier">
+        <div class="control-tile-label">🎁 지원금 배율</div>
+        <div class="control-tile-value" id="ctrl-subsidyMultiplier">— ×</div>
+        <input type="range" id="range-subsidyMultiplier" min="0.1" max="5" step="0.05" value="1" oninput="onRangeInput('subsidyMultiplier')" onchange="commitRange('subsidyMultiplier', '/admin/api/economy-controls/bulk-update', 'subsidyMultiplier', this.value)">
+        <div class="control-tile-hint">저소득층 지원금 자동 배율</div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; align-items:center; padding-top:14px; border-top:1px solid rgba(255,255,255,0.06);">
+      <div>
+        <div class="control-tile-label">🛒 자산세 기준 (현금+예금)</div>
+        <div style="display:flex; gap:6px; align-items:center; margin-top:4px;">
+          <input type="number" id="input-wealthThresholdForTax" min="100000" max="10000000000" step="100000" style="width:160px; background:#030712; border:1px solid rgba(255,255,255,0.18); color:#fff; padding:6px 10px; border-radius:6px; font-weight:700;">
+          <button type="button" onclick="commitInput('wealthThresholdForTax', '/admin/api/economy-controls/bulk-update', 'wealthThresholdForTax', document.getElementById('input-wealthThresholdForTax').value)" style="background:#2563eb; border:none; color:#fff; padding:6px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer;">설정</button>
+        </div>
+        <div class="control-tile-hint">이 금액 초과 시 자산세 발동</div>
+      </div>
+
+      <div>
+        <div class="control-tile-label">📈 주식 시장 강제 국면</div>
+        <div style="display:flex; gap:6px; align-items:center; margin-top:4px;">
+          <select id="select-forcedRegimeIndex" style="background:#030712; border:1px solid rgba(255,255,255,0.18); color:#fff; padding:6px 10px; border-radius:6px; font-weight:700;">
+            <option value="">🤖 자동 (인덱스 없음)</option>
+            <option value="0">🦆 0 - 번영기 BOOM</option>
+            <option value="1">📉 1 - 조정기 COOLDOWN</option>
+            <option value="2">⚖️ 2 - 박스권 STABLE</option>
+            <option value="3">🔥 3 - 단기 랠리 RALLY</option>
+            <option value="4">❄️ 4 - 긴축 TIGHTENING</option>
+            <option value="5">📉 5 - 불황 SLUMP</option>
+            <option value="6">⚠️ 6 - 패닉 PANIC</option>
+            <option value="7">🏦 7 - 유동성 완화 LIQUIDITY</option>
+            <option value="8">⚖️ 8 - 저변동 LOW_VOL</option>
+          </select>
+          <button type="button" onclick="commitRegime()" style="background:#2563eb; border:none; color:#fff; padding:6px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer;">설정</button>
+        </div>
+        <div class="control-tile-hint">다음 틱부터 즉시 적용 (stockEngine 반영)</div>
+      </div>
+    </div>
+
+    <div id="admin-eco-toast" style="margin-top:10px; min-height:20px;"></div>
+    <div id="admin-eco-history" style="margin-top:6px; max-height:140px; overflow-y:auto; font-size:11px; color:#9ca3af; padding:6px 10px; background:rgba(0,0,0,0.2); border-radius:6px;"></div>
+  </div>
+
+  <!-- ⚡ 빠른 카테고리 필터 칩스 -->
+  <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:14px; padding:10px 14px; background:#030712; border-radius:8px; border:1px solid rgba(255,255,255,0.06);">
+    <span style="font-size:0.75rem; color:#9ca3af; font-weight:700; margin-right:4px;">⚡ 유형 필터:</span>
+    <button type="button" class="eco-chip <%= !currentType ? 'is-active' : '' %>" onclick="submitEcoFilter('')">전체</button>
+    <button type="button" class="eco-chip <%= currentType === 'BUSINESS' ? 'is-active' : '' %>" onclick="submitEcoFilter('BUSINESS')">🏢 사업 수익/업글</button>
+    <button type="button" class="eco-chip <%= currentType === 'ADMIN' ? 'is-active' : '' %>" onclick="submitEcoFilter('ADMIN')">👑 관리자 지급/회수</button>
+    <button type="button" class="eco-chip <%= currentType === 'GAMBLE' ? 'is-active' : '' %>" onclick="submitEcoFilter('GAMBLE')">🎰 도박/카지노</button>
+    <button type="button" class="eco-chip <%= currentType === 'STOCK' ? 'is-active' : '' %>" onclick="submitEcoFilter('STOCK')">📈 주식 매매</button>
+    <button type="button" class="eco-chip <%= currentType === 'INFLOW' ? 'is-active' : '' %>" onclick="submitEcoFilter('INFLOW')">📥 현금 입금</button>
+    <button type="button" class="eco-chip <%= currentType === 'OUTFLOW' ? 'is-active' : '' %>" onclick="submitEcoFilter('OUTFLOW')">📤 현금 출금</button>
+    <button type="button" class="eco-chip <%= currentType === 'TAX' ? 'is-active' : '' %>" onclick="submitEcoFilter('TAX')">🏛️ 세금</button>
+    <button type="button" class="eco-chip <%= currentType === 'LOAN' ? 'is-active' : '' %>" onclick="submitEcoFilter('LOAN')">💳 대출</button>
+    <button type="button" class="eco-chip <%= currentType === 'TRANSFER' ? 'is-active' : '' %>" onclick="submitEcoFilter('TRANSFER')">💸 송금</button>
+  </div>
+
+  <!-- 🔍 검색 및 상단 페이지네이션 폼 -->
+  <form id="eco-search-form" onsubmit="handleSearchSubmit(event)" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:12px; background:rgba(255,255,255,0.02); padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.06);">
+    <div style="display:flex; gap:8px; align-items:center; flex:1; min-width:280px;">
+      <input type="text" id="eco-search-input" value="<%= currentSearch %>" placeholder="유저 닉네임, Discord ID, 거래 사유 검색 (Enter로 검색)..." style="width:100%; max-width:380px; background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:8px 14px; border-radius:6px; font-size:0.85rem;">
+      <button type="submit" style="background:#2563eb; border:none; color:#fff; padding:8px 14px; border-radius:6px; font-size:0.85rem; font-weight:700; cursor:pointer;">검색</button>
+      <% if (currentSearch || currentType) { %>
+      <button type="button" onclick="clearAllFilters()" style="background:#374151; border:1px solid var(--border); color:#cbd5e1; padding:8px 12px; border-radius:6px; font-size:0.8rem; cursor:pointer;">초기화</button>
+      <% } %>
+    </div>
+
+    <!-- 🌟 상단 퀵 페이지 넘김 바 -->
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <span style="font-size:0.85rem; color:#38bdf8; font-weight:700; margin-right:4px;">
+        <%= currentPage %> / <%= totalPages %> 페이지 (<%= totalFiltered.toLocaleString() %>건)
+      </span>
+      <div style="display:flex; gap:4px; align-items:center;">
+        <a href="javascript:goToPage(1)" class="pagination-btn <%= currentPage <= 1 ? 'disabled' : '' %>" style="padding:4px 8px; font-size:0.78rem;">« 처음</a>
+        <a href="javascript:goToPage(<%= currentPage - 1 %>)" class="pagination-btn <%= currentPage <= 1 ? 'disabled' : '' %>" style="padding:4px 10px; font-size:0.8rem; background:#374151; color:#fff;">‹ 이전</a>
+        
+        <!-- 현재 페이지 주변 빠른 번호 -->
+        <% 
+          const topStart = Math.max(1, currentPage - 2);
+          const topEnd = Math.min(totalPages, currentPage + 2);
+          for (let p = topStart; p <= topEnd; p++) { 
+        %>
+          <a href="javascript:goToPage(<%= p %>)" class="pagination-btn <%= p === currentPage ? 'active' : '' %>" style="padding:4px 9px; font-size:0.8rem;"><%= p %></a>
+        <% } %>
+
+        <a href="javascript:goToPage(<%= currentPage + 1 %>)" class="pagination-btn <%= currentPage >= totalPages ? 'disabled' : '' %>" style="padding:4px 10px; font-size:0.8rem; background:#374151; color:#fff;">다음 ›</a>
+        <a href="javascript:goToPage(<%= totalPages %>)" class="pagination-btn <%= currentPage >= totalPages ? 'disabled' : '' %>" style="padding:4px 8px; font-size:0.78rem;">마지막 »</a>
+      </div>
+    </div>
+  </form>
+
+  <!-- 📋 자금 흐름 테이블 -->
+  <div style="overflow-x:auto;">
+    <table class="eco-table">
+      <thead>
+        <tr>
+          <th style="width:70px;">번호</th>
+          <th style="width:140px;">시간 (KST)</th>
+          <th style="width:180px;">유저 계정</th>
+          <th style="width:160px;">변동 유형</th>
+          <th style="text-align:right; width:160px;">변동 금액</th>
+          <th style="text-align:right; width:160px;">잔액 변화 (전 → 후)</th>
+          <th>상세 사유 / 비고</th>
+          <th style="text-align:center; width:80px;">작업</th>
+        </tr>
+      </thead>
+      <tbody id="economy-table-tbody">
+        <%- economyRowsHtml %>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 🔢 페이지네이션 컨트롤 바 -->
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-top:20px; padding-top:16px; border-top:1px solid rgba(255,255,255,0.08);">
+    
+    <!-- 페이지 번호 버튼들 -->
+    <div style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
+      <a href="javascript:goToPage(1)" class="pagination-btn <%= currentPage <= 1 ? 'disabled' : '' %>">« 처음</a>
+      <a href="javascript:goToPage(<%= currentPage - 1 %>)" class="pagination-btn <%= currentPage <= 1 ? 'disabled' : '' %>">‹ 이전</a>
+
+      <% 
+        const startPage = Math.max(1, currentPage - 3);
+        const endPage = Math.min(totalPages, currentPage + 3);
+        for (let p = startPage; p <= endPage; p++) { 
+      %>
+        <a href="javascript:goToPage(<%= p %>)" class="pagination-btn <%= p === currentPage ? 'active' : '' %>"><%= p %></a>
+      <% } %>
+
+      <a href="javascript:goToPage(<%= currentPage + 1 %>)" class="pagination-btn <%= currentPage >= totalPages ? 'disabled' : '' %>">다음 ›</a>
+      <a href="javascript:goToPage(<%= totalPages %>)" class="pagination-btn <%= currentPage >= totalPages ? 'disabled' : '' %>">마지막 »</a>
+    </div>
+
+    <!-- 직접 페이지 입력 이동 -->
+    <div style="display:flex; gap:6px; align-items:center; font-size:0.85rem; color:#94a3b8;">
+      <span>페이지 이동:</span>
+      <input type="number" id="jump-page-input" min="1" max="<%= totalPages %>" value="<%= currentPage %>" style="width:65px; background:#030712; border:1px solid var(--border); color:#fff; padding:6px 8px; border-radius:6px; text-align:center; font-size:0.85rem; font-weight:700;">
+      <span>/ <%= totalPages %></span>
+      <button type="button" onclick="jumpToPage()" style="background:#374151; border:1px solid var(--border); color:#fff; padding:6px 10px; border-radius:6px; font-weight:700; cursor:pointer;">이동</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function buildEcoUrl(newPage, newType, newSearch, newLimit) {
+    const url = new URL(window.location.href);
+    if (newPage !== undefined) url.searchParams.set('page', newPage);
+    if (newType !== undefined) {
+      if (newType) url.searchParams.set('type', newType);
+      else url.searchParams.delete('type');
+    }
+    if (newSearch !== undefined) {
+      if (newSearch) url.searchParams.set('search', newSearch);
+      else url.searchParams.delete('search');
+    }
+    if (newLimit !== undefined) url.searchParams.set('lines', newLimit);
+    return url.toString();
+  }
+
+  function goToPage(page) {
+    if (page < 1) return;
+    window.location.href = buildEcoUrl(page);
+  }
+
+  function jumpToPage() {
+    const val = parseInt((document.getElementById('jump-page-input') || {}).value, 10);
+    if (val && val >= 1) goToPage(val);
+  }
+
+  function submitEcoFilter(type) {
+    window.location.href = buildEcoUrl(1, type);
+  }
+
+  function handleSearchSubmit(ev) {
+    ev.preventDefault();
+    const q = String((document.getElementById('eco-search-input') || {}).value || '').trim();
+    window.location.href = buildEcoUrl(1, undefined, q);
+  }
+
+  function clearAllFilters() {
+    window.location.href = '/admin/economy';
+  }
+
+  function changePageLimit(limit) {
+    window.location.href = buildEcoUrl(1, undefined, undefined, limit);
+  }
+
+  function refreshEconomyPage() {
+    location.reload();
+  }
+
+  // ============================================================
+  // 🎛️ 경제 컨트롤 패널
+  // ============================================================
+  let __ecoSnapshot = null;
+
+  function setToast(msg, type) {
+    const el = document.getElementById('admin-eco-toast');
+    if (!el) return;
+    const color = type === 'error' ? '#f87171' : type === 'success' ? '#34d399' : '#38bdf8';
+    el.innerHTML = '<span style="color:' + color + '; font-weight:700;">' + msg + '</span>';
+    setTimeout(() => { el.innerHTML = ''; }, 3500);
+  }
+
+  function applyAutoModeBadge(mode) {
+    const badge = document.getElementById('auto-mode-badge');
+    const info = document.getElementById('auto-mode-info');
+    if (!badge) return;
+    badge.className = 'status-pill';
+    if (mode === 'auto') {
+      badge.textContent = '🟢 자동 ON';
+      badge.style.background = 'rgba(52,211,153,0.18)';
+      badge.style.color = '#34d399';
+      if (info) info.textContent = '경제 상황에 따라 자동 조절 중';
+    } else if (mode === 'manual') {
+      badge.textContent = '🟡 수동 (잠금)';
+      badge.style.background = 'rgba(251,191,36,0.18)';
+      badge.style.color = '#fbbf24';
+      if (info) info.textContent = '관리자 설정값 유지, 자동조절 OFF';
+    } else if (mode === 'paused') {
+      badge.textContent = '⚪ 일시중지';
+      badge.style.background = 'rgba(148,163,184,0.18)';
+      badge.style.color = '#94a3b8';
+      if (info) info.textContent = '현재 설정값 그대로 동결';
+    } else {
+      badge.textContent = mode || '—';
+      if (info) info.textContent = '';
+    }
+  }
+
+  function setAutoMode(mode) {
+    fetch('/admin/api/economy-controls/auto-mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: mode })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) { setToast(data.error || '변경 실패', 'error'); return; }
+      applyAutoModeBadge(data.autoMode);
+      setToast('자동모드 "' + data.autoMode + '" 적용', 'success');
+      reloadEconomyControls();
+    })
+    .catch(e => setToast('통신 실패: ' + e.message, 'error'));
+  }
+
+  function onRangeInput(field) {
+    const range = document.getElementById('range-' + field);
+    const tile = document.querySelector('[data-control="' + field + '"] .control-tile-value');
+    if (!range || !tile) return;
+    const v = Number(range.value);
+    if (field === 'taxRate') tile.textContent = v.toFixed(1) + ' %';
+    else if (field === 'bankInterestRate') tile.textContent = v.toFixed(0) + ' %/년';
+    else tile.textContent = v.toFixed(2) + ' ×';
+  }
+
+  function commitRange(field, url, key, value) {
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ updates: { [key]: value } })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) {
+        const msg = data.skipped && data.skipped[0] ? data.skipped[0].reason : (data.error || '거부됨');
+        setToast(msg, 'error');
+        return;
+      }
+      const applied = data.applied && data.applied[0];
+      setToast('✓ ' + (applied ? applied.key : field) + ' 변경됨', 'success');
+      reloadEconomyControls();
+    })
+    .catch(e => setToast('통신 실패: ' + e.message, 'error'));
+  }
+
+  function commitInput(field, url, key, value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) { setToast('잘못된 숫자입니다', 'error'); return; }
+    commitRange(field, url, key, String(num));
+  }
+
+  function commitRegime() {
+    const sel = document.getElementById('select-forcedRegimeIndex');
+    if (!sel) return;
+    const val = sel.value === '' ? null : Number(sel.value);
+    if (val === null) {
+      commitRange('forcedRegimeIndex', '/admin/api/economy-controls/bulk-update', 'forcedRegimeIndex', null);
+    } else {
+      fetch('/admin/api/economy-controls/bulk-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates: { forcedRegimeIndex: val } })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.success) { setToast(data.error || '실패', 'error'); return; }
+        setToast('✓ 주식 국면 인덱스 #' + val + ' 적용 (다음 틱부터)', 'success');
+        reloadEconomyControls();
+      });
+    }
+  }
+
+  function reloadEconomyControls() {
+    fetch('/admin/api/economy-controls/snapshot', { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) return;
+      __ecoSnapshot = data;
+      const s = data.settings || {};
+      applyAutoModeBadge(s.autoMode);
+
+      const taxRateEl = document.getElementById('ctrl-taxRate');
+      if (taxRateEl && s.taxRate !== undefined) {
+        const pct = (Number(s.taxRate) * 100).toFixed(2);
+        taxRateEl.textContent = pct + ' %';
+        const r = document.getElementById('range-taxRate');
+        if (r) r.value = pct;
+      }
+      const wtEl = document.getElementById('ctrl-wealthTaxMultiplier');
+      if (wtEl && s.wealthTaxMultiplier !== undefined) {
+        const x = Number(s.wealthTaxMultiplier).toFixed(2);
+        wtEl.textContent = x + ' ×';
+        const r = document.getElementById('range-wealthTaxMultiplier');
+        if (r) r.value = x;
+      }
+      const biEl = document.getElementById('ctrl-bankInterestRate');
+      if (biEl && s.bankInterestRate !== undefined) {
+        const ann = (Number(s.bankInterestRate) * 60 * 24 * 365 * 100).toFixed(2);
+        biEl.textContent = ann + ' %/년';
+        const r = document.getElementById('range-bankInterestRate');
+        if (r) r.value = Number(ann).toFixed(0);
+      }
+      const subEl = document.getElementById('ctrl-subsidyMultiplier');
+      if (subEl && s.subsidyMultiplier !== undefined) {
+        const x = Number(s.subsidyMultiplier).toFixed(2);
+        subEl.textContent = x + ' ×';
+        const r = document.getElementById('range-subsidyMultiplier');
+        if (r) r.value = x;
+      }
+      const wtInput = document.getElementById('input-wealthThresholdForTax');
+      if (wtInput && s.wealthThresholdForTax) wtInput.value = s.wealthThresholdForTax;
+      const sel = document.getElementById('select-forcedRegimeIndex');
+      if (sel && s.forcedRegimeIndex !== undefined && s.forcedRegimeIndex !== null) {
+        sel.value = String(s.forcedRegimeIndex);
+      } else if (sel) {
+        sel.value = '';
+      }
+
+      // 변경 이력 표시
+      const histEl = document.getElementById('admin-eco-history');
+      if (histEl && data.manual && data.manual.history) {
+        histEl.innerHTML = '<b style="color:#a5b4fc;">📜 최근 변경 이력</b><br>' +
+          data.manual.history.slice(0, 8).map(h => {
+            const ts = new Date(h.ts).toLocaleString('ko-KR');
+            const oldV = h.oldVal !== undefined ? JSON.stringify(h.oldVal) : '—';
+            return `<span style="color:#34d399;">[${ts}]</span> <b>${h.key}</b>: ${oldV} → <span style="color:#38bdf8;">${JSON.stringify(h.value)}</span> <i>(${h.by})</i>`;
+          }).join('<br>') +
+          '<br><small style="color:#6b7280;">자동모드: ' + (data.manual.autoMode || '—') + ', 잠금: ' + (data.manual.taxPolicyLocked ? 'YES' : 'no') + '</small>';
+      }
+    })
+    .catch(e => console.error('[economy-controls]', e));
+  }
+
+  // 페이지 로드 시 자동 갱신
+  document.addEventListener('DOMContentLoaded', reloadEconomyControls);
+  // 즉시 1회
+  reloadEconomyControls();
+</script>
+
+<%- include('footer') %>

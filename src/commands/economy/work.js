@@ -1,8 +1,9 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const { pool, getOrCreateUser } = require('../../config/database');
+const { getOrCreateUser } = require('../../config/database');
 const config = require('../../config/config');
 const { createSuccessEmbed, createWarningEmbed } = require('../../utils/embedBuilder');
 const { formatMoney, formatTimeRemaining } = require('../../utils/formatters');
+const { safeBigInt, applyCashDelta, withUserLock, tryClaimCooldown } = require('../../utils/money');
 
 const WORK_SCENARIOS = [
   { text: '☕ 편의점과 카페에서 알바를 뛰며 손님 응대를 성실히 마쳤습니다.', min: 1200, max: 2800 },
@@ -21,6 +22,8 @@ module.exports = {
 
   async execute(interaction) {
     const userId = interaction.user.id;
+    const username = interaction.user.username;
+    return withUserLock(userId, async () => {
     const userData = await getOrCreateUser(userId);
 
     const now = new Date();
@@ -39,11 +42,9 @@ module.exports = {
       }
     }
 
-    // 작업 선택 및 무작위 급여
     const scenario = WORK_SCENARIOS[Math.floor(Math.random() * WORK_SCENARIOS.length)];
     const rawEarned = Math.floor(Math.random() * (scenario.max - scenario.min + 1)) + scenario.min;
 
-    // 🏦 자동 경제 조절 장치: 현재 경제 상황에 맞춘 동적 배율 적용
     let mult = 1.0;
     try {
       const { getDynamicSettings } = require('../../utils/economyBalancer');
@@ -52,20 +53,29 @@ module.exports = {
     } catch (e) {}
 
     const earned = Math.max(100, Math.round(rawEarned * mult));
-    const newCash = BigInt(userData.cash) + BigInt(earned);
+    const claimed = await tryClaimCooldown(userId, 'last_work', cooldownMs);
+    if (!claimed) {
+      const embed = createWarningEmbed(
+        '체력 회복 대기 중 😴',
+        '지금은 일할 수 있는 체력이 부족합니다!'
+      );
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    }
 
-    await pool.query(
-      'UPDATE users SET cash = ?, last_work = NOW() WHERE discord_id = ?',
-      [newCash.toString(), userId]
-    );
+    const { grantTreasurySubsidy } = require('../../utils/taxEngine');
+    const subResult = await grantTreasurySubsidy(userId, username, safeBigInt(earned), `🏛️ [공공 근로 수당] ${scenario.text}`);
+    const newCash = subResult.newCash;
+    const treasuryLeft = subResult.newTreasury;
 
     const embed = createSuccessEmbed(
       '근로 성공! 💼',
       `${scenario.text}\n\n` +
-      `💰 **획득한 급여:** **${formatMoney(earned)}**\n` +
-      `💳 **현재 보유 현금:** **${formatMoney(newCash)}**`
+      `💰 **획득한 급여:** **+${formatMoney(earned)}** (🏛️ 국고 지급)\n` +
+      `💳 **현재 보유 현금:** **${formatMoney(newCash)}**\n` +
+      `🏛️ **국고 잔액:** **${formatMoney(treasuryLeft)}**`
     );
 
     await interaction.reply({ embeds: [embed] });
+    });
   }
 };

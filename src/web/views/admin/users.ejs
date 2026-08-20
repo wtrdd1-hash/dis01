@@ -1,0 +1,454 @@
+<%- include('header', { activeMenu: 'users', pageTitle: '실시간 유저 자산 순위 & 포트폴리오 - 관리자', pageHeader: '유저-자산' }) %>
+
+<!-- 🌟 유저 자산 관리 메인 카드 -->
+<div class="card dx-card--padded" style="border: 1px solid rgba(99, 102, 241, 0.35); background: #0b1120;">
+
+  <!-- 상단 헤더 & 검색 컨트롤 -->
+  <div class="dx-page-header">
+    <div>
+      <h2 class="dx-page-title">
+        <span style="font-size:24px;">💎</span>
+        실시간 유저 자산 순위 & 포트폴리오
+      </h2>
+      <p class="dx-page-subtitle">서버 내 모든 유저의 현금, 은행 예금, 주식 평가액 및 총 순자산을 실시간으로 모니터링합니다.</p>
+    </div>
+
+    <div class="dx-flex dx-gap-2">
+      <div class="dx-search-bar" style="width:280px;">
+        <span style="color:#94a3b8;font-size:16px;">🔍</span>
+        <input type="text" id="admin-user-search" placeholder="닉네임 / Discord ID 실시간 검색..." oninput="filterAdminUsers()" aria-label="유저 검색">
+      </div>
+      <button type="button" onclick="refreshUserWealthTable()" class="dx-btn dx-btn--primary">
+        <span style="font-size:14px;">↻</span>
+        <span>자산 갱신</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 📊 전체 서버 경제 요약 타일 -->
+  <div class="admin-stat-grid">
+    <div class="admin-stat-card users">
+      <div class="stat-label">👥 총 일반 유저 수</div>
+      <div class="stat-value" style="color:#c084fc;"><%= summaryStats.totalUsersCount %>명</div>
+      <div class="stat-sub">관리자 <%= summaryStats.adminCount || 0 %>명 별도</div>
+    </div>
+    <div class="admin-stat-card cash">
+      <div class="stat-label">💵 총 유통 현금</div>
+      <div class="stat-value" style="color:#34d399;"><%= formatMoney(summaryStats.totalCash) %></div>
+      <div class="stat-sub">유저 지갑 합계</div>
+    </div>
+    <div class="admin-stat-card bank">
+      <div class="stat-label">🏦 총 은행 예치금</div>
+      <div class="stat-value" style="color:#60a5fa;"><%= formatMoney(summaryStats.totalBank) %></div>
+      <div class="stat-sub">이자 시간당 0.05%</div>
+    </div>
+    <div class="admin-stat-card stock">
+      <div class="stat-label">📊 총 주식 평가액</div>
+      <div class="stat-value" style="color:#fbbf24;"><%= formatMoney(summaryStats.totalStock) %></div>
+      <div class="stat-sub">시세 변동 실시간</div>
+    </div>
+    <div class="admin-stat-card" style="--accent-color:#c084fc;">
+      <div class="stat-label">💎 전체 순자산 총합</div>
+      <div class="stat-value" style="color:#c084fc;"><%= formatMoney(summaryStats.totalNet) %></div>
+      <div class="stat-sub">현금 + 예금 + 주식</div>
+    </div>
+  </div>
+
+  <!-- 일반 유저 테이블 -->
+  <div style="margin-bottom: 25px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <h3 style="color:#fbbf24; margin:0; display:flex; align-items:center; gap:6px;">
+        <span>👤 일반 유저 자산 순위</span>
+      </h3>
+      <span id="user-filter-count" style="font-size:0.8rem; color:#94a3b8;"></span>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:200px;">유저 계정</th>
+            <th style="text-align:right; width:160px;">💵 보유 현금</th>
+            <th style="text-align:right; width:160px;">🏦 은행 예금 (0.05%/h)</th>
+            <th style="text-align:right; width:160px;">📊 보유 주식 평가액</th>
+            <th style="text-align:right; width:180px;">💎 총 순자산</th>
+            <th style="text-align:center; width:160px;">빠른 관리 작업</th>
+          </tr>
+        </thead>
+        <tbody id="admin-users-tbody">
+          <%- userRowsHtml %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 관리자 계정 테이블 -->
+  <% if (adminUserRowsHtml) { %>
+  <div style="margin-top: 30px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 20px;">
+    <h3 style="color:#c084fc; margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+      <span>👑 봇 관리자 계정 (운영진)</span>
+    </h3>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:200px;">관리자 계정</th>
+            <th style="text-align:right; width:160px;">💵 보유 현금</th>
+            <th style="text-align:right; width:160px;">🏦 은행 예금</th>
+            <th style="text-align:right; width:160px;">📊 보유 주식 평가액</th>
+            <th style="text-align:right; width:180px;">💎 총 순자산</th>
+            <th style="text-align:center; width:160px;">빠른 관리 작업</th>
+          </tr>
+        </thead>
+        <tbody>
+          <%- adminUserRowsHtml %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <% } %>
+</div>
+
+<!-- 🧹 전체 유저 일괄 초기화 패널 (관리자 전용) -->
+<div class="dx-card dx-mt-4" style="border: 1px solid rgba(251, 146, 60, 0.35); background: rgba(120, 53, 15, 0.15);">
+  <div class="dx-page-header" style="border-color: rgba(251, 146, 60, 0.3);">
+    <div>
+      <h3 class="dx-page-title" style="color:#fdba74;">
+        <span style="font-size:22px;">🧹</span>
+        전체 일반 유저 데이터 일괄 초기화
+      </h3>
+      <p class="dx-page-subtitle">
+        관리자 <strong style="color:#34d399;"><%= (typeof adminIds !== 'undefined' ? adminIds.length : 3) %></strong>개 계정은 완전히 보존되며,
+        아래 선택한 테이블에 한해 일반 유저의 경제 데이터를 초기화합니다.
+      </p>
+    </div>
+    <div class="dx-flex dx-gap-2">
+      <span id="reset-all-status" style="font-size:12px; color:#94a3b8; padding:6px 12px; background:rgba(0,0,0,0.3); border-radius:6px; font-weight:700;">
+        ⏳ 대기
+      </span>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin-bottom:14px;">
+    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
+      <input type="checkbox" id="reset-table-users" checked>
+      <span style="font-weight:700;">👤 users</span>
+      <span style="font-size:11px; color:#94a3b8;">(현금 1만, 주식 클리커 0)</span>
+    </label>
+    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
+      <input type="checkbox" id="reset-table-user_stocks" checked>
+      <span style="font-weight:700;">📊 user_stocks</span>
+      <span style="font-size:11px; color:#94a3b8;">(보유 주식 0)</span>
+    </label>
+    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
+      <input type="checkbox" id="reset-table-user_businesses" checked>
+      <span style="font-weight:700;">🏢 user_businesses + meta</span>
+      <span style="font-size:11px; color:#94a3b8;">(사업 데이터)</span>
+    </label>
+    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
+      <input type="checkbox" id="reset-table-user_loan_credit" checked>
+      <span style="font-weight:700;">💳 user_loan_credit</span>
+      <span style="font-size:11px; color:#94a3b8;">(대출 신용도)</span>
+    </label>
+    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
+      <input type="checkbox" id="reset-table-gambling_logs" checked>
+      <span style="font-weight:700;">🎰 gambling_logs</span>
+      <span style="font-size:11px; color:#94a3b8;">(도박 로그)</span>
+    </label>
+    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
+      <input type="checkbox" id="reset-table-stock_transactions">
+      <span style="font-weight:700;">📈 stock_transactions</span>
+      <span style="font-size:11px; color:#94a3b8;">(주식 체결 로그)</span>
+    </label>
+    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
+      <input type="checkbox" id="reset-table-economy_logs">
+      <span style="font-weight:700;">📜 economy_logs</span>
+      <span style="font-size:11px; color:#94a3b8;">(경제 거래 로그)</span>
+    </label>
+  </div>
+
+  <div class="dx-banner dx-banner--warning">
+    <span class="dx-banner-icon">⚠️</span>
+    <div class="dx-banner-content">
+      <div class="dx-banner-title">이 작업은 되돌릴 수 없습니다</div>
+      <div class="dx-banner-desc">
+        체크한 테이블의 모든 일반 유저 데이터가 즉시 삭제·초기화됩니다.
+        봇은 단 1초의 다운타임도 없이 정상 작동합니다. 카지노 잔여 세션, 채굴 중 데이터는 그대로 보존됩니다.
+      </div>
+    </div>
+  </div>
+
+  <div class="dx-flex dx-gap-2 dx-mt-3">
+    <button type="button" id="btn-reset-all-confirm" class="dx-btn dx-btn--danger dx-btn--lg dx-btn--block">
+      🧹 선택한 테이블 일괄 초기화 실행
+    </button>
+  </div>
+
+  <div id="reset-all-toast" class="dx-mt-3"></div>
+</div>
+
+<script>
+  (function() {
+    const btn = document.getElementById('btn-reset-all-confirm');
+    const status = document.getElementById('reset-all-status');
+    const toast = document.getElementById('reset-all-toast');
+    if (!btn) return;
+
+    function setStatus(text, color) {
+      status.textContent = text;
+      status.style.color = color || '#94a3b8';
+    }
+
+    function showToast(html, type) {
+      toast.innerHTML = '<div class="dx-banner dx-banner--' + (type || 'info') + '">' + html + '</div>';
+    }
+
+    btn.addEventListener('click', function() {
+      const checked = Array.from(document.querySelectorAll('.reset-table-option input[type="checkbox"]:checked'))
+        .map(el => el.id.replace('reset-table-', ''));
+      if (checked.length === 0) {
+        return dx.showToast('최소 1개 테이블을 선택하세요', 'warning');
+      }
+      const summary = checked.map(t => '• ' + t).join('<br>');
+      dx.confirm(
+        '다음 테이블의 일반 유저 데이터를 초기화합니다. 관리자는 보존됩니다.\n\n' + checked.join(', '),
+        {
+          title: '🧹 일괄 초기화 확인',
+          okText: '초기화 실행',
+          danger: true
+        }
+      ).then(ok => {
+        if (!ok) return;
+        btn.disabled = true;
+        setStatus('⏳ 실행 중...', '#fbbf24');
+        showToast('<span class="dx-banner-icon">⏳</span><div class="dx-banner-content"><div class="dx-banner-title">처리 중...</div><div class="dx-banner-desc">데이터베이스 트랜잭션 실행 중. 잠시만 기다려 주세요.</div></div>', 'warning');
+        fetch('/admin/action/reset-all', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tables: checked })
+        })
+        .then(r => r.json())
+        .then(data => {
+          btn.disabled = false;
+          if (!data.success) {
+            setStatus('❌ 실패', '#f87171');
+            showToast('<span class="dx-banner-icon">✕</span><div class="dx-banner-content"><div class="dx-banner-title">실패</div><div class="dx-banner-desc">' + dx.escapeHtml(data.error || '알 수 없는 오류') + '</div></div>', 'danger');
+            return;
+          }
+          const s = data.summary || {};
+          setStatus('✓ 완료 · ' + (s.usersReset || 0) + '명', '#34d399');
+          showToast(
+            '<span class="dx-banner-icon">✓</span>' +
+            '<div class="dx-banner-content">' +
+            '<div class="dx-banner-title">초기화 완료</div>' +
+            '<div class="dx-banner-desc">' +
+            '유저: <b>' + (s.usersReset || 0) + '</b>명 · ' +
+            '주식: <b>' + (s.stocksDeleted || 0) + '</b>건 · ' +
+            '사업: <b>' + (s.businessesDeleted || 0) + '</b>건 · ' +
+            '도박로그: <b>' + (s.gamblingLogsDeleted || 0) + '</b>건' +
+            '</div></div>',
+            'success'
+          );
+          // 페이지 새로고침 후 새 데이터 표시
+          setTimeout(() => location.reload(), 1500);
+        })
+        .catch(e => {
+          btn.disabled = false;
+          setStatus('❌ 통신 실패', '#f87171');
+          showToast('<span class="dx-banner-icon">✕</span><div class="dx-banner-content"><div class="dx-banner-title">통신 실패</div><div class="dx-banner-desc">' + dx.escapeHtml(e.message) + '</div></div>', 'danger');
+        });
+      });
+    });
+
+    // 카드 호버 효과
+    document.querySelectorAll('.reset-table-option').forEach(label => {
+      label.addEventListener('mouseenter', () => label.style.borderColor = 'rgba(251, 146, 60, 0.4)');
+      label.addEventListener('mouseleave', () => label.style.borderColor = 'rgba(255,255,255,0.06)');
+    });
+  })();
+</script>
+
+<!-- 🚫 유저 로그인 차단 / 해제 모달 -->
+<div id="user-ban-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); backdrop-filter:blur(6px); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#0f172a; border:1px solid rgba(239,68,68,0.4); border-radius:16px; padding:28px; width:100%; max-width:460px; box-shadow:0 20px 40px rgba(0,0,0,0.8);">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:12px; margin-bottom:18px;">
+      <h3 id="ban-modal-title" style="margin:0; font-size:1.2rem; color:#f87171; font-weight:800; display:flex; align-items:center; gap:8px;">
+        <span>🚫 유저 로그인 차단 설정</span>
+      </h3>
+      <button type="button" onclick="closeUserBanModal()" style="background:none; border:none; color:#94a3b8; font-size:1.5rem; cursor:pointer;">&times;</button>
+    </div>
+
+    <input type="hidden" id="ban-target-id">
+    
+    <div style="margin-bottom:16px;">
+      <div style="font-size:0.85rem; color:#94a3b8; margin-bottom:4px;">대상 유저</div>
+      <div id="ban-target-name" style="font-size:1.1rem; font-weight:800; color:#f8fafc;">@유저</div>
+    </div>
+
+    <div id="ban-form-inputs">
+      <div style="margin-bottom:14px;">
+        <label style="font-size:0.8rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:6px;">차단 기간 (시간 단위 설정 가능)</label>
+        <select id="ban-duration" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:10px; border-radius:8px; color:#fff; font-weight:700; font-size:0.9rem;">
+          <option value="1">⏳ 1시간 정지 (단기 경고)</option>
+          <option value="3">⏳ 3시간 정지</option>
+          <option value="6">⏳ 6시간 정지</option>
+          <option value="12">⏳ 12시간 정지</option>
+          <option value="24" selected>⏳ 24시간 정지 (1일)</option>
+          <option value="72">⏳ 3일 정지 (72시간)</option>
+          <option value="168">⏳ 7일 정지 (1주일)</option>
+          <option value="720">⏳ 30일 정지 (1개월)</option>
+          <option value="0">🔒 영구 차단 (Permanent Ban)</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <label style="font-size:0.8rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:6px;">차단 사유</label>
+        <input type="text" id="ban-reason" placeholder="예: 악성 도배 / 버그 악용 / 규정 위반" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:10px; border-radius:8px; color:#fff; font-size:0.9rem;">
+      </div>
+
+      <div style="display:flex; gap:10px;">
+        <button type="button" onclick="submitUserBan()" style="flex:1; background:linear-gradient(135deg, #b91c1c, #ef4444); border:none; color:#fff; padding:12px; border-radius:8px; font-weight:800; font-size:0.95rem; cursor:pointer; box-shadow:0 4px 12px rgba(239,68,68,0.35);">
+          🚫 로그인 즉시 차단 실행
+        </button>
+        <button type="button" onclick="closeUserBanModal()" style="background:#334155; border:1px solid rgba(255,255,255,0.15); color:#cbd5e1; padding:12px 18px; border-radius:8px; font-weight:700; cursor:pointer;">
+          취소
+        </button>
+      </div>
+    </div>
+
+    <div id="unban-form-inputs" style="display:none;">
+      <p style="color:#cbd5e1; font-size:0.9rem; line-height:1.5; margin-bottom:20px;">
+        현재 이 유저는 로그인이 차단되어 있습니다.<br>
+        차단을 즉시 해제하여 정상 서비스 이용을 허용하시겠습니까?
+      </p>
+      <div style="display:flex; gap:10px;">
+        <button type="button" onclick="submitUserUnban()" style="flex:1; background:linear-gradient(135deg, #059669, #10b981); border:none; color:#fff; padding:12px; border-radius:8px; font-weight:800; font-size:0.95rem; cursor:pointer; box-shadow:0 4px 12px rgba(16,185,129,0.35);">
+          🔓 즉시 차단 해제 (정상 복구)
+        </button>
+        <button type="button" onclick="closeUserBanModal()" style="background:#334155; border:1px solid rgba(255,255,255,0.15); color:#cbd5e1; padding:12px 18px; border-radius:8px; font-weight:700; cursor:pointer;">
+          취소
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ⌨️ Ctrl+K / Cmd+K 검색창 단축키
+  document.addEventListener('keydown', function(e){
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      const input = document.getElementById('admin-user-search');
+      if (input) { input.focus(); input.select(); }
+    }
+    if (e.key === 'Escape') {
+      const input = document.getElementById('admin-user-search');
+      if (input && document.activeElement === input) {
+        input.value = '';
+        filterAdminUsers();
+        input.blur();
+      }
+    }
+  });
+
+  function filterAdminUsers() {
+    const q = String((document.getElementById('admin-user-search') || {}).value || '').toLowerCase().trim();
+    let count = 0;
+    document.querySelectorAll('#admin-users-tbody tr').forEach(function(tr) {
+      const txt = tr.textContent.toLowerCase();
+      const match = !q || txt.includes(q);
+      tr.style.display = match ? '' : 'none';
+      if (match) count++;
+    });
+    const info = document.getElementById('user-filter-count');
+    if (info) {
+      info.textContent = q ? '🔍 검색 결과: ' + count + '명' : '총 ' + document.querySelectorAll('#admin-users-tbody tr').length + '명';
+    }
+  }
+
+  // 페이지 로드 시 카운트 초기 표시
+  setTimeout(filterAdminUsers, 50);
+
+  async function refreshUserWealthTable() {
+    location.reload();
+  }
+
+  function openUserBanModal(userId, username, isBanned) {
+    document.getElementById('ban-target-id').value = userId;
+    document.getElementById('ban-target-name').textContent = '@' + username + ' (' + userId + ')';
+    
+    const banInputs = document.getElementById('ban-form-inputs');
+    const unbanInputs = document.getElementById('unban-form-inputs');
+    const title = document.getElementById('ban-modal-title');
+    
+    if (isBanned) {
+      banInputs.style.display = 'none';
+      unbanInputs.style.display = 'block';
+      title.innerHTML = '<span>🔓 유저 로그인 차단 해제</span>';
+      title.style.color = '#34d399';
+    } else {
+      banInputs.style.display = 'block';
+      unbanInputs.style.display = 'none';
+      title.innerHTML = '<span>🚫 유저 로그인 차단 설정</span>';
+      title.style.color = '#f87171';
+      document.getElementById('ban-reason').value = '';
+    }
+    
+    const modal = document.getElementById('user-ban-modal');
+    modal.style.display = 'flex';
+  }
+
+  function closeUserBanModal() {
+    document.getElementById('user-ban-modal').style.display = 'none';
+  }
+
+  async function submitUserBan() {
+    const userId = document.getElementById('ban-target-id').value;
+    const durationHours = document.getElementById('ban-duration').value;
+    const reason = document.getElementById('ban-reason').value || '관리자 직권 로그인 차단';
+
+    if (!userId) return;
+
+    try {
+      const res = await adminFetch('/api/admin/action/user-ban', {
+        method: 'POST',
+        body: { userId, durationHours, reason }
+      });
+
+      if (res.success) {
+        adminNotice(true, res.message || '유저 차단 완료');
+        closeUserBanModal();
+        setTimeout(() => location.reload(), 800);
+      } else {
+        adminNotice(false, res.error || '유저 차단 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '유저 차단 통신 오류');
+    }
+  }
+
+  async function submitUserUnban() {
+    const userId = document.getElementById('ban-target-id').value;
+    if (!userId) return;
+
+    try {
+      const res = await adminFetch('/api/admin/action/user-unban', {
+        method: 'POST',
+        body: { userId, reason: '관리자 차단 해제' }
+      });
+
+      if (res.success) {
+        adminNotice(true, res.message || '유저 차단 해제 완료');
+        closeUserBanModal();
+        setTimeout(() => location.reload(), 800);
+      } else {
+        adminNotice(false, res.error || '차단 해제 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '차단 해제 통신 오류');
+    }
+  }
+</script>
+
+<%- include('footer') %>

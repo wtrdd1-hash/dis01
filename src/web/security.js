@@ -1,11 +1,15 @@
 const { pool } = require('../config/database');
 const config = require('../config/config');
+const { cleanIp, lookupIp, isValidIp, isLocalIp } = require('../utils/geoIp');
+const { formatKstDateTime } = require('../utils/formatters');
+const session = require('./session');
+const { checkVpnOrProxy, renderVpnBlockPage } = require('../utils/vpnShield');
 
 // ============================================================
 // 🛡️ 웹 보안 시스템 (Web Security Shield)
 // - 악성 경로 차단 (해킹 시도, 스캐너, 정보 탈취 등)
 // - IP 기반 자동 차단 (의심 요청 누적 시 자동 밴)
-// - 관리자 Discord DM 즉시 알림
+// - 관리자 Discord DM 알림 (내부망·도커 프록시는 제외, 쿨다운 적용)
 // ============================================================
 
 // ── 🔴 차단할 악성 경로 패턴 ──────────────────────────────
@@ -27,7 +31,7 @@ const BLOCKED_PATHS = [
   /server\.xml/i,
   /httpd\.conf/i,
 
-  // 관리자 패널 스캔
+  // 관리자 패널 스캔 (실제 앱 경로 /admin, /api/admin 은 제외)
   /wp-admin/i,
   /wp-login/i,
   /wp-content/i,
@@ -40,6 +44,8 @@ const BLOCKED_PATHS = [
   /cpanel/i,
   /plesk/i,
   /webmin/i,
+  /\/administrator(\.|\/|$)/i,
+  /\/admin\.(php|asp|aspx|cgi|html)/i,
 
   // SQL 인젝션 패턴
   /union.*select/i,
@@ -73,7 +79,6 @@ const BLOCKED_PATHS = [
   /\/cgi-bin\//i,
 
   // 기타 탐색 시도
-  /\/(admin|administrator)(\.|\/|$)/i,
   /\/manager\//i,
   /actuator\//i,
   /\.aws\//i,
@@ -105,20 +110,75 @@ const BLOCKED_BOT_AGENTS = [
 ];
 
 // ── 🛡️ 화이트리스트 IP 목록 (절대 차단 불가) ──────────────
-const WHITELIST_IPS = new Set([
-  '14.49.239.61',
-  '127.0.0.1',
-  '::1',
-  '::ffff:127.0.0.1',
-  'localhost'
-]);
+function buildWhitelistIps() {
+  const set = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1', 'localhost']);
+  const fromEnv = String(process.env.SECURITY_WHITELIST_IPS || '')
+    .split(',')
+    .map((ip) => ip.trim())
+    .filter(Boolean);
+  if (fromEnv.length > 0) {
+    for (const ip of fromEnv) set.add(cleanIp(ip));
+  } else {
+    // env가 없으면 기존 운영 IP를 유지한다.
+    set.add('14.49.239.61');
+  }
+  return set;
+}
+const WHITELIST_IPS = buildWhitelistIps();
 
 // ── 🚦 Rate Limiter (IP별 요청 제한) ─────────────────────
 const requestCounts = new Map(); // IP → { count, firstTime, blocked }
 const RATE_LIMIT_WINDOW_MS  = 60 * 1000; // 1분 윈도우
-const RATE_LIMIT_MAX         = 120;       // 1분에 120회 초과 시 경고
-const RATE_LIMIT_HARD_BAN    = 300;       // 300회 초과 시 자동 IP 차단
+const RATE_LIMIT_MAX         = 240;       // 1분에 240회 초과 시 경고 (폴링 페이지 여유)
+const RATE_LIMIT_HARD_BAN    = 800;       // 800회 초과 시 자동 IP 차단
 const SUSPICIOUS_THRESHOLD   = 5;         // 악성 경로 5회 누적 시 자동 밴
+const RATE_LIMIT_SKIP_PATHS = new Set([
+  '/healthz',
+  '/nginx-health',
+  '/robots.txt',
+  '/sitemap.xml',
+  '/rss',
+  '/rss.xml',
+  '/feed',
+  '/favicon.ico',
+  '/favicon.svg'
+]);
+
+// ── 🔍 구글 검색 / 주요 공인 검색엔진 크롤러 화이트리스트 ────────
+const SEARCH_ENGINE_BOT_AGENTS = [
+  /Googlebot/i,
+  /Google-Site-Verification/i,
+  /Google-InspectionTool/i,
+  /Storebot-Google/i,
+  /Google-Cloud-VertexBot/i,
+  /AdsBot-Google/i,
+  /Google-Safety/i,
+  /Mediapartners-Google/i,
+  /FeedFetcher-Google/i,
+  /bingbot/i,
+  /Yeti/i,      // 네이버 검색엔진
+  /Daumoa/i     // 다음/카카오 검색엔진
+];
+
+function isSearchEngineRequest(ua, urlPath) {
+  const path = String(urlPath || '/').toLowerCase();
+  // 구글 소유권 확인 파일 또는 robots.txt / sitemap.xml / rss
+  if (path === '/robots.txt' || path === '/sitemap.xml' || path === '/rss' || path === '/rss.xml' || path === '/feed' || /^\/google[a-z0-9_-]+\.html$/i.test(path)) {
+    return true;
+  }
+  for (const regex of SEARCH_ENGINE_BOT_AGENTS) {
+    if (regex.test(ua)) return true;
+  }
+  return false;
+}
+const ALERT_COOLDOWN_MS = {
+  RATE_LIMIT: 45 * 60 * 1000,
+  MALICIOUS_PATH: 15 * 60 * 1000,
+  SQL_INJECTION: 15 * 60 * 1000,
+  IP_BANNED: 20 * 60 * 1000
+};
+const GLOBAL_RATE_LIMIT_ALERT_MS = 20 * 60 * 1000;
+let lastGlobalRateLimitAlert = 0;
 
 // ── 🚫 메모리 IP 블랙리스트 (재시작 전까지 유지) ─────────
 const memoryBanList = new Map(); // IP → { reason, bannedAt, expires }
@@ -129,28 +189,76 @@ let securityStats = {
   totalBanned: 0,
   attacksByPath: {},
   attacksByIp: {},
-  lastAlertTime: {},   // IP별 마지막 알림 시간 (중복 알림 방지)
+  lastAlertTime: {},   // type:ip 마지막 알림 시각 (중복 DM 방지)
 };
 
+function pruneStatEntries(statMap, maxEntries = 1000) {
+  const entries = Object.entries(statMap || {});
+  if (entries.length <= maxEntries) return;
+  entries
+    .sort((a, b) => Number(a[1] || 0) - Number(b[1] || 0))
+    .slice(0, entries.length - maxEntries)
+    .forEach(([key]) => delete statMap[key]);
+}
+
+function safeDecodePath(raw) {
+  const value = String(raw || '/');
+  try {
+    return decodeURIComponent(value).toLowerCase();
+  } catch (e) {
+    return value.toLowerCase();
+  }
+}
+
+function isTrustedProxySocket(req) {
+  return isLocalIp(req.socket?.remoteAddress || '');
+}
+
+function pickForwardedClientIp(req) {
+  const cf = String(req.headers['cf-connecting-ip'] || '').trim();
+  if (cf && isValidIp(cf)) return cleanIp(cf);
+  const realIp = String(req.headers['x-real-ip'] || '').split(',')[0].trim();
+  if (realIp && isValidIp(realIp)) return cleanIp(realIp);
+  const xff = String(req.headers['x-forwarded-for'] || '');
+  const parts = xff.split(',').map((s) => s.trim()).filter(Boolean);
+  for (let i = 0; i < parts.length; i++) {
+    const candidate = cleanIp(parts[i]);
+    if (isValidIp(candidate) && !isLocalIp(candidate)) return candidate;
+  }
+  if (parts.length && isValidIp(parts[0])) return cleanIp(parts[0]);
+  if (req.ip && isValidIp(req.ip)) return cleanIp(req.ip);
+  return null;
+}
+
 // ── 헬퍼: 클라이언트 실제 IP ────────────────────────────
+// Nginx는 도커 브리지(172.18.x)에서 host:8080 으로 붙는다.
+// 소켓이 로컬/사설망일 때만 포워드 헤더를 신뢰한다.
 function getClientIp(req) {
-  return (
-    (req.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
-    req.headers['x-real-ip'] ||
-    req.socket?.remoteAddress ||
-    'unknown'
-  );
+  if (isTrustedProxySocket(req)) {
+    const forwarded = pickForwardedClientIp(req);
+    if (forwarded) return forwarded;
+  }
+  return cleanIp(req.socket?.remoteAddress || 'unknown');
+}
+
+function isInternalClient(ip, geo) {
+  if (isLocalIp(ip)) return true;
+  if (geo && (geo.country === 'LOCAL' || geo.countryName === '로컬/내부망')) return true;
+  return false;
+}
+
+function shouldSkipRateLimit(urlPath) {
+  const path = String(urlPath || '/').split('?')[0];
+  if (RATE_LIMIT_SKIP_PATHS.has(path)) return true;
+  if (path.startsWith('/css/') || path.startsWith('/js/') || path.startsWith('/public/')) return true;
+  return false;
 }
 
 // ── 헬퍼: 관리자 여부 확인 ────────────────────────────────
 function isUserAdmin(req) {
   try {
-    if (req.cookies && req.cookies.discord_user) {
-      const user = typeof req.cookies.discord_user === 'string' 
-        ? JSON.parse(req.cookies.discord_user) 
-        : req.cookies.discord_user;
-      if (user && config.isAdmin(user.id)) return true;
-    }
+    const user = session.getSessionUser(req);
+    if (user && config.isAdmin(user.id)) return true;
   } catch (e) {}
   return false;
 }
@@ -173,12 +281,18 @@ function countryFlag(code) {
 // ── 🔔 관리자 Discord DM 알림 ────────────────────────────
 async function alertAdmins(client, type, data) {
   if (!client) return;
+  if (isInternalClient(data.ip, { countryName: data.countryName, country: data.country })) return;
 
-  // 같은 IP에 대해 5분 내 중복 알림 방지
   const now = Date.now();
-  const lastAlert = securityStats.lastAlertTime[data.ip] || 0;
-  if (type !== 'IP_BANNED' && now - lastAlert < 5 * 60 * 1000) return;
-  securityStats.lastAlertTime[data.ip] = now;
+  const cooldown = ALERT_COOLDOWN_MS[type] || 15 * 60 * 1000;
+  const alertKey = `${type}:${data.ip || 'unknown'}`;
+  const lastAlert = securityStats.lastAlertTime[alertKey] || 0;
+  if (now - lastAlert < cooldown) return;
+  if (type === 'RATE_LIMIT') {
+    if (now - lastGlobalRateLimitAlert < GLOBAL_RATE_LIMIT_ALERT_MS) return;
+    lastGlobalRateLimitAlert = now;
+  }
+  securityStats.lastAlertTime[alertKey] = now;
 
   const colorMap = {
     MALICIOUS_PATH: 0xFF4444,
@@ -239,15 +353,56 @@ async function logSecurityEvent(ip, type, path, reason, country, countryName) {
 function createSecurityMiddleware(client) {
   return async function securityMiddleware(req, res, next) {
     const ip      = getClientIp(req);
-    const urlPath = decodeURIComponent(req.path || req.url || '/').toLowerCase();
+    const urlPath = safeDecodePath(req.path || req.url || '/');
     const method  = req.method;
     const ua      = (req.headers['user-agent'] || '').substring(0, 200);
-    const country = req.geoCountry || '';
-    const countryName = req.geoCountryName || '';
+    const geo = lookupIp(ip);
+    req.geoCountry = geo.country;
+    req.geoCountryName = geo.countryName;
+    req.geoFlag = geo.flag;
+    const country = geo.country || '';
+    const countryName = geo.countryName || '';
+    const internalClient = isInternalClient(ip, geo);
+    const skipRate = internalClient || shouldSkipRateLimit(urlPath);
+
+    // 화이트리스트·관리자 예외와 관계없이 모든 응답에 기본 보안 헤더를 적용한다.
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
 
     // ── 0. 화이트리스트 및 관리자 확인 (절대 차단 불가) ────
     if (isWhitelisted(ip, req)) {
       return next();
+    }
+
+    // ── 🔍 구글 검색 / 주요 공인 검색엔진 예외 처리 (크롤링 & 색인 보장) ────
+    if (isSearchEngineRequest(ua, urlPath)) {
+      return next();
+    }
+
+    // ── 🛡️ VPN 및 익명 프록시 차단 ──────────────────────────
+    // OAuth 로그인·인증 경로는 VPN 검사에서 완전 제외 (로그인 불가 현상 방지)
+    const isAuthPath = urlPath.startsWith('/auth/') || urlPath === '/auth';
+    if (!skipRate && !isAuthPath && urlPath !== '/robots.txt' && urlPath !== '/sitemap.xml' && urlPath !== '/health') {
+      try {
+        const vpnCheck = await checkVpnOrProxy(ip, req);
+        if (vpnCheck && vpnCheck.isBlocked) {
+          logSecurityEvent(ip, 'VPN_PROXY_BLOCKED', urlPath, vpnCheck.reason || 'VPN/프록시 우회 접속 차단', country, countryName);
+          securityStats.totalBlocked++;
+          res.setHeader('X-Security', 'VPN-Blocked');
+          if (req.accepts && req.accepts('html') && !urlPath.startsWith('/api/')) {
+            return res.status(403).send(renderVpnBlockPage(ip, vpnCheck.reason));
+          } else {
+            return res.status(403).json({ success: false, error: 'VPN 또는 프록시를 통한 우회 접속이 차단되었습니다.', reason: vpnCheck.reason });
+          }
+        }
+      } catch (err) {}
     }
 
     // ── 1. 메모리 밴 리스트 확인 ───────────────────────
@@ -261,27 +416,25 @@ function createSecurityMiddleware(client) {
       }
     }
 
-    // ── 2. Rate Limit 체크 ─────────────────────────────
+    // ── 2. Rate Limit 체크 (내부망·헬스체크는 집계/차단/DM 제외) ─
     const now = Date.now();
     let rc = requestCounts.get(ip);
     if (!rc || now - rc.firstTime > RATE_LIMIT_WINDOW_MS) {
       rc = { count: 0, firstTime: now, suspicious: 0 };
       requestCounts.set(ip, rc);
     }
-    rc.count++;
+    if (!skipRate) {
+      rc.count++;
 
-    if (rc.count > RATE_LIMIT_HARD_BAN) {
-      // 하드 밴 (10분)
-      memoryBanList.set(ip, { reason: '요청 폭탄 (DDoS 의심)', bannedAt: now, expires: now + 10 * 60 * 1000 });
-      securityStats.totalBanned++;
-      logSecurityEvent(ip, 'IP_BANNED', urlPath, `분당 ${rc.count}회 요청 (DDoS 의심)`, country, countryName);
-      alertAdmins(client, 'IP_BANNED', { ip, country, countryName, method, path: urlPath, reason: `분당 ${rc.count}회 요청 → 10분 자동 차단`, count: rc.count });
-      res.setHeader('X-Security', 'Rate-Banned');
-      return res.status(429).json({ error: '너무 많은 요청입니다.' });
-    }
+      if (rc.count > RATE_LIMIT_HARD_BAN) {
+        memoryBanList.set(ip, { reason: '요청 폭탄 (DDoS 의심)', bannedAt: now, expires: now + 10 * 60 * 1000 });
+        securityStats.totalBanned++;
+        logSecurityEvent(ip, 'IP_BANNED', urlPath, `분당 ${rc.count}회 요청 (DDoS 의심)`, country, countryName);
+        alertAdmins(client, 'IP_BANNED', { ip, country, countryName, method, path: urlPath, reason: `분당 ${rc.count}회 요청 → 10분 자동 차단`, count: rc.count });
+        res.setHeader('X-Security', 'Rate-Banned');
+        return res.status(429).json({ error: '너무 많은 요청입니다.' });
+      }
 
-    if (rc.count > RATE_LIMIT_MAX) {
-      // 경고만 (차단은 아직 안 함)
       if (rc.count === RATE_LIMIT_MAX + 1) {
         alertAdmins(client, 'RATE_LIMIT', { ip, country, countryName, method, path: urlPath, reason: `분당 ${rc.count}회 초과 요청`, count: rc.count });
       }
@@ -346,13 +499,6 @@ function createSecurityMiddleware(client) {
       }
     }
 
-    // ── 5. 보안 헤더 삽입 ──────────────────────────────
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
-
     next();
   };
 }
@@ -366,7 +512,7 @@ function getSecurityStats() {
       activeBans.push({
         ip,
         reason: data.reason,
-        bannedAt: new Date(data.bannedAt).toLocaleString('ko-KR'),
+        bannedAt: formatKstDateTime(data.bannedAt),
         expiresIn: Math.max(0, Math.round((data.expires - now) / 60000)) + '분',
       });
     } else {
@@ -397,7 +543,7 @@ function getBannedIpsList() {
       list.push({
         ip,
         reason: data.reason,
-        bannedAt: new Date(data.bannedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
+        bannedAt: formatKstDateTime(data.bannedAt),
         remainingMinutes: Math.max(0, Math.round((data.expires - now) / 60000)),
       });
     } else {
@@ -410,32 +556,69 @@ function getBannedIpsList() {
 // ── 수동 IP 밴/언밴 함수 ─────────────────────────────────
 function banIp(ip, reason = '관리자 수동 차단', durationMinutes = 60 * 24) {
   if (!ip) return { success: false, message: '유효한 IP 주소를 입력하세요.' };
-  const cleanIp = ip.trim();
-  if (WHITELIST_IPS.has(cleanIp)) {
-    return { success: false, message: `⚠️ '${cleanIp}'는 화이트리스트 보호 IP이므로 차단할 수 없습니다.` };
+  const normalized = cleanIp(String(ip).trim());
+  if (!isValidIp(normalized)) {
+    return { success: false, message: `⚠️ '${ip}'는 올바른 IP 주소가 아닙니다.` };
   }
+  if (WHITELIST_IPS.has(normalized) || WHITELIST_IPS.has(String(ip).trim())) {
+    return { success: false, message: `⚠️ '${normalized}'는 화이트리스트 보호 IP이므로 차단할 수 없습니다.` };
+  }
+  if (isLocalIp(normalized)) {
+    return { success: false, message: `⚠️ '${normalized}'는 내부망 IP라 차단하지 않습니다.` };
+  }
+  const mins = Math.max(1, Number(durationMinutes) || 1440);
   const now = Date.now();
-  memoryBanList.set(cleanIp, { reason, bannedAt: now, expires: now + durationMinutes * 60 * 1000 });
+  memoryBanList.set(normalized, { reason, bannedAt: now, expires: now + mins * 60 * 1000 });
   securityStats.totalBanned++;
-  return { success: true, message: `✅ IP '${cleanIp}'가 ${durationMinutes}분 동안 성공적으로 차단되었습니다.` };
+  return { success: true, message: `✅ IP '${normalized}'가 ${mins}분 동안 성공적으로 차단되었습니다.`, ip: normalized };
 }
 
 function unbanIp(ip) {
   if (!ip) return false;
-  const cleanIp = ip.trim();
-  const wasBanned = memoryBanList.delete(cleanIp);
-  requestCounts.delete(cleanIp);
+  const normalized = cleanIp(String(ip).trim());
+  const wasBanned = memoryBanList.delete(normalized) || memoryBanList.delete(String(ip).trim());
+  requestCounts.delete(normalized);
+  requestCounts.delete(String(ip).trim());
   return wasBanned;
 }
 
 function isIpBanned(ip) {
   if (!ip) return false;
-  const cleanIp = ip.trim();
-  const ban = memoryBanList.get(cleanIp);
+  const normalized = cleanIp(String(ip).trim());
+  const ban = memoryBanList.get(normalized) || memoryBanList.get(String(ip).trim());
   if (!ban) return false;
-  if (ban.expires < Date.now()) { memoryBanList.delete(cleanIp); return false; }
+  if (ban.expires < Date.now()) {
+    memoryBanList.delete(normalized);
+    return false;
+  }
   return true;
 }
+
+function getCountryFromIp(ip) {
+  try {
+    return lookupIp(ip).country || 'N/A';
+  } catch (e) {
+    return 'N/A';
+  }
+}
+
+function pruneSecurityMaps() {
+  const now = Date.now();
+  for (const [ip, data] of memoryBanList.entries()) {
+    if (!data || data.expires <= now) memoryBanList.delete(ip);
+  }
+  for (const [ip, rc] of requestCounts.entries()) {
+    if (!rc || now - rc.firstTime > RATE_LIMIT_WINDOW_MS * 2) requestCounts.delete(ip);
+  }
+  const lastAlert = securityStats.lastAlertTime || {};
+  for (const key of Object.keys(lastAlert)) {
+    if (now - lastAlert[key] > 2 * 60 * 60 * 1000) delete lastAlert[key];
+  }
+  pruneStatEntries(securityStats.attacksByIp);
+  pruneStatEntries(securityStats.attacksByPath);
+}
+
+setInterval(pruneSecurityMaps, 5 * 60 * 1000).unref();
 
 module.exports = {
   createSecurityMiddleware,
@@ -444,5 +627,7 @@ module.exports = {
   banIp,
   unbanIp,
   isIpBanned,
+  getClientIp,
+  getCountryFromIp,
   WHITELIST_IPS,
 };

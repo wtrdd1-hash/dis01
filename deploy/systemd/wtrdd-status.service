@@ -1,0 +1,24 @@
+[Unit]
+Description=월덕 상태 페이지 (status.easy-scraping.com)
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=wtrdd
+Group=wtrdd
+SupplementaryGroups=docker
+WorkingDirectory=/home/wtrdd/discord-bot/deploy/status
+Environment=STATUS_PORT=8090
+Environment=STATUS_HOST=0.0.0.0
+Environment=APP_HEALTH_URL=http://127.0.0.1:8080/healthz
+Environment=ENV_FILE=/home/wtrdd/discord-bot/.env
+Environment=WATCHDOG_LOG=/home/wtrdd/discord-bot/logs/watchdog.jsonl
+Environment=WATCHDOG_STATE=/home/wtrdd/discord-bot/logs/watchdog
+ExecStart=/usr/bin/node /home/wtrdd/discord-bot/deploy/status/server.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -3,6 +3,7 @@ const { pool } = require('../../config/database');
 const config = require('../../config/config');
 const { createAdminEmbed, createErrorEmbed } = require('../../utils/embedBuilder');
 const { logAdminAction } = require('../../utils/logger');
+const { safeImageUrl } = require('../../utils/sanitize');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -64,9 +65,13 @@ module.exports = {
               { name: '💬 관리자 공식 답변', value: `\`\`\`\n${answer}\n\`\`\``, inline: false }
             );
 
-          if (ticket.image_url) {
-            userDmEmbed.setImage(ticket.image_url);
-            userDmEmbed.addFields({ name: '🖼️ 첨부하셨던 사진', value: `[사진 다시보기](${ticket.image_url})`, inline: false });
+          const safeImg = safeImageUrl(ticket.image_url);
+          if (safeImg) {
+            const absoluteImg = safeImg.startsWith('/')
+              ? `https://easy-scraping.com${safeImg}`
+              : safeImg;
+            userDmEmbed.setImage(absoluteImg);
+            userDmEmbed.addFields({ name: '🖼️ 첨부하셨던 사진', value: `[사진 다시보기](${absoluteImg})`, inline: false });
           }
 
           userDmEmbed.setFooter({ text: `답변자: @${adminUsername} · 웹사이트 [내 프로필]에서도 언제든 확인하실 수 있습니다.` });

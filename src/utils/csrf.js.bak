@@ -1,0 +1,156 @@
+/**
+ * 🛡️ CSRF (Cross-Site Request Forgery) 토큰 발급 및 검증 유틸리티
+ *
+ * - Double Submit Cookie + HMAC 서명 패턴 사용
+ * - Express 세션과 동일한 COOKIE_SECRET을 HMAC 키로 활용
+ * - 토큰은 HttpOnly + Signed 쿠키로 보관하고, 클라이언트는 별도 헤더(X-CSRF-Token)로 회신
+ * - 모든 관리자 POST/PUT/DELETE API는 requireCsrf() 미들웨어를 통과해야 함
+ */
+const crypto = require('crypto');
+const session = require('../web/session');
+
+const CSRF_COOKIE = 'wtrd_csrf';
+const CSRF_HEADER = 'x-csrf-token';
+const CSRF_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+function generateRawToken() {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+function cookieOptions(req) {
+  const host = String((req && (req.headers['x-forwarded-host'] || req.headers.host)) || '').split(',')[0].toLowerCase();
+  const hostname = host.split(':')[0];
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+  const opts = {
+    httpOnly: true,
+    secure: !isLocal,
+    sameSite: 'strict',
+    path: '/',
+    signed: true
+  };
+  if (!isLocal) opts.domain = '.easy-scraping.com';
+  return opts;
+}
+
+function hostOnlyCookieOptions(req) {
+  const opts = cookieOptions(req);
+  delete opts.domain;
+  return opts;
+}
+
+/**
+ * 클라이언트가 처음 관리자 페이지를 로드할 때 호출되어 CSRF 쿠키를 발급
+ */
+function issueCsrfToken(req, res) {
+  const raw = generateRawToken();
+  const secret = session.getCookieSecret();
+  const hmac = crypto.createHmac('sha256', secret).update(raw).digest('base64url');
+  const signed = `${raw}.${hmac}`;
+  const opts = { ...cookieOptions(req), maxAge: CSRF_MAX_AGE_MS };
+  res.cookie(CSRF_COOKIE, signed, opts);
+  return signed;
+}
+
+/**
+ * 응답 헤더에 CSRF 토큰 (raw값) 노출 - 클라이언트 JS가 읽어서 X-CSRF-Token 헤더로 회신
+ */
+function exposeTokenHeader(req, res) {
+  const signed = req.signedCookies && req.signedCookies[CSRF_COOKIE];
+  if (signed) {
+    res.setHeader('X-CSRF-Token', signed);
+  }
+}
+
+/**
+ * Express 요청에서 CSRF 토큰 추출 (헤더 우선, body 폴백)
+ */
+function extractClientToken(req) {
+  const fromHeader = String(req.headers[CSRF_HEADER] || '').trim();
+  if (fromHeader) return fromHeader;
+  if (req.body && typeof req.body === 'object') {
+    const fromBody = String(req.body._csrf || req.body.csrfToken || '').trim();
+    if (fromBody) return fromBody;
+  }
+  return '';
+}
+
+/**
+ * 토큰 검증: HMAC 서명 + 만료시간(쿠키 자체의 maxAge) 체크
+ */
+function verifyToken(provided, cookieSigned) {
+  if (!provided || !cookieSigned) return false;
+  const dotIdx = cookieSigned.lastIndexOf('.');
+  if (dotIdx < 0) return false;
+  const raw = cookieSigned.slice(0, dotIdx);
+  const expectedHmac = cookieSigned.slice(dotIdx + 1);
+  const secret = session.getCookieSecret();
+  const computed = crypto.createHmac('sha256', secret).update(raw).digest('base64url');
+
+  const a = Buffer.from(expectedHmac);
+  const b = Buffer.from(computed);
+  if (a.length !== b.length) return false;
+  if (!crypto.timingSafeEqual(a, b)) return false;
+
+  const providedDot = provided.lastIndexOf('.');
+  if (providedDot < 0) return false;
+  const providedRaw = provided.slice(0, providedDot);
+  const providedHmac = provided.slice(providedDot + 1);
+
+  const c = Buffer.from(providedHmac);
+  const d = Buffer.from(computed);
+  if (c.length !== d.length) return false;
+  if (!crypto.timingSafeEqual(c, d)) return false;
+
+  if (providedRaw !== raw) return false;
+  return true;
+}
+
+/**
+ * Express 미들웨어: 안전한 메소드(POST/PUT/PATCH/DELETE)에 대해 CSRF 검증
+ */
+function requireCsrf(req, res, next) {
+  const method = String(req.method || '').toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next();
+  if (req.path && req.path.startsWith('/socket.io')) return next();
+
+  const cookieToken = (req.signedCookies && req.signedCookies[CSRF_COOKIE]) || '';
+  const headerToken = extractClientToken(req);
+
+  if (!cookieToken) {
+    return res.status(403).json({ success: false, error: 'CSRF 토큰이 만료되었습니다. 페이지를 새로고침 후 다시 시도하세요.' });
+  }
+  if (!headerToken) {
+    return res.status(403).json({ success: false, error: 'CSRF 토큰 헤더가 누락되었습니다.' });
+  }
+  if (!verifyToken(headerToken, cookieToken)) {
+    return res.status(403).json({ success: false, error: 'CSRF 토큰 검증 실패 (위조 가능성 차단)' });
+  }
+  next();
+}
+
+function clearCsrfCookie(res, req) {
+  const base = cookieOptions(req);
+  const host = hostOnlyCookieOptions(req);
+  res.clearCookie(CSRF_COOKIE, base);
+  res.clearCookie(CSRF_COOKIE, host);
+}
+
+/**
+ * 관리자 페이지 렌더 시 사용할 토큰 (이미 발급된 쿠키의 서명값 반환, 없으면 새로 발급)
+ */
+function ensureToken(req, res) {
+  const existing = req.signedCookies && req.signedCookies[CSRF_COOKIE];
+  if (existing) return existing;
+  return issueCsrfToken(req, res);
+}
+
+module.exports = {
+  CSRF_COOKIE,
+  CSRF_HEADER,
+  issueCsrfToken,
+  requireCsrf,
+  clearCsrfCookie,
+  ensureToken,
+  exposeTokenHeader,
+  verifyToken
+};

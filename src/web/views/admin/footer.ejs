@@ -1,0 +1,660 @@
+      </main>
+    </div>
+  </div>
+
+  <!-- 🌐 IP 이력 모달 -->
+  <div id="ip-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:90;align-items:center;justify-content:center;">
+    <div style="background:#1f2937;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:20px;width:min(600px,90vw);max-height:80vh;overflow:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 id="ip-modal-title" style="color:#fff;font-size:1.1rem;margin:0;">접속 IP</h3>
+        <button type="button" onclick="closeIpModal()" style="background:#374151;border:none;color:#fff;padding:6px 10px;border-radius:6px;cursor:pointer;">닫기</button>
+      </div>
+      <div id="ip-modal-body" style="font-size:0.85rem;color:#e5e7eb;"></div>
+    </div>
+  </div>
+
+  <!-- 📊 유저 보유 주식 상세 포트폴리오 모달 -->
+  <div id="user-stocks-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:90; align-items:center; justify-content:center;">
+    <div style="background:#0f172a; border:1px solid rgba(56,189,248,0.4); border-radius:14px; padding:22px; width:min(880px,94vw); max-height:85vh; overflow:auto; box-shadow:0 20px 40px rgba(0,0,0,0.8);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px;">
+        <div>
+          <h3 id="user-stocks-modal-title" style="color:#38bdf8; font-size:1.15rem; margin:0;">📊 유저 보유 주식 포트폴리오</h3>
+          <p id="user-stocks-modal-sub" style="font-size:0.8rem; color:#9ca3af; margin-top:4px;"></p>
+        </div>
+        <button type="button" onclick="closeUserStocksModal()" style="background:#374151; border:none; color:#fff; padding:6px 14px; border-radius:6px; font-weight:700; cursor:pointer;">닫기 ✕</button>
+      </div>
+
+      <!-- 요약 타일 -->
+      <div id="user-stocks-summary-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-bottom:16px;"></div>
+
+      <!-- 보유 종목 테이블 -->
+      <table>
+        <thead>
+          <tr>
+            <th>종목</th>
+            <th style="text-align:right;">보유 수량</th>
+            <th style="text-align:right;">매수 평단가</th>
+            <th style="text-align:right;">현재가</th>
+            <th style="text-align:right;">총 매수원금</th>
+            <th style="text-align:right;">현재 평가금액</th>
+            <th style="text-align:right;">평가 손익</th>
+            <th style="text-align:right;">수익률(ROI)</th>
+            <th style="text-align:center;">관리 작업</th>
+          </tr>
+        </thead>
+        <tbody id="user-stocks-modal-tbody">
+          <tr><td colspan="9" style="text-align:center; color:#9ca3af; padding:15px;">조회 중...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 💵 빠른 자금 지급/회수 공통 모달 -->
+  <div id="quick-money-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:95; align-items:center; justify-content:center;">
+    <div style="background:#0f172a; border:1px solid rgba(99,102,241,0.4); border-radius:12px; padding:22px; width:min(440px,92vw); box-shadow:0 20px 40px rgba(0,0,0,0.8);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px;">
+        <h3 id="quick-money-title" style="color:#fbbf24; font-size:1.1rem; margin:0;">💵 자금 지급 / 회수</h3>
+        <button type="button" onclick="closeQuickMoneyModal()" style="background:#374151; border:none; color:#fff; padding:4px 10px; border-radius:6px; cursor:pointer;">✕</button>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div>
+          <label style="font-size:0.8rem; color:#9ca3af; display:block; margin-bottom:4px;">대상 유저</label>
+          <input type="text" id="qm-user-display" readonly style="width:100%; background:#1e293b; border:1px solid var(--border); color:#38bdf8; font-weight:700; padding:8px 12px; border-radius:6px; font-size:0.85rem;">
+          <input type="hidden" id="qm-user-id">
+        </div>
+        <div>
+          <label style="font-size:0.8rem; color:#9ca3af; display:block; margin-bottom:4px;">금액 (숫자 또는 5만, 1억, 500양)</label>
+          <input type="text" id="qm-amount" placeholder="예: 50000, 100만, 10억" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; font-weight:700; padding:8px 12px; border-radius:6px; font-size:0.9rem;">
+        </div>
+        <div>
+          <label style="font-size:0.8rem; color:#9ca3af; display:block; margin-bottom:4px;">사유 (선택)</label>
+          <input type="text" id="qm-reason" placeholder="지급/회수 사유" style="width:100%; background:#1e293b; border:1px solid var(--border); color:#fff; padding:8px 12px; border-radius:6px; font-size:0.85rem;">
+        </div>
+        <div style="display:flex; gap:8px; margin-top:6px;">
+          <button type="button" onclick="execQuickMoney('give')" style="flex:1; background:#10b981; border:none; color:#fff; padding:10px; border-radius:6px; font-weight:700; cursor:pointer; font-size:0.9rem;">+ 돈 지급</button>
+          <button type="button" onclick="execQuickMoney('take')" style="flex:1; background:#ef4444; border:none; color:#fff; padding:10px; border-radius:6px; font-weight:700; cursor:pointer; font-size:0.9rem;">- 돈 회수</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="admin-toast" class="admin-toast"></div>
+
+  <!-- ✏️ 유저 정보 통합 수정 모달 -->
+  <div id="user-edit-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:96; align-items:center; justify-content:center;">
+    <div style="background:#0f172a; border:1px solid rgba(99,102,241,0.4); border-radius:14px; padding:22px; width:min(640px,95vw); max-height:88vh; overflow:auto; box-shadow:0 20px 40px rgba(0,0,0,0.8);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px;">
+        <div>
+          <h3 id="ue-modal-title" style="color:#a5b4fc; font-size:1.15rem; margin:0;">✏️ 유저 정보 통합 수정</h3>
+          <p id="ue-modal-sub" style="font-size:0.8rem; color:#9ca3af; margin-top:4px;">현재 값을 확인하고 필요한 항목만 변경하세요.</p>
+        </div>
+        <button type="button" onclick="closeUserEditModal()" style="background:#374151; border:none; color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:700;">✕</button>
+      </div>
+
+      <!-- 현재 스냅샷 표시 -->
+      <div id="ue-current-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:8px; margin-bottom:16px;"></div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div>
+          <label style="font-size:0.75rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">닉네임 (username)</label>
+          <input type="text" id="ue-username" placeholder="변경 시에만 입력" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:8px 10px; border-radius:6px; font-size:0.85rem;">
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">연속 출석 일수 (daily_streak)</label>
+          <input type="number" id="ue-daily_streak" min="0" max="99999" placeholder="비워두면 변경 안 함" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:8px 10px; border-radius:6px; font-size:0.85rem;">
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#34d399; font-weight:700; display:block; margin-bottom:4px;">💵 현금 (cash)</label>
+          <input type="text" id="ue-cash" placeholder="예: 50000 / 5만 / 1억 (비워두면 변경 안 함)" style="width:100%; background:#030712; border:1px solid rgba(16,185,129,0.35); color:#a7f3d0; padding:8px 10px; border-radius:6px; font-size:0.85rem; font-weight:700;">
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#60a5fa; font-weight:700; display:block; margin-bottom:4px;">🏦 은행 예금 (bank)</label>
+          <input type="text" id="ue-bank" placeholder="예: 100000 / 10만 (비워두면 변경 안 함)" style="width:100%; background:#030712; border:1px solid rgba(56,189,248,0.35); color:#bae6fd; padding:8px 10px; border-radius:6px; font-size:0.85rem; font-weight:700;">
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#fbbf24; font-weight:700; display:block; margin-bottom:4px;">⛏️ 채굴 레벨 (clicker_level)</label>
+          <input type="number" id="ue-clicker_level" min="1" max="9999" placeholder="1~9999" style="width:100%; background:#030712; border:1px solid rgba(251,191,36,0.35); color:#fde68a; padding:8px 10px; border-radius:6px; font-size:0.85rem;">
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#c084fc; font-weight:700; display:block; margin-bottom:4px;">⛏️ 자동채굴 레벨 (auto_miner_level)</label>
+          <input type="number" id="ue-auto_miner_level" min="0" max="9999" placeholder="0~9999" style="width:100%; background:#030712; border:1px solid rgba(192,132,252,0.35); color:#e9d5ff; padding:8px 10px; border-radius:6px; font-size:0.85rem;">
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">🎰 도박 턴 수 (gamble_turns)</label>
+          <input type="number" id="ue-gamble_turns" min="0" max="99999" placeholder="기본 50" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:8px 10px; border-radius:6px; font-size:0.85rem;">
+        </div>
+        <div>
+          <label style="font-size:0.75rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">🖱️ 누적 클릭 수 (total_clicks)</label>
+          <input type="number" id="ue-total_clicks" min="0" placeholder="0 이상" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:8px 10px; border-radius:6px; font-size:0.85rem;">
+        </div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <label style="font-size:0.75rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">📝 수정 사유 (audit_logs 기록용)</label>
+        <input type="text" id="ue-reason" placeholder="왜 수정하는지 간단히 입력" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:8px 10px; border-radius:6px; font-size:0.85rem;">
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:16px;">
+        <button type="button" onclick="submitUserEdit()" style="flex:1; background:linear-gradient(135deg, #4f46e5, #6366f1); border:none; color:#fff; padding:12px; border-radius:8px; font-weight:800; cursor:pointer; font-size:0.95rem; box-shadow:0 4px 12px rgba(99,102,241,0.35);">
+          💾 변경 저장 (DB 트랜잭션)
+        </button>
+        <button type="button" onclick="closeUserEditModal()" style="background:#334155; border:1px solid rgba(255,255,255,0.15); color:#cbd5e1; padding:12px 18px; border-radius:8px; font-weight:700; cursor:pointer;">
+          취소
+        </button>
+      </div>
+
+      <p style="font-size:0.72rem; color:#64748b; margin-top:10px; text-align:center;">⚠️ 변경 전/후 값은 audit_logs에 영구 기록됩니다. 비워둔 필드는 변경되지 않습니다.</p>
+    </div>
+  </div>
+
+  <script>
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function openQuickMoneyModal(userId, username) {
+      const modal = document.getElementById('quick-money-modal');
+      const uidInput = document.getElementById('qm-user-id');
+      const udisplay = document.getElementById('qm-user-display');
+      const amtInput = document.getElementById('qm-amount');
+      const rInput = document.getElementById('qm-reason');
+      if (!modal) return;
+
+      if (uidInput) uidInput.value = userId;
+      if (udisplay) udisplay.value = '@' + (username || userId) + ' (' + userId + ')';
+      if (amtInput) amtInput.value = '';
+      if (rInput) rInput.value = '';
+      modal.style.display = 'flex';
+      if (amtInput) amtInput.focus();
+    }
+
+    function closeQuickMoneyModal() {
+      const modal = document.getElementById('quick-money-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function execQuickMoney(type) {
+      const userId = (document.getElementById('qm-user-id') || {}).value;
+      const amount = String((document.getElementById('qm-amount') || {}).value || '').trim();
+      const reason = String((document.getElementById('qm-reason') || {}).value || '').trim();
+      if (!userId || !amount) return alert('금액을 입력하세요.');
+
+      const res = await adminFetch('/api/admin/action/' + type, {
+        method: 'POST',
+        body: { userId, amount, reason, confirm: true }
+      });
+
+      if (res.success) {
+        closeQuickMoneyModal();
+        adminNotice(true, res.message || '처리되었습니다.');
+        setTimeout(function() { location.reload(); }, 1000);
+      } else {
+        adminNotice(false, res.error || '실패');
+      }
+    }
+
+    function toggleAdminDrawers(which) {
+      const sb = document.getElementById('channel-sidebar');
+      const mb = document.getElementById('mobile-backdrop');
+      if (sb) sb.classList.toggle('open');
+      if (mb) mb.classList.toggle('show');
+    }
+    function closeAdminDrawers() {
+      const sb = document.getElementById('channel-sidebar');
+      const mb = document.getElementById('mobile-backdrop');
+      if (sb) sb.classList.remove('open');
+      if (mb) mb.classList.remove('show');
+    }
+
+    function adminNotice(ok, msg) {
+      const text = msg || (ok ? '처리되었습니다.' : '처리에 실패했습니다.');
+      const el = document.getElementById('admin-action-result');
+      if (el) {
+        el.style.display = 'block';
+        el.style.background = ok ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)';
+        el.style.border = '1px solid ' + (ok ? '#10b981' : '#ef4444');
+        el.style.color = ok ? '#6ee7b7' : '#fca5a5';
+        el.textContent = text;
+      }
+      let toast = document.getElementById('admin-toast');
+      if (toast) {
+        toast.className = 'admin-toast is-on ' + (ok ? 'is-ok' : 'is-err');
+        toast.textContent = text;
+        clearTimeout(adminNotice._hide);
+        adminNotice._hide = setTimeout(function() { toast.classList.remove('is-on'); }, 4200);
+      }
+    }
+
+    async function adminFetch(url, opts) {
+      const init = Object.assign({
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+      }, opts || {});
+      if (init.body && typeof init.body === 'object' && !(init.body instanceof FormData)) {
+        init.body = JSON.stringify(init.body);
+      }
+      const res = await fetch(url, init);
+      const data = await res.json().catch(function() {
+        return { success: false, error: '응답 파싱 실패 (HTTP ' + res.status + ')' };
+      });
+      if (!res.ok && !data.error) data.error = '요청 실패 (HTTP ' + res.status + ')';
+      return data;
+    }
+
+    // 주식 포트폴리오 모달
+    async function showUserStocksModal(userId, username) {
+      const modal = document.getElementById('user-stocks-modal');
+      const title = document.getElementById('user-stocks-modal-title');
+      const sub = document.getElementById('user-stocks-modal-sub');
+      const tbody = document.getElementById('user-stocks-modal-tbody');
+      const grid = document.getElementById('user-stocks-summary-grid');
+      if (!modal || !tbody) return;
+
+      if (title) title.textContent = '📊 @' + (username || userId) + ' 님의 주식 포트폴리오';
+      if (sub) sub.textContent = 'Discord ID: ' + userId;
+      if (grid) grid.innerHTML = '';
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#9ca3af; padding:20px;"><span class="pulse-dot"></span> 보유 주식 데이터를 불러오는 중...</td></tr>';
+      modal.style.display = 'flex';
+
+      try {
+        const res = await adminFetch('/api/admin/users/' + encodeURIComponent(userId) + '/stocks');
+        if (!res.success) {
+          tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#f87171; padding:15px;">' + (res.error || '조회 실패') + '</td></tr>';
+          return;
+        }
+
+        const u = res.user;
+        if (grid) {
+          grid.innerHTML = 
+            '<div style="background:#1e293b; border:1px solid rgba(56,189,248,0.3); border-radius:8px; padding:10px;">' +
+              '<div style="font-size:0.75rem; color:#9ca3af;">총 주식 평가금액</div>' +
+              '<div style="font-size:1.1rem; font-weight:800; color:#38bdf8;">' + u.totalStockValText + '</div>' +
+            '</div>' +
+            '<div style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:10px;">' +
+              '<div style="font-size:0.75rem; color:#9ca3af;">총 매수 원금</div>' +
+              '<div style="font-size:1.1rem; font-weight:700; color:#cbd5e1;">' + u.totalSpentText + '</div>' +
+            '</div>' +
+            '<div style="background:#1e293b; border:1px solid rgba(251,191,36,0.3); border-radius:8px; padding:10px;">' +
+              '<div style="font-size:0.75rem; color:#9ca3af;">총 평가 손익 / 수익률</div>' +
+              '<div style="font-size:1.1rem; font-weight:800; color:' + (u.totalProfitText.startsWith('-') ? '#f87171' : '#34d399') + ';">' + 
+                u.totalProfitText + ' (' + (Number(u.totalRoiPercent) >= 0 ? '+' : '') + u.totalRoiPercent + '%)</div>' +
+            '</div>';
+        }
+
+        const list = res.portfolio || [];
+        tbody.innerHTML = '';
+        if (!list.length) {
+          tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#9ca3af; padding:20px;">보유 중인 주식이 없습니다.</td></tr>';
+          return;
+        }
+
+        list.forEach(function(s) {
+          const tr = document.createElement('tr');
+          const isProfit = s.isProfit;
+          const profitColor = isProfit ? '#34d399' : '#f87171';
+
+          tr.innerHTML = 
+            '<td><b>' + s.name + '</b> <small style="color:#818cf8;">(' + s.stockId + ')</small></td>' +
+            '<td style="text-align:right; font-weight:700; color:#fff;">' + s.amountText + '</td>' +
+            '<td style="text-align:right; color:#9ca3af;">' + s.avgPriceText + '</td>' +
+            '<td style="text-align:right; font-weight:700; color:#38bdf8;">' + s.currentPriceText + '</td>' +
+            '<td style="text-align:right; color:#cbd5e1;">' + s.totalSpentText + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:#fbbf24;">' + s.evalValueText + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:' + profitColor + ';">' + s.profitText + '</td>' +
+            '<td style="text-align:right; font-weight:800; color:' + profitColor + ';">' + (isProfit ? '+' : '') + s.roiPercent + '%</td>' +
+            '<td style="text-align:center;">' +
+              '<button type="button" data-user-id="' + userId + '" data-stock-id="' + s.stockId + '" data-stock-name="' + s.name + '" data-amount="' + s.amount + '" onclick="execForceSellStock(this.dataset.userId, this.dataset.stockId, this.dataset.stockName, Number(this.dataset.amount))" style="background:#dc2626; border:1px solid #ef4444; color:#fff; padding:3px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer; font-weight:700;">🚨 강제매도</button>' +
+            '</td>';
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#f87171; padding:15px;">조회 중 오류가 발생했습니다.</td></tr>';
+      }
+    }
+
+    function closeUserStocksModal() {
+      const modal = document.getElementById('user-stocks-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function execForceSellStock(userId, stockId, stockName, maxAmount) {
+      const input = prompt('@' + userId + ' 님의 ' + stockName + '(' + stockId + ') 강제 매도 수량을 입력하세요.\n(현재 보유: ' + maxAmount.toLocaleString() + '주 / 비워두거나 all 입력 시 전량 매도):', 'all');
+      if (input === null) return;
+      const sellAmount = (!input || input.trim().toLowerCase() === 'all') ? 'all' : input.trim();
+
+      if (!confirm('⚠️ 정말로 @' + userId + ' 님의 ' + stockName + ' ' + (sellAmount === 'all' ? '전량(' + maxAmount.toLocaleString() + '주)' : sellAmount + '주') + '를 강제 매도하시겠습니까?\n현재 시세 금액이 유저 현금으로 환급 지급됩니다.')) return;
+
+      try {
+        const res = await adminFetch('/api/admin/stocks/force-sell', {
+          method: 'POST',
+          body: { userId, stockId, amount: sellAmount, confirm: true }
+        });
+        if (!res.success) {
+          adminNotice(false, res.error || '강제 매도 실패');
+          return;
+        }
+        adminNotice(true, res.message);
+        showUserStocksModal(userId);
+        if (typeof refreshAllStockHolders === 'function') refreshAllStockHolders();
+      } catch (e) {
+        adminNotice(false, '강제 매도 처리 중 통신 오류');
+      }
+    }
+
+    // IP 모달
+    async function showUserIps(userId) {
+      const modal = document.getElementById('ip-modal');
+      const body = document.getElementById('ip-modal-body');
+      if (!modal || !body) return;
+      modal.style.display = 'flex';
+      body.innerHTML = '조회 중...';
+
+      try {
+        const res = await adminFetch('/api/admin/users/' + encodeURIComponent(userId) + '/ips');
+        if (!res.success) {
+          body.textContent = res.error || '조회 실패';
+          return;
+        }
+        const ips = res.ips || [];
+        if (!ips.length) {
+          body.textContent = '기록된 IP가 없습니다.';
+          return;
+        }
+        let html = '<ul style="list-style:none;padding:0;">';
+        ips.forEach(function(item) {
+          html += '<li style="padding:6px 0;border-bottom:1px solid #374151;display:flex;justify-content:space-between;align-items:center;">' +
+            '<span><b>' + (item.ip || 'unknown') + '</b> (' + (item.countryName || item.country || '-') + ')</span>' +
+            '<button type="button" data-ip="' + (item.ip || '') + '" onclick="banFromLog(this.dataset.ip)" class="btn-rollback">차단</button>' +
+            '</li>';
+        });
+        html += '</ul>';
+        body.innerHTML = html;
+      } catch (e) {
+        body.textContent = '조회 중 오류 발생';
+      }
+    }
+
+    function closeIpModal() {
+      const modal = document.getElementById('ip-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function banFromLog(ip) {
+      if (!ip || ip === 'DELETED' || ip === '127.0.0.1') return;
+      const reason = prompt('IP ' + ip + ' 차단 사유를 입력하세요:', '관리자 수동 차단');
+      if (reason === null) return;
+      try {
+        const res = await adminFetch('/api/admin/security/ban', {
+          method: 'POST',
+          body: { ip, reason: reason.trim() || '관리자 수동 차단', minutes: 1440, confirm: true }
+        });
+        if (res.success) {
+          adminNotice(true, 'IP ' + ip + ' 차단 완료');
+          location.reload();
+        } else {
+          adminNotice(false, res.error || '차단 실패');
+        }
+      } catch (e) {
+        adminNotice(false, '차단 처리 오류');
+      }
+    }
+
+    // ✏️ 유저 정보 통합 수정 모달
+    let __ueCurrentUserId = null;
+    function openUserEditModal(userId, username) {
+      const modal = document.getElementById('user-edit-modal');
+      if (!modal) return;
+      __ueCurrentUserId = userId;
+      const titleEl = document.getElementById('ue-modal-title');
+      const subEl = document.getElementById('ue-modal-sub');
+      const gridEl = document.getElementById('ue-current-grid');
+      if (titleEl) titleEl.textContent = '✏️ @' + (username || userId) + ' 님 정보 수정';
+      if (subEl) subEl.textContent = 'Discord ID: ' + userId;
+
+      ['ue-username','ue-daily_streak','ue-cash','ue-bank','ue-clicker_level','ue-auto_miner_level','ue-gamble_turns','ue-total_clicks','ue-reason']
+        .forEach(function(id){ const el = document.getElementById(id); if (el) el.value = ''; });
+
+      if (gridEl) gridEl.innerHTML = '<div style="grid-column:1/-1; color:#9ca3af; font-size:0.85rem; text-align:center;">현재 값을 불러오는 중...</div>';
+      modal.style.display = 'flex';
+
+      adminFetch('/api/admin/users/' + encodeURIComponent(userId) + '/profile')
+        .then(function(res){
+          if (!res.success) {
+            if (gridEl) gridEl.innerHTML = '<div style="grid-column:1/-1; color:#f87171; text-align:center;">' + (res.error || '조회 실패') + '</div>';
+            return;
+          }
+          const p = res.profile;
+          if (gridEl) {
+            const tiles = [
+              ['💵 현금', formatMoneySafe(p.cash), '#34d399'],
+              ['🏦 예금', formatMoneySafe(p.bank), '#60a5fa'],
+              ['⛏️ 채굴 Lv', String(p.clicker_level), '#fbbf24'],
+              ['⛏️ 자동 Lv', String(p.auto_miner_level), '#c084fc'],
+              ['📅 연속 출석', String(p.daily_streak) + '일', '#94a3b8'],
+              ['🎰 도박 턴', String(p.gamble_turns), '#94a3b8'],
+              ['🖱️ 누적 클릭', Number(p.total_clicks).toLocaleString(), '#94a3b8'],
+              ['🚫 차단', p.isBanned ? '차단됨' : '정상', p.isBanned ? '#f87171' : '#34d399']
+            ];
+            gridEl.innerHTML = tiles.map(function(t){
+              return '<div style="background:#1e293b; border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:10px;">' +
+                '<div style="font-size:0.72rem; color:#9ca3af;">' + t[0] + '</div>' +
+                '<div style="font-size:0.95rem; font-weight:800; color:' + t[2] + ';">' + t[1] + '</div>' +
+              '</div>';
+            }).join('');
+          }
+        })
+        .catch(function(){
+          if (gridEl) gridEl.innerHTML = '<div style="grid-column:1/-1; color:#f87171; text-align:center;">조회 실패</div>';
+        });
+    }
+
+    function closeUserEditModal() {
+      const modal = document.getElementById('user-edit-modal');
+      if (modal) modal.style.display = 'none';
+      __ueCurrentUserId = null;
+    }
+
+    function formatMoneySafe(v) {
+      try {
+        const n = BigInt(String(v || '0'));
+        if (n >= 1000000000000n) return (Number(n / 1000000000n) / 1000).toFixed(2) + '조';
+        if (n >= 100000000n) return (Number(n / 100000000n) / 10).toFixed(1) + '억';
+        if (n >= 10000n) return (Number(n / 10000n) / 10).toFixed(1) + '만';
+        return Number(n).toLocaleString() + '원';
+      } catch (e) { return String(v); }
+    }
+
+    async function submitUserEdit() {
+      const reasonInput = document.getElementById('ue-reason');
+      const reason = reasonInput ? reasonInput.value.trim() : '';
+      if (!reason) {
+        adminNotice(false, '수정 사유는 필수입니다 (audit_logs 기록용).');
+        if (reasonInput) reasonInput.focus();
+        return;
+      }
+      const fields = {};
+      const pairs = [
+        ['ue-username', 'username'],
+        ['ue-cash', 'cash'],
+        ['ue-bank', 'bank'],
+        ['ue-clicker_level', 'clicker_level'],
+        ['ue-auto_miner_level', 'auto_miner_level'],
+        ['ue-daily_streak', 'daily_streak'],
+        ['ue-gamble_turns', 'gamble_turns'],
+        ['ue-total_clicks', 'total_clicks']
+      ];
+      pairs.forEach(function(p){
+        const el = document.getElementById(p[0]);
+        if (el && String(el.value).trim() !== '') fields[p[1]] = String(el.value).trim();
+      });
+      if (!Object.keys(fields).length) {
+        adminNotice(false, '변경할 필드를 1개 이상 입력하세요.');
+        return;
+      }
+      const userId = __ueCurrentUserId;
+      if (!userId) {
+        adminNotice(false, '대상 유저를 식별할 수 없습니다.');
+        return;
+      }
+      const summary = Object.keys(fields).map(function(k){ return k + '=' + fields[k]; }).join(', ');
+      if (!confirm('⚠️ 정말로 이 유저의 [' + summary + '] 값을 변경하시겠습니까?\n모든 변경 내역은 audit_logs에 영구 기록됩니다.')) return;
+
+      try {
+        const res = await adminFetch('/api/admin/action/user-edit', {
+          method: 'POST',
+          body: { userId, reason, fields, confirm: true }
+        });
+        if (res.success) {
+          adminNotice(true, res.message || '유저 정보 수정 완료');
+          closeUserEditModal();
+          setTimeout(function(){ location.reload(); }, 800);
+        } else {
+          adminNotice(false, res.error || '수정 실패');
+        }
+      } catch (e) {
+        adminNotice(false, '통신 오류');
+      }
+    }
+
+    const ipModalEl = document.getElementById('ip-modal');
+    if (ipModalEl) {
+      ipModalEl.addEventListener('click', function(ev) {
+        if (ev.target.id === 'ip-modal') closeIpModal();
+      });
+    }
+    const userStocksModalEl = document.getElementById('user-stocks-modal');
+    if (userStocksModalEl) {
+      userStocksModalEl.addEventListener('click', function(ev) {
+        if (ev.target.id === 'user-stocks-modal') closeUserStocksModal();
+      });
+    }
+    const userEditModalEl = document.getElementById('user-edit-modal');
+    if (userEditModalEl) {
+      userEditModalEl.addEventListener('click', function(ev) {
+        if (ev.target.id === 'user-edit-modal') closeUserEditModal();
+      });
+    }
+
+    // ── ⚡ [관리자 모든 페이지 실시간 자동 동기화 & 라이브 리프레시] ──
+    (function initAdminLiveSync() {
+      let isFormInputFocused = false;
+      document.addEventListener('focusin', function(e) {
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) {
+          isFormInputFocused = true;
+        }
+      });
+      document.addEventListener('focusout', function(e) {
+        isFormInputFocused = false;
+      });
+
+      // 1. 현재 페이지에 맞는 전용 무음 갱신 함수 실행기
+      function executePageLiveUpdate() {
+        if (isFormInputFocused) return; // 관리자가 텍스트 입력 중일 때는 입력 방해 방지
+
+        // [주식 관리 페이지]
+        if (typeof refreshAllStockHolders === 'function') {
+          refreshAllStockHolders();
+        }
+        // [유저 자산 페이지]
+        else if (typeof refreshUserWealthTable === 'function') {
+          // 유저 자산 페이지 무음 동기화 (DOM 교체)
+          fetch(location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(html, 'text/html');
+              const newTbody = doc.getElementById('admin-users-tbody');
+              const curTbody = document.getElementById('admin-users-tbody');
+              if (newTbody && curTbody && newTbody.innerHTML !== curTbody.innerHTML) {
+                curTbody.innerHTML = newTbody.innerHTML;
+                if (typeof filterAdminUsers === 'function') filterAdminUsers();
+              }
+              // 통계 카드 갱신
+              const newCards = doc.querySelector('.card');
+              const curCards = document.querySelector('.card');
+              if (newCards && curCards && newCards.innerHTML !== curCards.innerHTML) {
+                curCards.innerHTML = newCards.innerHTML;
+              }
+            })
+            .catch(() => {});
+        }
+        // [경제/국고 페이지]
+        else if (typeof refreshEconomyStats === 'function') {
+          refreshEconomyStats();
+        }
+        // [로그/감사 페이지]
+        else if (typeof loadAdminAuditLogs === 'function') {
+          loadAdminAuditLogs();
+        }
+        // [문의/서포트 페이지]
+        else if (typeof refreshInquiries === 'function') {
+          refreshInquiries();
+        }
+        // [기타 관리자 대시보드 페이지]
+        else {
+          // 전용 갱신 함수가 없는 정적 뷰의 경우, 데이터 변경 감지 시 부드럽게 무음 새로고침
+          const lastUpdateCheck = window.__lastAdminReloadTime || 0;
+          if (Date.now() - lastUpdateCheck > 8000) {
+            window.__lastAdminReloadTime = Date.now();
+            fetch(location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+              .then(r => r.text())
+              .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newContent = doc.querySelector('.admin-content') || doc.querySelector('.admin-container');
+                const curContent = document.querySelector('.admin-content') || document.querySelector('.admin-container');
+                if (newContent && curContent && newContent.innerHTML !== curContent.innerHTML) {
+                  curContent.innerHTML = newContent.innerHTML;
+                }
+              })
+              .catch(() => {});
+          }
+        }
+      }
+
+      // 2. 웹소켓 실시간 이벤트 리스너 연결
+      function connectAdminSocket() {
+        if (typeof io !== 'undefined') {
+          try {
+            const socket = io({ transports: ['websocket', 'polling'], timeout: 6000 });
+            window.__adminLiveSocket = socket;
+
+            socket.on('connect', function() {
+              socket.emit('admin:join', {});
+            });
+
+            // 주가 변동, 거래 체결, 액면분할, 인적분할, 관리자 작업 발생 시 0초 즉시 갱신
+            const liveEvents = ['market:update', 'market:snapshot', 'stock:split', 'stock:spinoff', 'trade:executed', 'admin:event', 'user:sync'];
+            liveEvents.forEach(function(evt) {
+              socket.on(evt, function() {
+                executePageLiveUpdate();
+              });
+            });
+          } catch (e) {}
+        }
+      }
+
+      if (document.readyState === 'complete') {
+        connectAdminSocket();
+      } else {
+        window.addEventListener('load', connectAdminSocket);
+      }
+
+      // 3. 주기적 스마트 백그라운드 폴러 (10초 주기 무음 자동 갱신)
+      setInterval(function() {
+        executePageLiveUpdate();
+      }, 10000);
+    })();
+  </script>
+  <!-- 🧰 통합 클라이언트 헬퍼 -->
+  <script src="/static/js/dx-helpers.js"></script>
+  <!-- Chart.js (주가 변동 기록 차트) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</body>
+</html>

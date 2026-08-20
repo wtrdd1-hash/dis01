@@ -1,16 +1,19 @@
 const { pool } = require('../config/database');
+const { STOCK, clampStockDelta, hourlyDividendForHolding } = require('./economyBalance');
+const { pushUserLive } = require('./liveSync');
+const { whereNotAdmin } = require('./economyCohort');
 
-// 우리 커뮤니티 가상 경제 시황 국면 (Custom Community Economic Regimes - 상승 & 하락 사이클 보장)
+// 우리 커뮤니티 가상 경제 시황 국면 (Custom Community Economic Regimes - 역동적 박스권 & 경기 사이클)
 const MARKET_REGIMES = [
-  { name: '🦆 월덕 경제 번영기 (Duck Prosperity)', drift: 0.03, volatilityFactor: 1.0, desc: '서버 커뮤니티 활동과 채굴, 카지노 이용이 활발해지며 전 종목 매수세가 우세합니다.' },
-  { name: '📉 가상 시장 차익실현 조정기 (Market Cooldown)', drift: -0.035, volatilityFactor: 1.2, desc: '단기 급등에 따른 차익 실현 매물 출회로 전반적인 숨고르기 조정 국면에 진입했습니다.' },
-  { name: '⚖️ 안정적 박스권 횡보 (Stable Sideways)', drift: 0.00, volatilityFactor: 0.7, desc: '예금과 실물 소비가 균형을 이루며 주가가 안정적인 가격대를 형성하고 있습니다.' },
-  { name: '🔥 카지노 & 광산 대박 랠리 (Jackpot Boom)', drift: 0.05, volatilityFactor: 1.4, desc: '광산에서 초희귀 원석이 대량 출토되고 카지노 잭팟 열풍으로 투기적 매수세가 폭발합니다.' },
-  { name: '❄️ 시장 긴축 & 매물 소화기 (Market Tightening)', drift: -0.04, volatilityFactor: 1.3, desc: '중앙은행의 건전성 정책과 현금 확보 심리로 주가가 일시적 하락세를 보입니다.' },
-  { name: '🚀 냥코 양자 퀀텀 폭등 (Neko Quantum Surge)', drift: 0.06, volatilityFactor: 1.6, desc: '네코 랩스의 신비한 고양이 에너지 기술 발표로 첨단 테마주들이 폭등세를 주도합니다.' },
-  { name: '⚠️ 경기 침체 우려 & 저가 매수 구간 (Recession Fear)', drift: -0.045, volatilityFactor: 1.5, desc: '투자 심리 위축으로 급락세가 나타나며 스마트 머니의 저가 분할매수 기회가 열립니다.' },
-  { name: '🏦 중앙은행 유동성 무제한 살포 (Bank Liquidity)', drift: 0.04, volatilityFactor: 1.2, desc: '덕스 중앙은행의 지원금 확대와 예금 금리 우대로 풍부한 유동성이 증시로 유입됩니다.' },
-  { name: '🌟 메가 서포터즈 슈퍼사이클 (Mega Supercycle)', drift: 0.07, volatilityFactor: 1.8, desc: '전 세계 디스코드 유저 유입과 대형 기관 투자가 몰리며 전 종목 역사적 신고가를 돌파합니다.' }
+  { id: 'BOOM', type: 'SUPER_BULL', name: '🦆 월덕 경제 번영기 (Duck Prosperity)', drift: 0.025, volatilityFactor: 1.0, desc: '커뮤니티 활동과 소비가 활발해지며 전반적인 매수세가 완만하게 우세합니다.' },
+  { id: 'COOLDOWN', type: 'RECESSION', name: '📉 가상 시장 차익실현 조정기 (Market Cooldown)', drift: -0.015, volatilityFactor: 1.1, desc: '단기 급등에 따른 차익 실현 매물 출회로 전반적인 숨고르기 조정 국면에 진입했습니다.' },
+  { id: 'STABLE', type: 'NORMAL', name: '⚖️ 안정적 박스권 횡보 (Stable Sideways)', drift: 0.005, volatilityFactor: 0.7, desc: '매수세와 매도세가 팽팽하게 맞서며 주가가 안정적인 가격대를 형성하고 있습니다.' },
+  { id: 'RALLY', type: 'BULL', name: '🔥 카지노 & 광산 단기 랠리 (Jackpot Boom)', drift: 0.035, volatilityFactor: 1.3, desc: '단기 테마성 자금이 유입되며 일부 종목이 상승 탄력을 받습니다.' },
+  { id: 'TIGHTENING', type: 'CRASH', name: '❄️ 시장 긴축 & 매물 소화기 (Market Tightening)', drift: -0.020, volatilityFactor: 1.2, desc: '중앙은행의 유동성 흡수와 현금 확보 심리로 주가가 하락세를 보입니다.' },
+  { id: 'SLUMP', type: 'CRASH', name: '📉 경기 둔화 & 투자 심리 위축 (Market Slump)', drift: -0.022, volatilityFactor: 1.3, desc: '투자자들의 관망세와 손절 매물 출회로 주요 종목들이 약세를 면치 못하고 있습니다.' },
+  { id: 'PANIC', type: 'CRASH', name: '⚠️ 패닉 셀 & 저가 매수 공방 (Panic Sell & Dip Buy)', drift: -0.010, volatilityFactor: 1.4, desc: '변동성이 극대화되며 급락과 반등이 치열하게 교차하는 구간입니다.' },
+  { id: 'LIQUIDITY', type: 'SUPER_BULL', name: '🏦 중앙은행 유동성 완화 (Bank Liquidity)', drift: 0.028, volatilityFactor: 1.0, desc: '중앙은행의 유동성 공급으로 증시에 자금이 완만하게 유입됩니다.' },
+  { id: 'LOW_VOL', type: 'NORMAL', name: '⚖️ 저변동 수렴 국면 (Low Volatility Range)', drift: 0.002, volatilityFactor: 0.6, desc: '거래량이 줄어들며 특정 지지선과 저항선 사이에서 수렴합니다.' }
 ];
 
 // 120가지 이상의 독창적인 가상 커뮤니티 기업 뉴스 & 경제 공시 풀
@@ -159,7 +162,67 @@ const NEWS_EVENTS = [
   { title: '🦆 월덕 지주사 & 냥코 랩스 & 이지스크랩, 3사 합작 초전도 AI 프로젝트 가동', text: '지주사의 자본, 냥코의 초전도체, 이지스크랩의 빅데이터가 결합된 드림팀이 출범했습니다.', eventType: 'MACRO_SURGE', sentiment: 'BULL', importance: 'URGENT', relatedStock: 'WTRD', impactSector: '첨단 기술 융합', impact: { WTRD: 0.25, NEKO: 0.30, SCRP: 0.25 } },
   { title: '🎰 황금오리 카지노 & 월덕 광산 & 럭키 복권, [골든 트라이앵글] 제휴', text: '채굴한 보석으로 카지노와 복권을 즐기고 당첨금을 즉시 정산하는 원스톱 생태계가 구축되었습니다.', eventType: 'MACRO_SURGE', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'CASN', impactSector: '게이밍 & 채굴 연합', impact: { CASN: 0.22, MINE: 0.20, SLOT: 0.24 } },
   { title: '🏦 덕스 중앙은행 & 황금닭 치킨, [소상공인 치킨 지원 바우처] 전격 체결', text: '중앙은행 예치금을 통해 치킨 할인 바우처를 전 유저에게 지급하여 소비 진작에 나섭니다.', eventType: 'MACRO_SURGE', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'CHKN', impactSector: '금융 & 소비재 제휴', impact: { CHKN: 0.18, BANK: 0.12 } },
-  { title: '🌟 커뮤니티 상장 기업 전체 1분기 영업이익 합계 1조 원 돌파 신기록', text: '8개 상장사 모두 흑자 경영을 달성하며 펀더멘털의 견고함을 입증했습니다.', eventType: 'MACRO_SURGE', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'ALL', impactSector: '시장 전반', impact: { ALL: 0.09, WTRD: 0.14 } },
+  { title: '🌟 커뮤니티 상장 기업 전체 1분기 영업이익 합계 1조 원 돌파 신기록', text: '상장사 모두 흑자 경영을 달성하며 펀더멘털의 견고함을 입증했습니다.', eventType: 'MACRO_SURGE', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'ALL', impactSector: '시장 전반', impact: { ALL: 0.09, WTRD: 0.14 } },
+
+  // 🧠 10. 오리 인공지능 & 퀀텀 칩스 (AICH) - 10개
+  { title: '🧠 오리 AI 칩스, 1nm 차세대 퀀텀 NPU 가속기 양산 성공 공시', text: '기존 GPU 대비 연산 속도 10배, 전력 소모 80% 감소한 혁신적 AI 칩셋 양산에 성공했습니다.', eventType: 'CHIP_TECH', sentiment: 'BULL', importance: 'URGENT', relatedStock: 'AICH', impactSector: 'AI 반도체 & NPU 가속기', impact: { AICH: 0.32, SCRP: 0.12, WTRD: 0.08 } },
+  { title: '🧠 글로벌 빅테크 기업에 1조 원 규모 AI 가속기 독점 공급 계약 체결', text: '초대형 데이터센터용 인공지능 칩셋 납품 계약을 체결하며 사상 최대 수주 잔고를 달성했습니다.', eventType: 'CHIP_TECH', sentiment: 'BULL', importance: 'URGENT', relatedStock: 'AICH', impactSector: 'AI 반도체 & NPU 가속기', impact: { AICH: 0.28, BANK: 0.08 } },
+  { title: '🧠 차세대 초고대역폭 메모리 HBM4 독자 패키징 수율 98% 달성', text: '업계 최고 수준의 반도체 수율을 확보하여 원가 경쟁력을 비약적으로 높였습니다.', eventType: 'CHIP_TECH', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'AICH', impactSector: 'AI 반도체 & NPU 가속기', impact: { AICH: 0.22 } },
+  { title: '⚠️ 글로벌 파운드리 웨이퍼 원자재 공급 지연으로 단기 생산 차질 발생', text: '희귀 가스 통관 지연으로 반도체 조립 라인이 일시적으로 숨고르기에 들어갔습니다.', eventType: 'CHIP_TECH', sentiment: 'BEAR', importance: 'NORMAL', relatedStock: 'AICH', impactSector: 'AI 반도체 & NPU 가속기', impact: { AICH: -0.08 } },
+  { title: '🧠 오리 AI 칩스, 자율주행 특화 뉴로모픽 프로세서 칩 개발 완료', text: '인간 뇌신경망을 모방한 자율주행 차량용 초저지연 비전 칩셋을 공개했습니다.', eventType: 'CHIP_TECH', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'AICH', impactSector: 'AI 반도체 & NPU 가속기', impact: { AICH: 0.24, AUTO: 0.15 } },
+  { title: '🧠 미국/유럽 주요 정부 인공지능 반도체 보조금 5,000억원 수령 확정', text: '정부 차원의 반도체 육성 펀드 지원 대상자로 선정되어 대규모 현금이 유입됩니다.', eventType: 'CHIP_TECH', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'AICH', impactSector: 'AI 반도체 & NPU 가속기', impact: { AICH: 0.20, BANK: 0.06 } },
+  { title: '⚠️ 경쟁사 신제품 출시에 따른 반도체 단가 인하 경쟁 심화 우려', text: '시장 점유율 방어를 위해 단기 판가 조정에 들어가며 영업이익률이 일시 둔화되었습니다.', eventType: 'CHIP_TECH', sentiment: 'BEAR', importance: 'NORMAL', relatedStock: 'AICH', impactSector: 'AI 반도체 & NPU 가속기', impact: { AICH: -0.06 } },
+  { title: '🧠 세계 반도체 학회(ISSCC) 최우수 혁신 논문상 및 기술 대상 수상', text: '독자적인 3차원 적층 칩렛 기술로 전 세계 학계와 업계의 찬사를 받았습니다.', eventType: 'CHIP_TECH', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'AICH', impactSector: 'AI 반도체 & NPU 가속기', impact: { AICH: 0.16 } },
+  { title: '🧠 오리 AI 칩스, 연간 순이익 300% 폭증 및 주당 특별 현금 배당 공시', text: '반도체 슈퍼사이클 도래에 힘입어 주주들에게 파격적인 현금 배당을 결의했습니다.', eventType: 'DIVIDEND_BONUS', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'AICH', impactSector: 'AI 반도체 & NPU 가속기', impact: { AICH: 0.26, BANK: 0.08 } },
+  { title: '🧠 차세대 광자(Photonic) 연산 반도체 시제품 세계 최초 시연 성공', text: '전기 대신 빛으로 연산하는 차세대 포토닉스 칩셋 구동에 성공하며 기술 격차를 벌렸습니다.', eventType: 'CHIP_TECH', sentiment: 'BULL', importance: 'URGENT', relatedStock: 'AICH', impactSector: 'AI 반도체 & NPU 가속기', impact: { AICH: 0.30, NEKO: 0.12 } },
+
+  // 🚀 11. 덕스 에어로스페이스 & 방산 (SPAC) - 10개
+  { title: '🚀 덕스 에어로스페이스, 정지궤도 초정밀 통신위성 1호기 발사 완전 성공', text: '자체 개발 우주 발사체로 인공위성을 정밀 궤도에 안착시키며 우주 강국으로 도약했습니다.', eventType: 'SPACE_LAUNCH', sentiment: 'BULL', importance: 'URGENT', relatedStock: 'SPAC', impactSector: '우주항공 & 국방 방위산업', impact: { SPAC: 0.30, WTRD: 0.10, SCRP: 0.08 } },
+  { title: '🚀 다국적 방위청과 8,000억원 규모 차세대 무인 방산 드론 체계 공급 계약', text: 'AI 자율비행 방산 드론 수주 계약을 체결하며 방산 수출 대박을 터뜨렸습니다.', eventType: 'SPACE_LAUNCH', sentiment: 'BULL', importance: 'URGENT', relatedStock: 'SPAC', impactSector: '우주항공 & 국방 방위산업', impact: { SPAC: 0.27, BANK: 0.07 } },
+  { title: '🚀 재사용 가능한 친환경 메탄 로켓 엔진 연소 시험 100회 무결점 통과', text: '스페이스X급 로켓 엔진 재사용 기술을 확보하여 발사 비용을 90% 절감했습니다.', eventType: 'SPACE_LAUNCH', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'SPAC', impactSector: '우주항공 & 국방 방위산업', impact: { SPAC: 0.23, NEKO: 0.09 } },
+  { title: '⚠️ 기상 악화로 인한 소형 시험 발사체 일정 1주일 연기 안내', text: '태풍 및 강풍으로 발사 카운트다운이 안전을 위해 순연되며 단기 관망세가 형성되었습니다.', eventType: 'SPACE_LAUNCH', sentiment: 'BEAR', importance: 'NORMAL', relatedStock: 'SPAC', impactSector: '우주항공 & 국방 방위산업', impact: { SPAC: -0.07 } },
+  { title: '🚀 달 기지 건설 프로젝트 [오리 아르테미스] 공식 탐사선 납품 업체 선정', text: '국제 우주정거장 및 달 궤도선 모듈 납품 계약을 체결하여 우주 개발의 주역이 되었습니다.', eventType: 'SPACE_LAUNCH', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'SPAC', impactSector: '우주항공 & 국방 방위산업', impact: { SPAC: 0.25, MINE: 0.11 } },
+  { title: '🚀 초음속 하이퍼소닉 방산 미사일 요격 방어 시스템 개발 완료', text: '국가 영공을 완벽 방어하는 최첨단 방공 레이더 및 요격 체계가 실전 배치되었습니다.', eventType: 'SPACE_LAUNCH', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'SPAC', impactSector: '우주항공 & 국방 방위산업', impact: { SPAC: 0.19 } },
+  { title: '⚠️ 발사대 지상 설비 밸브 부품 교체로 정기 보수 비용 발생', text: '안전성 강화를 위한 설비 유지보수 작업이 진행되었습니다.', eventType: 'SPACE_LAUNCH', sentiment: 'BEAR', importance: 'NORMAL', relatedStock: 'SPAC', impactSector: '우주항공 & 국방 방위산업', impact: { SPAC: -0.05 } },
+  { title: '🚀 글로벌 우주 인터넷 군집위성 60기 동시 궤도 투하 성공', text: '전 세계 오지에서도 1Gbps 속도로 통신이 가능한 저궤도 위성망 구축에 박차를 가합니다.', eventType: 'SPACE_LAUNCH', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'SPAC', impactSector: '우주항공 & 국방 방위산업', impact: { SPAC: 0.21, SCRP: 0.08 } },
+  { title: '🚀 덕스 에어로스페이스, 순이익 60% 주주 환원 및 우주투어 탑승권 추첨', text: '주주총회를 통해 높은 배당과 주주 대상 준궤도 우주여행 티켓 이벤트를 발표했습니다.', eventType: 'DIVIDEND_BONUS', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'SPAC', impactSector: '우주항공 & 국방 방위산업', impact: { SPAC: 0.18, BANK: 0.05 } },
+  { title: '🚀 차세대 스텔스 복합소재 탄소섬유 외피 기술 미국 특허 등록', text: '레이더 전파를 99% 흡수하는 특수 스텔스 신소재 특허를 획득했습니다.', eventType: 'SPACE_LAUNCH', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'SPAC', impactSector: '우주항공 & 국방 방위산업', impact: { SPAC: 0.16 } },
+
+  // 🧬 12. 월덕 바이오 파마 (BIOX) - 10개
+  { title: '🧬 월덕 바이오, 불로장생 오리 펩타이드 항암 신약 글로벌 임상 3상 대성공!', text: '말기 암 환자 대상 임상 3상에서 완치율 94%라는 기적적인 결과를 발표하며 전 세계 의학계를 뒤흔들었습니다.', eventType: 'BIO_TRIAL', sentiment: 'BULL', importance: 'URGENT', relatedStock: 'BIOX', impactSector: '바이오 헬스케어 & 신약 개발', impact: { BIOX: 0.40, WTRD: 0.12, BANK: 0.08 } },
+  { title: '🧬 글로벌 1위 제약사에 3조 원 규모 신약 기술수출(라이선스 아웃) 계약 체결', text: '계약금만 3,000억 원에 달하는 메가톤급 기술 수출 계약을 성사시켰습니다.', eventType: 'BIO_TRIAL', sentiment: 'BULL', importance: 'URGENT', relatedStock: 'BIOX', impactSector: '바이오 헬스케어 & 신약 개발', impact: { BIOX: 0.35, BANK: 0.10 } },
+  { title: '🧬 FDA(미국 식품의약국) 패스트트랙 신속 심사 품목 공식 지정', text: '혁신 치료제 지정으로 신약 출시 일정이 2년 이상 앞당겨질 전망입니다.', eventType: 'BIO_TRIAL', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'BIOX', impactSector: '바이오 헬스케어 & 신약 개발', impact: { BIOX: 0.26 } },
+  { title: '⚠️ 임상 2상 투약 데이터 통계 보완 요청으로 승인 일정 일시 지연', text: '규제 당국의 추가 서류 제출 요청으로 단기 불확실성이 발생했으나 안전성에는 문제가 없습니다.', eventType: 'BIO_TRIAL', sentiment: 'BEAR', importance: 'HIGH', relatedStock: 'BIOX', impactSector: '바이오 헬스케어 & 신약 개발', impact: { BIOX: -0.12 } },
+  { title: '🧬 유전자 가위(CRISPR) 기반 희귀 유전 질환 치료제 동물 시험 완치', text: '단 1회 투여로 선천성 유전 질환을 교정하는 획기적인 연구 결과가 네이처지에 실렸습니다.', eventType: 'BIO_TRIAL', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'BIOX', impactSector: '바이오 헬스케어 & 신약 개발', impact: { BIOX: 0.28 } },
+  { title: '🧬 대규모 바이오 의약품 CDMO(위탁생산) 스마트 공장 완공 및 가동', text: '연간 20만 리터 규모의 첨단 항체 치료제 생산 시설이 본격 가동에 들어갔습니다.', eventType: 'BIO_TRIAL', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'BIOX', impactSector: '바이오 헬스케어 & 신약 개발', impact: { BIOX: 0.19 } },
+  { title: '⚠️ 바이오 배양 배지 원료 수입가 상승으로 단기 연구개발비 지출 증가', text: '최고급 시약 구입으로 1회성 R&D 비용이 증가했습니다.', eventType: 'BIO_TRIAL', sentiment: 'BEAR', importance: 'NORMAL', relatedStock: 'BIOX', impactSector: '바이오 헬스케어 & 신약 개발', impact: { BIOX: -0.06 } },
+  { title: '🧬 줄기세포 기반 노화 역전 회춘 화장품 원료 특허 등록 및 완판', text: '의약품 기술을 접목한 더마 코스메틱 신제품이 출시 당일 품절되었습니다.', eventType: 'BIO_TRIAL', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'BIOX', impactSector: '바이오 헬스케어 & 신약 개발', impact: { BIOX: 0.17, LUXU: 0.10 } },
+  { title: '🧬 월덕 바이오, 순이익 흑자 전환 기념 무상증자 1:2 전격 단행', text: '기술특례 상장에서 완전한 흑자 바이오 기업으로 탈바꿈하며 주주 가치를 높였습니다.', eventType: 'DIVIDEND_BONUS', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'BIOX', impactSector: '바이오 헬스케어 & 신약 개발', impact: { BIOX: 0.24, BANK: 0.06 } },
+  { title: '🧬 만성 통증 1초 완화 나노 패치 유럽 CE 인증 획득', text: '부작용 없는 차세대 패치형 진통제가 유럽 전역 약국에 유통됩니다.', eventType: 'BIO_TRIAL', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'BIOX', impactSector: '바이오 헬스케어 & 신약 개발', impact: { BIOX: 0.15 } },
+
+  // 💎 13. 황금오리 럭셔리 & 부티크 (LUXU) - 10개
+  { title: '💎 황금오리 럭셔리, 최고급 한정판 다이아몬드 워치 100억원 옥션 낙찰', text: '전 세계 단 1피스만 제작된 플래티넘 다이아몬드 오리 투르비옹 시계가 신기록을 세웠습니다.', eventType: 'LUXURY_BOOM', sentiment: 'BULL', importance: 'URGENT', relatedStock: 'LUXU', impactSector: '글로벌 명품 패션 & 하이엔드 쥬얼리', impact: { LUXU: 0.25, MINE: 0.10, CASN: 0.08 } },
+  { title: '💎 파리/밀라노 패션위크 메인 오프닝 쇼 극찬 및 수주액 5,000억원 달성', text: '황금오리 오트쿠튀르 컬렉션이 글로벌 패션 에디터들의 만장일치 찬사를 받았습니다.', eventType: 'LUXURY_BOOM', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'LUXU', impactSector: '글로벌 명품 패션 & 하이엔드 쥬얼리', impact: { LUXU: 0.22, WTRD: 0.06 } },
+  { title: '💎 VIP 멤버십 전용 플래그십 하우스 오픈 및 대기자 1만 명 돌파', text: '초고액 자산가들의 명품 가방 및 쥬얼리 오픈런이 이어지며 영업이익률 45%를 달성했습니다.', eventType: 'LUXURY_BOOM', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'LUXU', impactSector: '글로벌 명품 패션 & 하이엔드 쥬얼리', impact: { LUXU: 0.20, BANK: 0.05 } },
+  { title: '⚠️ 최고급 이탈리아 가죽 통관 지연으로 일부 백 라인 출고 지연', text: '원자재 검수 강화로 프리미엄 백 출고가 며칠 늦어졌으나 품질에는 이상이 없습니다.', eventType: 'LUXURY_BOOM', sentiment: 'BEAR', importance: 'NORMAL', relatedStock: 'LUXU', impactSector: '글로벌 명품 패션 & 하이엔드 쥬얼리', impact: { LUXU: -0.05 } },
+  { title: '💎 황금오리 럭셔리, 전 품목 판매가 15% 기습 인상에도 수요 폭증', text: '명품의 베블런 효과(가격이 오를수록 과시욕으로 수요가 증가)로 매출이 2배 증가했습니다.', eventType: 'LUXURY_BOOM', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'LUXU', impactSector: '글로벌 명품 패션 & 하이엔드 쥬얼리', impact: { LUXU: 0.24 } },
+  { title: '💎 K-팝 글로벌 톱스타 전원 브랜드 앰버서더 전속 계약 체결', text: '글로벌 Z세대 팬덤의 폭발적 관심으로 주얼리와 향수 라인이 품절 대란을 빚고 있습니다.', eventType: 'LUXURY_BOOM', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'LUXU', impactSector: '글로벌 명품 패션 & 하이엔드 쥬얼리', impact: { LUXU: 0.18, CASN: 0.06 } },
+  { title: '⚠️ 명품 모조품(짝퉁) 단속 강화에 따른 일시적 법무 비용 지출', text: '브랜드 가치 수호를 위한 대대적 지식재산권 보호 소송을 전개하고 있습니다.', eventType: 'LUXURY_BOOM', sentiment: 'BEAR', importance: 'NORMAL', relatedStock: 'LUXU', impactSector: '글로벌 명품 패션 & 하이엔드 쥬얼리', impact: { LUXU: -0.04 } },
+  { title: '💎 글로벌 면세점 및 럭셔리 백화점 메인 로열 1층 입점 계약 독점 체결', text: '전 세계 주요 공항 및 최고급 백화점의 최상급 명당자리를 독점 확보했습니다.', eventType: 'LUXURY_BOOM', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'LUXU', impactSector: '글로벌 명품 패션 & 하이엔드 쥬얼리', impact: { LUXU: 0.16 } },
+  { title: '💎 황금오리 럭셔리, 연간 배당 수익률 5.5% 확정 고배당주 등극', text: '막대한 현금 유입을 바탕으로 주주들에게 풍성한 결산 배당금을 지급합니다.', eventType: 'DIVIDEND_BONUS', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'LUXU', impactSector: '글로벌 명품 패션 & 하이엔드 쥬얼리', impact: { LUXU: 0.21, BANK: 0.07 } },
+  { title: '💎 한정판 아트 콜라보레이션 에디션 발매 1분 만에 전 세계 서버 다운', text: '유명 현대 미술가와의 협업 리미티드 에디션이 중고 리셀가 500%를 기록했습니다.', eventType: 'LUXURY_BOOM', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'LUXU', impactSector: '글로벌 명품 패션 & 하이엔드 쥬얼리', impact: { LUXU: 0.17 } },
+
+  // 🚗 14. 덕스 모빌리티 & 자율주행 (AUTO) - 10개
+  { title: '🚗 덕스 모빌리티, 레벨 4 무인 완전 자율주행 로보택시 상용 면허 취득!', text: '운전자가 전혀 타지 않는 완전 무인 자율주행 택시 서비스가 시내 전역에서 본격 운행을 시작했습니다.', eventType: 'EV_AUTO', sentiment: 'BULL', importance: 'URGENT', relatedStock: 'AUTO', impactSector: '자율주행 전기차 & 미래 모빌리티', impact: { AUTO: 0.32, AICH: 0.12, WTRD: 0.08 } },
+  { title: '🚗 1회 충전 1,200km 주행 전고체 배터리 탑재 하이퍼 전기차 발표', text: '충전 시간 5분에 서울-부산을 왕복할 수 있는 꿈의 전기차가 전 세계의 이목을 집중시켰습니다.', eventType: 'EV_AUTO', sentiment: 'BULL', importance: 'URGENT', relatedStock: 'AUTO', impactSector: '자율주행 전기차 & 미래 모빌리티', impact: { AUTO: 0.28, NEKO: 0.10 } },
+  { title: '🚗 사전 예약 24시간 만에 10만 대 돌파 역대 최고 신차 기록 달성', text: '스타일리시한 미래형 유선형 디자인과 압도적 성능으로 사전 예약이 폭주했습니다.', eventType: 'EV_AUTO', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'AUTO', impactSector: '자율주행 전기차 & 미래 모빌리티', impact: { AUTO: 0.24, BANK: 0.06 } },
+  { title: '⚠️ 배터리 팩 냉각 밸브 무상 소프트웨어 OTA 업데이트 실시', text: '선제적 안전 예방 조치로 무선 소프트웨어 패치를 진행하며 단기 비용이 발생했습니다.', eventType: 'EV_AUTO', sentiment: 'BEAR', importance: 'NORMAL', relatedStock: 'AUTO', impactSector: '자율주행 전기차 & 미래 모빌리티', impact: { AUTO: -0.07 } },
+  { title: '🚗 도심 항공 모빌리티(UAM) 플라잉 오리 택시 시범 비행 성공', text: '도로 정체를 피하는 수직이착륙 도심 항공 모빌리티 시범 비행을 성공리에 마쳤습니다.', eventType: 'EV_AUTO', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'AUTO', impactSector: '자율주행 전기차 & 미래 모빌리티', impact: { AUTO: 0.26, SPAC: 0.12 } },
+  { title: '🚗 글로벌 자동차 1위 제조사와 2조 원 규모 자율주행 OS 라이선스 계약', text: '자체 개발한 무인 자율주행 운영체제를 완성차 업체에 독점 공급하기로 합의했습니다.', eventType: 'EV_AUTO', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'AUTO', impactSector: '자율주행 전기차 & 미래 모빌리티', impact: { AUTO: 0.22, SCRP: 0.08 } },
+  { title: '⚠️ 차량용 반도체 리드타임 증가로 출고 대기 기간 소폭 연장', text: '공급망 다변화를 통해 생산 라인을 안정화하고 있습니다.', eventType: 'EV_AUTO', sentiment: 'BEAR', importance: 'NORMAL', relatedStock: 'AUTO', impactSector: '자율주행 전기차 & 미래 모빌리티', impact: { AUTO: -0.05 } },
+  { title: '🚗 친환경 태양광 루프 충전 시스템 세계 최초 전 차종 기본 탑재', text: '주행 중 햇빛만으로 매일 50km를 무료 주행할 수 있는 솔라루프 기술이 호평을 받습니다.', eventType: 'EV_AUTO', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'AUTO', impactSector: '자율주행 전기차 & 미래 모빌리티', impact: { AUTO: 0.17 } },
+  { title: '🚗 덕스 모빌리티, 기가팩토리 생산 수율 95% 돌파 및 주주 배당 공시', text: '생산 효율 극대화로 분기 영업이익이 사상 최고치를 경신했습니다.', eventType: 'DIVIDEND_BONUS', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'AUTO', impactSector: '자율주행 전기차 & 미래 모빌리티', impact: { AUTO: 0.20, BANK: 0.05 } },
+  { title: '🚗 초고속 무인 자율주행 레이싱 대회 월드 챔피언십 우승', text: '세계 정상급 인공지능 주행 알고리즘의 우수성을 레이싱 서킷에서 완벽 입증했습니다.', eventType: 'EV_AUTO', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'AUTO', impactSector: '자율주행 전기차 & 미래 모빌리티', impact: { AUTO: 0.15 } },
   { title: '🎁 전 종목 특별 분기 배당 주간 선포 및 자동 이자 지급 개시', text: '배당을 실시하는 모든 종목 보유자들에게 현금 배당이 계좌로 즉시 입금됩니다.', eventType: 'DIVIDEND_BONUS', sentiment: 'BULL', importance: 'HIGH', relatedStock: 'ALL', impactSector: '시장 전반', impact: { ALL: 0.08, BANK: 0.15, WTRD: 0.12 } },
   { title: '🔥 숏스퀴즈 랠리 폭발! 공매도 세력 청산으로 전 종목 수직 상승', text: '하락에 배팅했던 악성 투기 세력들이 강제 청산당하며 주가가 수직 급등합니다.', eventType: 'MACRO_SURGE', sentiment: 'BULL', importance: 'URGENT', relatedStock: 'ALL', impactSector: '시장 전반', impact: { ALL: 0.16, SLOT: 0.25, NEKO: 0.28 } },
   { title: '🌐 커뮤니티 데이터 트래픽 월간 10억 뷰 돌파 신기록', text: '웹사이트와 디스코드 봇 이용량이 폭발적으로 늘어나며 디지털 경제 규모가 커졌습니다.', eventType: 'MACRO_SURGE', sentiment: 'BULL', importance: 'NORMAL', relatedStock: 'SCRP', impactSector: '시장 전반', impact: { SCRP: 0.15, WTRD: 0.11 } },
@@ -198,12 +261,14 @@ async function updateStockPrices() {
     const userTradeImpactMap = {};
     try {
       // 최근 1시간 동안의 유저 실거래량 (매수 vs 매도) 집계
+      const txFilter = whereNotAdmin('user_id');
       const [txRows] = await connection.query(`
         SELECT stock_id, action, COALESCE(SUM(amount), 0) as total_amount, COALESCE(SUM(total_price), 0) as total_money
         FROM stock_transactions
         WHERE created_at >= NOW() - INTERVAL 1 HOUR
+          AND ${txFilter.sql}
         GROUP BY stock_id, action
-      `);
+      `, txFilter.params);
 
       const buyMap = {};
       const sellMap = {};
@@ -229,7 +294,11 @@ async function updateStockPrices() {
     // 3. 👥 커뮤니티 전체 유저 총 유동성 지표 반영
     let communityLiquidityFactor = 0.0;
     try {
-      const [userSummary] = await connection.query('SELECT AVG(cash) as avg_cash, AVG(bank) as avg_bank FROM users');
+      const cashFilter = whereNotAdmin('discord_id');
+      const [userSummary] = await connection.query(
+        `SELECT AVG(cash) as avg_cash, AVG(bank) as avg_bank FROM users WHERE ${cashFilter.sql}`,
+        cashFilter.params
+      );
       if (userSummary.length > 0) {
         const avgTotal = Number(userSummary[0].avg_cash || 0) + Number(userSummary[0].avg_bank || 0);
         if (avgTotal > 1000000) communityLiquidityFactor = 0.02;
@@ -240,7 +309,7 @@ async function updateStockPrices() {
     // 50% 확률로 120개 중 랜덤 뉴스 이벤트 발생 및 DB 저장
     let eventImpactMap = {};
     lastNews = null;
-    if (Math.random() < 0.50) {
+    if (Math.random() < STOCK.NEWS_CHANCE) {
       const selectedEvent = NEWS_EVENTS[Math.floor(Math.random() * NEWS_EVENTS.length)];
       lastNews = {
         title: selectedEvent.title,
@@ -277,13 +346,61 @@ async function updateStockPrices() {
 
       const regimeDrift = currentRegime.drift;
       const eventBoost = (eventImpactMap[stockId] || 0) + (eventImpactMap['ALL'] || 0);
-      const userImpact = userTradeImpactMap[stockId] || 0;
-      const adjustedVolatility = baseVolatility * currentRegime.volatilityFactor;
-      const noise = (Math.random() * 2 - 1) * adjustedVolatility;
+      const userImpact = Math.max(-0.03, Math.min(0.03, (userTradeImpactMap[stockId] || 0) * 0.5));
+      // 🪫 변동폭 축소: 사용자 요청으로 노이즈/드리프트 크기를 30%로 축소
+      const adjustedVolatility = baseVolatility * currentRegime.volatilityFactor * 0.3;
+      let noise = (Math.random() * 2 - 1) * adjustedVolatility;
 
-      // 최종 변동률 = 시황 + 공시 + 유저 실거래(수요/공급) + 유동성 + 노이즈
-      const totalDelta = regimeDrift + eventBoost + userImpact + communityLiquidityFactor + noise;
+      // 🛡️ 가격 이상 감지: 현재가가 24h 평균 대비 ±20% 이상 벌어지면 변동폭 추가 감쇠
+      // (변동시간은 건드리지 않고 변동폭만 더 줄임)
+      const prevHigh24 = BigInt(stock.high_24h || stock.price || 100);
+      const prevLow24 = BigInt(stock.low_24h || stock.price || 100);
+      let dampenFactor = 1.0;
+      if (prevHigh24 > 0n && prevLow24 > 0n && prevHigh24 !== prevLow24) {
+        const mid24h = (Number(prevHigh24) + Number(prevLow24)) / 2;
+        if (mid24h > 0) {
+          const deviation = (Number(currentPrice) - mid24h) / mid24h; // -1 ~ 1
+          const absDev = Math.abs(deviation);
+          if (absDev > 0.20) {
+            // ±20% 이상 → 1/(1 + (absDev-0.2)*5) 만큼 감쇠 (ex: 30% → 0.4, 50% → 0.25)
+            dampenFactor = 1 / (1 + (absDev - 0.2) * 5);
+            if (dampenFactor < 0.1) dampenFactor = 0.1; // 최소 10%는 유지
+          }
+        }
+      }
+      noise *= dampenFactor;
+
+      // 🌐 실제 거시경제 경기 사이클 및 금리 효과 연동
+      let macroCycleBias = 0;
+      try {
+        const { MACRO, macroState } = require('./macroEconomics');
+        const curCycle = MACRO.CYCLE_NAMES[macroState.cycleIndex];
+        if (curCycle && typeof curCycle.stockBias === 'number') {
+          macroCycleBias = curCycle.stockBias * 0.5; // 실시간 사이클 가중치
+        }
+      } catch (e) {}
+
+      // 📉 단기 과열 방지 및 차익 실현 매도 압력 (Profit Taking & Mean Reversion)
+      let profitTakingDrag = 0;
+      const low24 = BigInt(stock.low_24h || stock.price || 100);
+      if (low24 > 0n && currentPrice > low24) {
+        const gainRatio = Number(currentPrice - low24) / Number(low24);
+        if (gainRatio > 0.25) {
+          // 25% 이상 급등 시 완만한 차익 실현 (-0.5% ~ -1.5%)
+          profitTakingDrag = -Math.min(0.015, (gainRatio - 0.25) * 0.04);
+        }
+      }
+
+      const rawDelta = regimeDrift + eventBoost + userImpact + communityLiquidityFactor + macroCycleBias + profitTakingDrag + noise;
+      const totalDelta = clampStockDelta(eventBoost, rawDelta);
       let newPrice = BigInt(Math.max(10, Math.round(Number(currentPrice) * (1 + totalDelta))));
+
+      // 💡 틱마다 0% 정체를 방지하여 생생한 실시간 가격 변동 보장
+      if (newPrice === currentPrice) {
+        const nudge = Math.random() < 0.5 ? 1n : -1n;
+        newPrice = currentPrice + nudge;
+        if (newPrice < 10n) newPrice = 10n;
+      }
 
       // 💡 초보자 입문주(SLOT)는 신규 가입자(정착금 10,000원)가 언제든 쉽게 매수할 수 있도록 50~500원 구간 안정 유지
       if (stockId === 'SLOT') {
@@ -340,36 +457,44 @@ async function updateStockPrices() {
     await connection.commit();
     console.log(`📈 [월덕 가상 경제 엔진] 유저 상황 연동 주가 갱신 완료 (${currentRegime.name}) - ${stocks.length}개 종목${lastNews ? ` | 📢 공시: ${lastNews.title}` : ''}`);
 
+    if (typeof global.__invalidateMarketCache === 'function') {
+      global.__invalidateMarketCache();
+    }
+
     // 📡 ⚡ Socket.IO 및 SSE 실시간 양방향 브로드캐스트 (연결된 모든 웹 클라이언트에 0초 즉시 push)
+    const [latestStocks] = await pool.query('SELECT stock_id, name, price, prev_price, high_24h, low_24h, volume_24h, volatility FROM stocks');
+    const updatePayload = {
+      stocks: latestStocks.map(s => {
+        const curP = Number(s.price);
+        const prevP = Number(s.prev_price || s.price);
+        const diffP = curP - prevP;
+        const rateP = prevP > 0 ? (diffP / prevP) * 100 : 0;
+        return {
+          stock_id: s.stock_id,
+          name: s.name,
+          price: curP,
+          prev_price: prevP,
+          rate: rateP,
+          diff: diffP,
+          isUp: diffP >= 0,
+          high_24h: Number(s.high_24h || curP),
+          low_24h: Number(s.low_24h || curP),
+          volume_24h: Number(s.volume_24h || 0),
+          volatility: Number(s.volatility || 0.04)
+        };
+      }),
+      regime: currentRegime,
+      news: lastNews,
+      timestamp: Date.now()
+    };
+
     if (global.__io) {
-      const [latestStocks] = await pool.query('SELECT stock_id, name, price, prev_price, high_24h, low_24h, volume_24h, volatility FROM stocks');
-      global.__io.emit('market:update', {
-        stocks: latestStocks.map(s => {
-          const curP = Number(s.price);
-          const prevP = Number(s.prev_price || s.price);
-          const diffP = curP - prevP;
-          const rateP = prevP > 0 ? (diffP / prevP) * 100 : 0;
-          return {
-            stock_id: s.stock_id,
-            name: s.name,
-            price: curP,
-            prev_price: prevP,
-            rate: rateP,
-            high_24h: Number(s.high_24h || curP),
-            low_24h: Number(s.low_24h || curP),
-            volume_24h: Number(s.volume_24h || 0),
-            volatility: Number(s.volatility || 0.04)
-          };
-        }),
-        regime: currentRegime,
-        news: lastNews,
-        timestamp: Date.now()
-      });
+      global.__io.emit('market:update', updatePayload);
+      global.__io.emit('market:snapshot', updatePayload);
     }
 
     if (typeof global.__broadcastMarketUpdate === 'function') {
-      if (typeof global.__invalidateMarketCache === 'function') global.__invalidateMarketCache();
-      setTimeout(global.__broadcastMarketUpdate, 200);
+      global.__broadcastMarketUpdate();
     }
 
     historyCleanupCounter++;
@@ -400,8 +525,7 @@ async function distributeStockDividends() {
     if (stocks.length === 0) return;
 
     for (const s of stocks) {
-      const yieldRate = Number(s.dividend_yield || 0) / 100;
-      const hourlyDividendPerShare = Math.max(1, Math.floor((Number(s.price) * yieldRate) / 24));
+      const yieldRate = Number(s.dividend_yield || 0);
 
       const [holdings] = await pool.query(`
         SELECT us.user_id, us.amount, u.username, u.cash
@@ -411,17 +535,17 @@ async function distributeStockDividends() {
       `, [s.stock_id]);
 
       for (const h of holdings) {
-        const shareCount = Number(h.amount);
-        const dividendAmount = BigInt(Math.floor(hourlyDividendPerShare * shareCount));
+        const { unitsToAmountStr, amountToUnits } = require('./moneyScale');
+        const dividendAmount = hourlyDividendForHolding(s.price, h.amount, yieldRate);
         if (dividendAmount <= 0n) continue;
 
-        const beforeCash = BigInt(h.cash || 0);
+        const beforeCash = BigInt(String(h.cash || 0).split('.')[0] || 0);
+        await pool.query('UPDATE users SET cash = cash + ? WHERE discord_id = ?', [dividendAmount.toString(), h.user_id]);
         const afterCash = beforeCash + dividendAmount;
-
-        await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [afterCash.toString(), h.user_id]);
+        pushUserLive(h.user_id);
 
         try {
-          const displayCount = (shareCount % 1 === 0) ? shareCount.toLocaleString() : shareCount.toFixed(4);
+          const displayCount = unitsToAmountStr(amountToUnits(h.amount));
           await pool.query(`
             INSERT INTO economy_logs (user_id, username, type, amount, balance_before, balance_after, description)
             VALUES (?, ?, 'DIVIDEND', ?, ?, ?, ?)
@@ -441,7 +565,8 @@ async function distributeStockDividends() {
 
 // 🔧 스마트 주가 조절 시스템 (Smart Stock Price Adjustment System)
 async function adjustStockPrice(stockId, targetPrice, reason = '관리자/시스템 가격 조절') {
-  const newPrice = BigInt(targetPrice);
+  const { safeBigInt } = require('./money');
+  const newPrice = safeBigInt(targetPrice);
   if (newPrice < 10n) throw new Error('주가는 최소 10원 이상이어야 합니다.');
 
   const [stocks] = await pool.query('SELECT * FROM stocks WHERE stock_id = ?', [stockId]);
@@ -498,34 +623,734 @@ async function adjustAllStocksRatio(percentMultiplier, reason = '시장 전체 �
   const [stocks] = await pool.query('SELECT * FROM stocks');
   const results = [];
   for (const s of stocks) {
-    const cur = Number(s.price);
-    const target = Math.max(10, Math.round(cur * (1 + percentMultiplier / 100)));
-    const res = await adjustStockPrice(s.stock_id, target, reason);
+    const { safeBigInt } = require('./money');
+    const { mulRate } = require('./moneyScale');
+    const cur = safeBigInt(s.price);
+    const delta = mulRate(cur, Number(percentMultiplier) / 100, 6);
+    const target = cur + delta;
+    const res = await adjustStockPrice(s.stock_id, target < 10n ? 10n : target, reason);
     results.push(res);
   }
   return results;
 }
 
-function startStockEngine(intervalMs = 180000) {
-  console.log(`🚀 [월덕 가상 경제 엔진] 가동 시작 (갱신 주기: ${intervalMs / 1000}초, 이벤트 풀: ${NEWS_EVENTS.length}개)`);
+function startStockEngine(intervalMs = 10000, client = null) {
+  console.log(`🚀 [월덕 가상 경제 엔진] 가동 시작 (기본 주기: ${intervalMs / 1000}초, 경제 상황별 ±2초 랜덤, 변동폭 30% 축소 + 이상가 감쇠, 이벤트 풀: ${NEWS_EVENTS.length}개)`);
+
+  // 🌐 경제 상황(레짐)별 주식 가격 갱신 주기 동적 결정 (10초 베이스)
+  // - 기준 주기(10초)에서 경제 상황에 따라 ±랜덤 변동
+  // - ⚠️ 가격 이상 시 변동시간은 건드리지 않고 변동폭만 추가 감쇠 (사용자 요청)
+  // - 급락/패닉(CRASH): 변동성 ↑ → 갱신 살짝 빠르게 (8~10초)
+  // - 번영기(BULL/BOOM): 활발 → 8~12초
+  // - 안정(NORMAL): 10~14초
+  // - 침체(RECESSION): 차분 → 10~16초
+  function getNextTickDelay(baseMs) {
+    let regime = null;
+    try { regime = getCurrentMarketRegime(); } catch (e) {}
+    const regimeType = regime && (regime.type || (regime.id || '').toString()) || 'NORMAL';
+    const minMs = 5 * 1000;   // 절대 최소 5초
+    const maxMs = 30 * 1000;  // 절대 최대 30초
+    let jitterMs = 0;
+    if (regimeType === 'CRASH' || regimeType === 'PANIC') {
+      // 8~10초 (변동성 ↑)
+      jitterMs = -(Math.random() * 2 + 0) * 1000; // -2 ~ 0초
+    } else if (regimeType === 'SUPER_BULL' || regimeType === 'BULL') {
+      // 8~12초
+      jitterMs = (Math.random() * 4 - 2) * 1000; // -2 ~ +2초
+    } else if (regimeType === 'RECESSION' || regimeType === 'COOLDOWN' || regimeType === 'TIGHTENING' || regimeType === 'SLUMP') {
+      // 10~16초 (침체기는 갱신 느리게)
+      jitterMs = Math.random() * 6 * 1000; // 0 ~ +6초
+    } else {
+      // NORMAL/STABLE/LOW_VOL: ±2초 랜덤
+      jitterMs = (Math.random() * 4 - 2) * 1000; // -2 ~ +2초
+    }
+    const next = Math.max(minMs, Math.min(maxMs, baseMs + jitterMs));
+    return Math.floor(next);
+  }
+
+  // 첫 갱신은 부팅 후 3초
   setTimeout(() => {
     updateStockPrices();
   }, 3000);
-  setInterval(updateStockPrices, intervalMs);
+
+  // 📈 자기 재스케줄링 루프: 경제 상황별 랜덤 변동
+  function scheduleNextStockTick() {
+    const delay = getNextTickDelay(intervalMs);
+    setTimeout(() => {
+      try { updateStockPrices(); } catch (e) { console.error('[StockEngine] updateStockPrices 실패:', e); }
+      scheduleNextStockTick();
+    }, delay);
+  }
+  scheduleNextStockTick();
+
+  // 📋 지정가 주문 자동 체결 루프 (주가 갱신 주기와 동일하게)
+  let limitOrderClient = client;
+  function runLimitOrders() {
+    try {
+      const { processPendingOrders, expirePendingOrders } = require('./limitOrderEngine');
+      processPendingOrders(limitOrderClient).catch(() => {});
+    } catch (e) {}
+  }
+  setTimeout(runLimitOrders, 5000); // 부팅 5초 후 첫 실행
+  setInterval(runLimitOrders, intervalMs);
+
+  // 📋 만료 주문 처리 (30분 주기)
+  setInterval(() => {
+    try {
+      const { expirePendingOrders } = require('./limitOrderEngine');
+      expirePendingOrders().catch(() => {});
+    } catch (e) {}
+  }, 30 * 60 * 1000);
 
   // 1시간마다 주식 보유자 대상 자동 배당금 지급
   setInterval(distributeStockDividends, 60 * 60 * 1000);
+  // 30분마다 상장적격성 심사 및 상장폐지/정리매매 프로세스 점검
+  setInterval(checkAndProcessDelistings, 30 * 60 * 1000);
+
+  // 외부에서 client를 주입할 수 있는 함수
+  startStockEngine.setClient = (c) => { limitOrderClient = c; };
+}
+
+
+// 🏢 신규 IPO 상장 대기 기업 풀 (기업 순환 경제)
+const IPO_CANDIDATE_POOL = [
+  { stock_id: 'QBIT', name: '퀀텀 딥러닝 (QBIT)', price: 3500, sector: '양자컴퓨팅/AI', description: '초전도 큐비트 양자 연산 가속기와 차세대 딥러닝 칩셋을 생산하는 딥테크 기업', volatility: 0.08, pe_ratio: 35.0, dividend_yield: 1.8 },
+  { stock_id: 'ROBO', name: '월덕 로보틱스 (ROBO)', price: 4800, sector: '로봇/휴머노이드', description: '채굴장 무인화 로봇 및 서빙 자동화 메카트로닉스를 독점 제조하는 기업', volatility: 0.06, pe_ratio: 28.0, dividend_yield: 2.2 },
+  { stock_id: 'AERO', name: '덕스 스페이스 (AERO)', price: 8200, sector: '우주/항공', description: '성층권 통신 위성과 궤도 자원 탐사 셔틀을 개발하는 민간 우주 발사체 기업', volatility: 0.09, pe_ratio: 42.0, dividend_yield: 1.2 },
+  { stock_id: 'NANO', name: '냥코 바이오랩 (NANO)', price: 2900, sector: '바이오/신약', description: '유전자 편집 치료제와 안티에이징 항노화 펩타이드 특허를 보유한 바이오벤처', volatility: 0.10, pe_ratio: 22.0, dividend_yield: 1.5 },
+  { stock_id: 'GRID', name: '하이퍼 에너지 (GRID)', price: 6100, sector: '신재생/에너지', description: '차세대 전고체 배터리와 스마트 마이크로그리드 전력망 인프라 전문 기업', volatility: 0.05, pe_ratio: 18.0, dividend_yield: 3.5 },
+  { stock_id: 'META', name: '메타 오리 스튜디오 (META)', price: 1900, sector: '엔터/메타버스', description: '가상현실 월드 플랫폼 및 3D 아바타 NFT 콘텐츠를 제작하는 크리에이티브 스튜디오', volatility: 0.07, pe_ratio: 25.0, dividend_yield: 2.0 }
+];
+
+/**
+ * 🛡️ 주가 안정화 & 영구 상장 보장 관리 엔진 (30분 주기)
+ * - 🚫 상장폐지 제도 전면 폐지: 어떤 종목도 강제 상장폐지되지 않으며 유저 주식 자산 100% 영구 보존!
+ * - ⚡ 주가 과열 시: 자동 액면분할 (1:5, 1:10) 및 자회사 인적분할(Spin-off)로만 적정 주가 안정화
+ * - 🔄 기존 비정상 상태 종목: 전원 ACTIVE 정상 거래 상태로 자동 복구
+ */
+async function checkAndProcessDelistings() {
+  try {
+    // 1. 🏛️ 모든 종목을 ACTIVE 정상 거래 상태로 무조건 유지/복구 (상장폐지 전면 폐지)
+    await pool.query("UPDATE stocks SET status = 'ACTIVE', delisted_at = NULL, liquidation_price = 0 WHERE status != 'ACTIVE'");
+
+    const [stocks] = await pool.query("SELECT * FROM stocks");
+    for (const s of stocks) {
+      const price = Number(s.price || 0);
+
+      // ── [1. 🛡️ 주가 과열 자동 안정화: 액면분할 & 자회사 인적분할 (주가 150만원 돌파 시)] ──
+      if (price >= 1500000) {
+        try {
+          const [activeCountRows] = await pool.query("SELECT COUNT(*) AS cnt FROM stocks WHERE status = 'ACTIVE'");
+          const activeCount = activeCountRows[0]?.cnt || 10;
+
+          // 종목 수가 적고 신사업 테마가 가능한 경우 ➔ 40% 확률로 자회사 인적분할(Spin-off)
+          const canSpinOff = activeCount < 20 && Math.random() < 0.40;
+          if (canSpinOff) {
+            const candidateSuffixes = ['AI', 'TECH', 'LAB', 'BIO', 'SYS', 'ROB', 'NEXT', 'PAY'];
+            const suf = candidateSuffixes[Math.floor(Math.random() * candidateSuffixes.length)];
+            const newCode = (s.stock_id + suf).slice(0, 8);
+
+            const [exist] = await pool.query('SELECT stock_id FROM stocks WHERE stock_id = ? LIMIT 1', [newCode]);
+            if (!exist.length) {
+              const newName = `${s.name.split(' ')[0]} ${suf} 신성장 테크`;
+              await executeSpinOff(s.stock_id, newCode, newName, 0.40, '첨단혁신', `주가 ${price.toLocaleString()}원 과열 방지 및 미래 신사업 전문화를 위한 인적분할 신규 상장`);
+              continue;
+            }
+          }
+
+          // 그 외의 경우 ➔ 1:5 또는 1:10 액면분할로 주가를 낮추고 유저 주식 수를 비례 증가시켜 안정화
+          const splitRatio = price >= 4000000 ? 10 : 5;
+          await executeStockSplit(s.stock_id, splitRatio, `주가 ${price.toLocaleString()}원 과열 진화 및 적정 거래 유동성 공급을 위한 1:${splitRatio} 전격 액면분할`);
+          continue;
+        } catch (splitErr) {
+          console.error(`[자동 주가 안정화(분할) 오류] ${s.stock_id}:`, splitErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('❌ [주가 안정화 점검 오류]:', err);
+  }
+}
+
+/**
+ * 💥 상장폐지 기능 (거래소 정책에 의해 영구 폐지 및 보호됨)
+ */
+async function executeDelisting(stockId, reason = '상장폐지 불가', liquidationPricePerShare = 0n) {
+  console.log(`🛡️ [상장폐지 차단] 거래소 영구 상장 보장 정책에 따라 ${stockId} 종목의 상장폐지가 원천 차단되었습니다.`);
+  return {
+    success: false,
+    message: '거래소 규정에 의해 상장폐지 제도가 전면 폐지되었으며 모든 종목의 영구 상장이 보장됩니다.'
+  };
+}
+
+/**
+ * 🎉 상장폐지 종목 전격 재상장 (Relisting / Re-IPO)
+ */
+async function relistStock(stockId, options = {}) {
+  const { formatMoney } = require('./formatters');
+  const { safeBigInt } = require('./money');
+
+  const sId = String(stockId || '').toUpperCase().trim();
+  const [sRows] = await pool.query('SELECT * FROM stocks WHERE stock_id = ? LIMIT 1', [sId]);
+  if (!sRows.length) throw new Error(`[${sId}] 종목을 찾을 수 없습니다.`);
+  const stock = sRows[0];
+
+  const rawPrice = options.price ? safeBigInt(options.price) : (safeBigInt(stock.price) > 100n ? safeBigInt(stock.price) : 1000n);
+  const reason = String(options.reason || '기업 구조조정 성공 및 재무 건전성 회복에 따른 전격 재상장').trim();
+
+  // 1. 상태를 ACTIVE로 복구하고 주가 및 지표 갱신
+  await pool.query(`
+    UPDATE stocks
+    SET status = 'ACTIVE',
+        price = ?,
+        prev_price = ?,
+        high_24h = ?,
+        low_24h = ?,
+        volume_24h = 0,
+        delisted_at = NULL,
+        liquidation_price = 0,
+        updated_at = NOW()
+    WHERE stock_id = ?
+  `, [
+    rawPrice.toString(),
+    rawPrice.toString(),
+    rawPrice.toString(),
+    rawPrice.toString(),
+    sId
+  ]);
+
+  // 2. 증시 공시 등록
+  const title = `🎉 [기업 회생 & 전격 재상장 공시] ${stock.name} (${sId}) 거래소 재상장 승인!`;
+  const content = `한국거래소 공시: [${stock.name}] 기업이 ${reason} 사유로 상장폐지 처분을 딛고 기준가 ${formatMoney(rawPrice)}원에 성공적으로 재상장(Relisting)되었습니다. 금일부터 웹 및 디스코드에서 정상 거래가 재개됩니다.`;
+
+  await pool.query(`
+    INSERT INTO market_news_feed (title, content, event_type, impact_sector, related_stock, impact_rate, sentiment, importance)
+    VALUES (?, ?, 'STOCK_RELISTED', ?, ?, 0.50, 'BULL', 'URGENT')
+  `, [title, content, stock.sector || '재상장', sId]);
+
+  if (typeof global.__invalidateMarketCache === 'function') {
+    global.__invalidateMarketCache();
+  }
+
+  console.log(`🎉 [재상장 완료] ${stock.name} (${sId}) 재상장가: ${formatMoney(rawPrice)}`);
+
+  return {
+    success: true,
+    stockId: sId,
+    stockName: stock.name,
+    price: rawPrice.toString(),
+    priceFormatted: formatMoney(rawPrice),
+    sector: stock.sector,
+    reason
+  };
+}
+
+/**
+ * ⚡ 주식 액면분할 (Stock Split) 시스템
+ * - 주가: 1 / splitRatio 로 감소
+ * - 모든 주주 보유 주식 수: splitRatio 배 증가
+ * - 주주 총 자산 가치 및 매수 원금 100% 보존
+ */
+async function executeStockSplit(stockId, splitRatio = 2, reason = '유동성 공급 및 거래 활성화') {
+  const { formatMoney } = require('./formatters');
+  const { safeBigInt } = require('./money');
+  const { amountToUnits, unitsToAmountStr } = require('./moneyScale');
+
+  const sId = String(stockId || '').toUpperCase().trim();
+  const ratio = Math.max(2, Math.min(100, parseInt(splitRatio, 10) || 2));
+
+  const [sRows] = await pool.query('SELECT * FROM stocks WHERE stock_id = ? LIMIT 1', [sId]);
+  if (!sRows.length) throw new Error(`[${sId}] 종목을 찾을 수 없습니다.`);
+  const stock = sRows[0];
+
+  const oldPrice = safeBigInt(stock.price);
+  const oldPrevPrice = safeBigInt(stock.prev_price || stock.price);
+  const ratioBig = BigInt(ratio);
+
+  const newPrice = oldPrice / ratioBig > 10n ? oldPrice / ratioBig : 10n;
+  const newPrevPrice = oldPrevPrice / ratioBig > 10n ? oldPrevPrice / ratioBig : 10n;
+  const newHigh24 = safeBigInt(stock.high_24h || oldPrice) / ratioBig;
+  const newLow24 = safeBigInt(stock.low_24h || oldPrice) / ratioBig;
+
+  // 1. 주가 테이블 갱신
+  await pool.query(`
+    UPDATE stocks
+    SET price = ?,
+        prev_price = ?,
+        high_24h = ?,
+        low_24h = ?,
+        updated_at = NOW()
+    WHERE stock_id = ?
+  `, [
+    newPrice.toString(),
+    newPrevPrice.toString(),
+    newHigh24 > 10n ? newHigh24.toString() : '10',
+    newLow24 > 10n ? newLow24.toString() : '10',
+    sId
+  ]);
+
+  // 2. 👥 해당 주식을 보유한 모든 유저의 보유 수량을 SQL 레벨에서 정확히 ratio배로 일괄 증가
+  const [holders] = await pool.query('SELECT user_id, amount, total_spent FROM user_stocks WHERE stock_id = ? AND amount > 0', [sId]);
+  await pool.query('UPDATE user_stocks SET amount = amount * ? WHERE stock_id = ?', [ratio, sId]);
+
+  // 3. 📈 차트 왜곡 방지를 위한 과거 주가 히스토리 수정주가(Adjusted Historical Price) 소급 적용 & 거래량 조정
+  try {
+    await pool.query('UPDATE stock_history SET price = GREATEST(10, FLOOR(price / ?)) WHERE stock_id = ?', [ratio, sId]);
+    await pool.query('UPDATE stocks SET volume_24h = volume_24h * ? WHERE stock_id = ?', [ratio, sId]);
+  } catch (adjErr) {}
+
+  // 4. 증시 공시 등록
+  const title = `⚡ [액면분할 공시] ${stock.name} (${sId}) 1:${ratio} 주식 액면분할 단행!`;
+  const content = `한국거래소 공시: [${stock.name}] 종목이 ${reason} 사유로 1주당 ${ratio}주 비율의 액면분할(Stock Split)을 완료하였습니다. 주가는 기존 ${formatMoney(oldPrice)}원에서 ${formatMoney(newPrice)}원으로 분할되었으며, 기존 주주(${holders.length}명)의 보유 주식 수는 ${ratio}배로 자동 무상 배정(평단가 1/${ratio}로 하향)되었습니다.`;
+
+  await pool.query(`
+    INSERT INTO market_news_feed (title, content, event_type, impact_sector, related_stock, impact_rate, sentiment, importance)
+    VALUES (?, ?, 'STOCK_SPLIT', ?, ?, 0.15, 'BULL', 'URGENT')
+  `, [title, content, stock.sector || '액면분할', sId]);
+
+  if (typeof global.__invalidateMarketCache === 'function') {
+    global.__invalidateMarketCache();
+  }
+
+  // 5. 📡 실시간 양방향 브로드캐스트 (주가 및 전 유저 잔고/포트폴리오 즉시 동기화)
+  if (global.__io) {
+    global.__io.emit('stock:split', {
+      stockId: sId,
+      ratio,
+      oldPrice: oldPrice.toString(),
+      newPrice: newPrice.toString()
+    });
+  }
+
+  console.log(`⚡ [액면분할 완료] ${stock.name} (${sId}) 1:${ratio} 분할 (주가: ${formatMoney(oldPrice)} -> ${formatMoney(newPrice)}, 주주: ${holders.length}명)`);
+
+  return {
+    success: true,
+    stockId: sId,
+    stockName: stock.name,
+    ratio,
+    oldPrice: oldPrice.toString(),
+    newPrice: newPrice.toString(),
+    oldPriceFormatted: formatMoney(oldPrice),
+    newPriceFormatted: formatMoney(newPrice),
+    affectedUsers: holders.length,
+    reason
+  };
+}
+
+/**
+ * 🏢 기업 인적분할 (Corporate Spin-off) 시스템
+ * - 모회사(A)에서 신설회사(B)를 분할 상장
+ * - 분할 비율 (예: 0.4 ➔ 신설회사 40%, 모회사 60% 가치)
+ * - 모회사(A) 주가 = 기존가 * (1 - ratio)
+ * - 신설회사(B) 주가 = 기존가 * ratio
+ * - 기존 모회사 주주 전원에게 보유 수량 1:1 지분율대로 신설회사(B) 주식 무상 자동 배정!
+ * - 주주의 총 투자 평가액 100% 완벽 보존
+ */
+async function executeSpinOff(parentStockId, newStockId, newStockName, splitRatio = 0.4, newSector = null, reason = '사업부문 전문화 및 기업가치 극대화') {
+  const { formatMoney } = require('./formatters');
+  const { safeBigInt } = require('./money');
+
+  const pId = String(parentStockId || '').toUpperCase().trim();
+  const nId = String(newStockId || '').toUpperCase().trim();
+  const nName = String(newStockName || '').trim();
+  const ratio = Math.max(0.1, Math.min(0.9, parseFloat(splitRatio) || 0.4)); // 10% ~ 90%
+
+  if (!pId || !nId || !nName) {
+    throw new Error('모회사 코드, 신설 종목코드, 신설 종목명을 모두 입력해야 합니다.');
+  }
+
+  if (pId === nId) {
+    throw new Error('모회사와 신설회사의 종목코드는 달라야 합니다.');
+  }
+
+  // 1. 모회사 조회
+  const [pRows] = await pool.query('SELECT * FROM stocks WHERE stock_id = ? LIMIT 1', [pId]);
+  if (!pRows.length) throw new Error(`모회사 [${pId}] 종목을 찾을 수 없습니다.`);
+  const parent = pRows[0];
+
+  // 2. 신설 종목코드 중복 검사
+  const [existRows] = await pool.query('SELECT stock_id FROM stocks WHERE stock_id = ? LIMIT 1', [nId]);
+  if (existRows.length > 0) {
+    throw new Error(`신설 종목코드 [${nId}]가 이미 거래소에 존재합니다. 다른 코드를 사용하세요.`);
+  }
+
+  const oldParentPrice = safeBigInt(parent.price);
+  const oldParentPrevPrice = safeBigInt(parent.prev_price || parent.price);
+
+  // 모회사와 신설 자회사 가격 배분 (합계는 기존가와 100% 동일)
+  const ratioInt = BigInt(Math.round(ratio * 10000));
+  const newChildPrice = (oldParentPrice * ratioInt) / 10000n > 10n ? (oldParentPrice * ratioInt) / 10000n : 10n;
+  const newParentPrice = (oldParentPrice - newChildPrice) > 10n ? (oldParentPrice - newChildPrice) : 10n;
+
+  const childPrevPrice = (oldParentPrevPrice * ratioInt) / 10000n > 10n ? (oldParentPrevPrice * ratioInt) / 10000n : 10n;
+  const parentPrevPrice = (oldParentPrevPrice - childPrevPrice) > 10n ? (oldParentPrevPrice - childPrevPrice) : 10n;
+
+  const childSector = newSector || parent.sector || '신성장';
+
+  // 3. 모회사 주가 조정
+  await pool.query(`
+    UPDATE stocks
+    SET price = ?,
+        prev_price = ?,
+        high_24h = ?,
+        low_24h = ?,
+        updated_at = NOW()
+    WHERE stock_id = ?
+  `, [
+    newParentPrice.toString(),
+    parentPrevPrice.toString(),
+    newParentPrice.toString(),
+    newParentPrice.toString(),
+    pId
+  ]);
+
+  // 4. 신설회사 신규 상장
+  await pool.query(`
+    INSERT INTO stocks (
+      stock_id, name, sector, price, prev_price,
+      high_24h, low_24h, volume_24h, dividend_yield,
+      volatility, status, description, pe_ratio, market_cap
+    ) VALUES (
+      ?, ?, ?, ?, ?,
+      ?, ?, 0, ?,
+      ?, 'ACTIVE', ?, 20.0, ?
+    )
+  `, [
+    nId,
+    nName,
+    childSector,
+    newChildPrice.toString(),
+    childPrevPrice.toString(),
+    newChildPrice.toString(),
+    newChildPrice.toString(),
+    parent.dividend_yield || 0.02,
+    parent.volatility || 0.05,
+    `${parent.name} 기업 인적분할 신설 테크 상장사`,
+    (newChildPrice * 1000000n).toString()
+  ]);
+
+  // 5. 👥 기존 모회사 주주 전원에게 신설회사 주식 1:1 지분율 무상 배정
+  const [holders] = await pool.query('SELECT user_id, amount, total_spent FROM user_stocks WHERE stock_id = ? AND amount > 0', [pId]);
+  for (const h of holders) {
+    const shareAmt = String(h.amount);
+    await pool.query(`
+      INSERT INTO user_stocks (user_id, stock_id, amount, total_spent)
+      VALUES (?, ?, ?, 0)
+      ON DUPLICATE KEY UPDATE amount = amount + VALUES(amount)
+    `, [h.user_id, nId, shareAmt]);
+  }
+
+  // 6. 증시 공시 등록
+  const title = `🏢 [인적분할 신규상장] ${parent.name}(${pId}) ➔ ${nName}(${nId}) 분할 상장!`;
+  const content = `한국거래소 공시: [${parent.name}] 기업이 ${reason} 사유로 핵심 사업부를 분할하여 [${nName} (${nId})]을 신규 상장하였습니다. (가치분할: 존속 ${100 - Math.round(ratio*100)}% / 신설 ${Math.round(ratio*100)}%)\n기존 ${parent.name} 주주(${holders.length}명) 전원에게 보유 수량과 동일한 1:1 비율로 [${nName}] 신주가 무상 배정 입고되었습니다.`;
+
+  await pool.query(`
+    INSERT INTO market_news_feed (title, content, event_type, impact_sector, related_stock, impact_rate, sentiment, importance)
+    VALUES (?, ?, 'STOCK_SPINOFF', ?, ?, 0.25, 'BULL', 'URGENT')
+  `, [title, content, childSector, nId]);
+
+  if (typeof global.__invalidateMarketCache === 'function') {
+    global.__invalidateMarketCache();
+  }
+
+  // 7. 실시간 소켓 브로드캐스트
+  if (global.__io) {
+    global.__io.emit('stock:spinoff', {
+      parentStockId: pId,
+      newStockId: nId,
+      newStockName: nName,
+      ratio,
+      parentNewPrice: newParentPrice.toString(),
+      childNewPrice: newChildPrice.toString()
+    });
+  }
+
+  console.log(`🏢 [인적분할 완료] ${parent.name}(${pId}) ➔ ${nName}(${nId}) (가치: ${formatMoney(newParentPrice)} + ${formatMoney(newChildPrice)}, 주주: ${holders.length}명 배정)`);
+
+  return {
+    success: true,
+    parentStockId: pId,
+    parentName: parent.name,
+    parentNewPrice: newParentPrice.toString(),
+    parentNewPriceFormatted: formatMoney(newParentPrice),
+    newStockId: nId,
+    newStockName: nName,
+    newStockPrice: newChildPrice.toString(),
+    newStockPriceFormatted: formatMoney(newChildPrice),
+    splitRatio: ratio,
+    affectedUsers: holders.length,
+    reason
+  };
+}
+
+/**
+ * 🚀 신규 혁신 기업 IPO 공모 상장 (빈자리 자동 충원)
+ */
+async function launchNewIPOStock(customStock = null) {
+  const { formatMoney } = require('./formatters');
+
+  let candidate = customStock;
+  if (!candidate) {
+    // 기존 활성 종목 ID 목록
+    const [active] = await pool.query("SELECT stock_id FROM stocks WHERE status != 'DELISTED'");
+    const activeIds = new Set(active.map(r => r.stock_id));
+
+    // 미상장된 IPO 후보 선택
+    candidate = IPO_CANDIDATE_POOL.find(c => !activeIds.has(c.stock_id));
+  }
+
+  if (!candidate) {
+    console.log('ℹ️ [IPO 상장] 대기 중인 신규 IPO 후보가 없습니다.');
+    return null;
+  }
+
+  // 데이터베이스에 신규 종목 등록 (또는 재상장)
+  await pool.query(`
+    INSERT INTO stocks 
+      (stock_id, name, price, prev_price, volatility, sector, description, high_24h, low_24h, volume_24h, market_cap, pe_ratio, dividend_yield, status, delisted_at, liquidation_price)
+    VALUES 
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'ACTIVE', NULL, 0)
+    ON DUPLICATE KEY UPDATE
+      name = VALUES(name),
+      price = VALUES(price),
+      prev_price = VALUES(prev_price),
+      volatility = VALUES(volatility),
+      sector = VALUES(sector),
+      description = VALUES(description),
+      high_24h = VALUES(high_24h),
+      low_24h = VALUES(low_24h),
+      market_cap = VALUES(market_cap),
+      pe_ratio = VALUES(pe_ratio),
+      dividend_yield = VALUES(dividend_yield),
+      status = 'ACTIVE',
+      delisted_at = NULL,
+      liquidation_price = 0
+  `, [
+    candidate.stock_id,
+    candidate.name,
+    candidate.price,
+    candidate.price,
+    candidate.volatility || 0.06,
+    candidate.sector || '신규상장',
+    candidate.description || '신규 공모 상장 기업',
+    candidate.price,
+    candidate.price,
+    candidate.price * 1000000,
+    candidate.pe_ratio || 25.0,
+    candidate.dividend_yield || 2.0
+  ]);
+
+  // 증시 공시 속보 등록
+  const title = `🚀 [신규 IPO 상장 공시] 혁신 기업 ${candidate.name} (${candidate.stock_id}) 거래소 신규 상장!`;
+  const content = `한국거래소 공시: 차세대 성장 유망 기업 [${candidate.name}]이 공모가 ${formatMoney(candidate.price)}원에 성공적으로 신규 상장되었습니다. (${candidate.sector} - ${candidate.description})`;
+
+  await pool.query(`
+    INSERT INTO market_news_feed (title, content, event_type, impact_sector, related_stock, impact_rate, sentiment, importance)
+    VALUES (?, ?, 'STOCK_IPO', ?, ?, 0.35, 'BULL', 'URGENT')
+  `, [title, content, candidate.sector, candidate.stock_id]);
+
+  console.log(`🚀 [신규 IPO 상장] ${candidate.name} (${candidate.stock_id}) 상장 완료 (공모가: ${candidate.price}원)`);
+
+  return candidate;
+}
+
+/**
+ * 👑 관리자 커스텀 주식 신규 상장/추가
+ */
+async function createCustomStock(options = {}) {
+  const { formatMoney } = require('./formatters');
+  const { safeBigInt } = require('./money');
+
+  const stockId = String(options.stockId || '').toUpperCase().trim();
+  const name = String(options.name || '').trim();
+  const rawPrice = safeBigInt(options.price || 1000);
+  const sector = String(options.sector || '신규상장').trim();
+  const description = String(options.description || '관리자 신규 상장 기업').trim();
+  const volatility = Math.max(0.01, Math.min(0.20, Number(options.volatility || 0.06)));
+  const peRatio = Number(options.peRatio || 20.0);
+  const dividendYield = Number(options.dividendYield || 2.5);
+
+  if (!stockId || stockId.length < 2 || stockId.length > 10) {
+    throw new Error('종목코드는 2~10자 영문 대문자여야 합니다. (예: GOOGL, SAM, DUCK)');
+  }
+  if (!name || name.length < 2) {
+    throw new Error('종목명을 2자 이상 입력해주세요.');
+  }
+  if (rawPrice < 10n) {
+    throw new Error('공모가는 최소 10원 이상이어야 합니다.');
+  }
+
+  // DB 등록
+  await pool.query(`
+    INSERT INTO stocks 
+      (stock_id, name, price, prev_price, volatility, sector, description, high_24h, low_24h, volume_24h, market_cap, pe_ratio, dividend_yield, status, delisted_at, liquidation_price)
+    VALUES 
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'ACTIVE', NULL, 0)
+    ON DUPLICATE KEY UPDATE
+      name = VALUES(name),
+      price = VALUES(price),
+      prev_price = VALUES(prev_price),
+      volatility = VALUES(volatility),
+      sector = VALUES(sector),
+      description = VALUES(description),
+      high_24h = VALUES(high_24h),
+      low_24h = VALUES(low_24h),
+      market_cap = VALUES(market_cap),
+      pe_ratio = VALUES(pe_ratio),
+      dividend_yield = VALUES(dividend_yield),
+      status = 'ACTIVE',
+      delisted_at = NULL,
+      liquidation_price = 0
+  `, [
+    stockId,
+    name,
+    rawPrice.toString(),
+    rawPrice.toString(),
+    volatility,
+    sector,
+    description,
+    rawPrice.toString(),
+    rawPrice.toString(),
+    (rawPrice * 1000000n).toString(),
+    peRatio,
+    dividendYield
+  ]);
+
+  // 증시 공시 등록
+  const title = `👑 [관리자 특례 신규 상장] ${name} (${stockId}) 거래소 신규 상장 공시!`;
+  const content = `거래소 공시: 관리자 직권 특례 상장으로 신규 기업 [${name}]이 공모가 ${formatMoney(rawPrice)}원에 상장되었습니다. (${sector} - ${description})`;
+
+  await pool.query(`
+    INSERT INTO market_news_feed (title, content, event_type, impact_sector, related_stock, impact_rate, sentiment, importance)
+    VALUES (?, ?, 'STOCK_IPO', ?, ?, 0.40, 'BULL', 'URGENT')
+  `, [title, content, sector, stockId]);
+
+  console.log(`👑 [관리자 커스텀 신규 상장] ${name} (${stockId}) 공모가: ${formatMoney(rawPrice)}`);
+
+  return {
+    stockId,
+    name,
+    price: rawPrice.toString(),
+    priceFormatted: formatMoney(rawPrice),
+    sector,
+    description,
+    volatility,
+    peRatio,
+    dividendYield
+  };
 }
 
 function getCurrentMarketRegime() {
-  return MARKET_REGIMES[currentRegimeIndex];
+  return MARKET_REGIMES[currentRegimeIndex] || MARKET_REGIMES[0];
+}
+
+/**
+ * 🌐 거시경제 국면에 따른 주식 매수 한도 배율 (Dynamic Regime Buy Limit Multiplier)
+ * - 🚀 SUPER_BULL / BOOM: 2.0x (유동성 파티 한도 200% 대폭 확대)
+ * - 📈 BULL: 1.5x (경기 확장기 150% 확대)
+ * - ⚖️ NORMAL: 1.0x (표준 한도 100%)
+ * - 📉 RECESSION: 0.7x (경기 침체 70% 긴축)
+ * - 🌪️ CRASH: 0.5x (금융 위기 50% 안전 보호)
+ */
+function getRegimeBuyLimitMultiplier() {
+  const regime = getCurrentMarketRegime();
+  if (!regime) return { multiplier: 1.0, policyName: '표준 한도 (100%)', regimeName: '정상 경기' };
+  
+  if (regime.type === 'SUPER_BULL' || regime.id === 'BOOM') {
+    return { multiplier: 2.0, policyName: '🚀 대호황기 유동성 특수 매수 한도 2배(200%) 확대', regimeName: regime.name };
+  }
+  if (regime.type === 'BULL' || regime.drift > 0) {
+    return { multiplier: 1.5, policyName: '📈 경기 확장기 매수 한도 1.5배(150%) 완화', regimeName: regime.name };
+  }
+  if (regime.type === 'CRASH') {
+    return { multiplier: 0.5, policyName: '🌪️ 금융위기 투자자 보호 매수 한도 50% 긴축', regimeName: regime.name };
+  }
+  if (regime.type === 'RECESSION' || regime.drift < 0) {
+    return { multiplier: 0.7, policyName: '📉 경기 침체기 투기 과열 방지 매수 한도 70% 축소', regimeName: regime.name };
+  }
+  return { multiplier: 1.0, policyName: '⚖️ 정상 시장 표준 매수 한도 (100%)', regimeName: regime.name };
+}
+
+/**
+ * 📊 종목별 고유 기초 최대 매수 한도 (Base Max Shares per Stock)
+ * - 초저가 동전주 (< 1,000원): 1,000만 주
+ * - 중저가 일반주 (1,000원 ~ 10,000원): 200만 주
+ * - 고가 혁신주 (10,000원 ~ 100,000원): 50만 주
+ * - 초고가 대형주 (100,000원 ~ 100만원): 10만 주
+ * - 황제주 (100만원 이상): 2만 주
+ */
+function getStockBaseBuyLimit(stock) {
+  if (typeof stock === 'object' && stock && stock.max_buy_limit != null && Number(stock.max_buy_limit) > 0) {
+    return Number(stock.max_buy_limit);
+  }
+  const price = typeof stock === 'object' ? Number(stock.price || 0) : Number(stock || 0);
+  if (price < 1000) return 10000000;       // 1,000만 주
+  if (price < 10000) return 2000000;       // 200만 주
+  if (price < 100000) return 500000;       // 50만 주
+  if (price < 1000000) return 100000;      // 10만 주
+  return 20000;                            // 2만 주
+}
+
+/**
+ * 🎯 경제 상황 연동 종목별 실시간 1회 최대 구매 한도 계산 (Max Stock Purchase Limit)
+ */
+function getStockMaxBuyLimit(stock) {
+  const baseShares = getStockBaseBuyLimit(stock);
+  const { multiplier, policyName, regimeName } = getRegimeBuyLimitMultiplier();
+  const maxShares = Math.max(10, Math.floor(baseShares * multiplier));
+  const maxUnits = BigInt(maxShares) * 10000n; // 소수점 4자리 유닛 단위
+  const isCustom = typeof stock === 'object' && stock && stock.max_buy_limit != null && Number(stock.max_buy_limit) > 0;
+
+  return {
+    baseShares,
+    multiplier,
+    maxShares,
+    maxUnits,
+    maxSharesText: maxShares.toLocaleString('ko-KR') + '주',
+    policyName,
+    regimeName,
+    isCustom
+  };
+}
+
+/**
+ * 👑 관리자 종목별 1회 최대 구매 한도 직접 설정/초기화
+ */
+async function setStockCustomBuyLimit(stockId, maxLimit) {
+  const sId = String(stockId || '').toUpperCase().trim();
+  const [stocks] = await pool.query('SELECT stock_id, name, price FROM stocks WHERE stock_id = ?', [sId]);
+  if (!stocks.length) {
+    throw new Error(`존재하지 않는 주식 종목코드입니다: [${sId}]`);
+  }
+
+  const limitVal = maxLimit === null || maxLimit === undefined || maxLimit === '' || Number(maxLimit) <= 0
+    ? null
+    : Math.floor(Number(maxLimit));
+
+  await pool.query('UPDATE stocks SET max_buy_limit = ? WHERE stock_id = ?', [limitVal, sId]);
+
+  const stock = stocks[0];
+  stock.max_buy_limit = limitVal;
+  const buyLimitInfo = getStockMaxBuyLimit(stock);
+
+  console.log(`👑 [관리자 한도 설정] [${stock.name}(${sId})] 최대 매수 한도 ➔ ${limitVal ? limitVal.toLocaleString() + '주 (커스텀)' : '주가 기반 자동'}`);
+
+  return {
+    stockId: sId,
+    stockName: stock.name,
+    customLimit: limitVal,
+    buyLimitInfo
+  };
 }
 
 // 자동 경제 조절 시스템에서 호출 - 시장 국면 강제 변경
 function setMarketRegime(index) {
   if (index >= 0 && index < MARKET_REGIMES.length) {
+    currentRegimeIndex = index;
     forcedRegimeIndex = index;
-    console.log(`🔧 [자동경제조절] 시장 국면 강제 전환 예약: ${MARKET_REGIMES[index].name}`);
+    regimeCyclesLeft = 3;
+    console.log(`🔧 [시장국면] 즉시 전환: ${MARKET_REGIMES[index].name}`);
   }
 }
 
@@ -548,10 +1373,22 @@ module.exports = {
   adjustStockPrice,
   adjustAllStocksRatio,
   startStockEngine,
+  checkAndProcessDelistings,
+  executeDelisting,
+  relistStock,
+  executeStockSplit,
+  executeSpinOff,
+  launchNewIPOStock,
+  createCustomStock,
   getCurrentMarketRegime,
   setMarketRegime,
+  getStockBaseBuyLimit,
+  getRegimeBuyLimitMultiplier,
+  getStockMaxBuyLimit,
+  setStockCustomBuyLimit,
   getLastNews,
   getRecentNewsFeed,
   MARKET_REGIMES,
-  NEWS_EVENTS
+  NEWS_EVENTS,
+  IPO_CANDIDATE_POOL
 };

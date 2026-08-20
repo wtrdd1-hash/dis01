@@ -21,10 +21,10 @@ module.exports = {
     }
 
     const username = interaction.user.displayName || interaction.user.username;
+    const safeText = String(text.trim()).replace(/@(everyone|here)/gi, '@\u200b$1');
 
-    // 디스코드 자체 음성(TTS) 메시지 발송
     await interaction.reply({
-      content: `🔊 **[${username}]**: ${text.trim()}`,
+      content: `🔊 **[${username}]**: ${safeText}`,
       tts: true
     });
   }

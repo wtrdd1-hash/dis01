@@ -1,0 +1,149 @@
+/* 월덕 웹 도움말 */
+body[data-tab="tab-help"] #cx-ticker { display: none; }
+body[data-tab="tab-help"] .channel-content { padding: 12px 16px 28px; }
+
+.btn-help-top {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0;
+  line-height: 1;
+}
+.btn-help-top:hover {
+  background: var(--bg-mod-hover);
+  color: var(--text-header);
+  border-color: var(--brand);
+}
+
+.help-page { max-width: 720px; }
+.help-hero h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-header);
+  margin-bottom: 6px;
+}
+.help-hero p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  line-height: 1.55;
+}
+.help-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 0 12px;
+}
+.help-search-icon { color: var(--text-faint); font-size: 16px; }
+.help-search {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: var(--text-header);
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 0;
+  outline: none;
+  width: 100%;
+}
+.help-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0 12px;
+}
+.help-chip {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.help-chip:hover { color: var(--text-header); background: var(--bg-mod-hover); }
+.help-chip.active {
+  background: var(--bg-mod-selected);
+  color: var(--text-header);
+  border-color: transparent;
+}
+
+.help-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.help-card-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  color: var(--text-header);
+  font-size: 15px;
+  font-weight: 650;
+  cursor: pointer;
+  text-align: left;
+}
+.help-card-head:hover { background: var(--bg-mod-hover); }
+.help-caret {
+  color: var(--text-faint);
+  transition: transform 0.15s ease;
+}
+.help-card.open .help-caret { transform: rotate(180deg); }
+.help-card-body {
+  display: none;
+  padding: 0 14px 14px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.help-card.open .help-card-body { display: block; }
+.help-card-body p { margin-bottom: 8px; }
+.help-card-body ul,
+.help-card-body ol { margin: 0 0 8px 1.15em; }
+.help-card-body li { margin-bottom: 4px; }
+.help-note {
+  background: rgba(88, 101, 242, 0.12);
+  border-left: 3px solid var(--brand);
+  padding: 8px 10px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.help-go {
+  margin-top: 6px;
+  background: var(--brand);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.help-go:hover { background: var(--brand-hover); }
+.help-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 28px 8px;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .btn-help-top { display: inline-grid; }
+}

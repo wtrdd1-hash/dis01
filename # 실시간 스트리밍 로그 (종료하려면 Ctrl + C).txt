@@ -1,0 +1,28 @@
+# 실시간 스트리밍 로그 (종료하려면 Ctrl + C)
+pm2 logs discord-bot
+
+# 최근 50줄만 빠르게 확인하고 빠져나오기
+pm2 logs discord-bot --lines 50 --nostream
+
+# 에러 로그만 확인하기
+pm2 logs discord-bot --err --lines 30 --nostream
+pm2 restart discord-bot
+ssh vps-wtrdd
+wtrdd
+sudo docker logs -tf --tail 50 wtrdd-discord-app
+https://dash.cloudflare.com/9e8aa189c3ac346960d069c95e671182/home
+
+Get-ChildItem -Force | Where-Object { $_.Name -ne ".env" } | ForEach-Object {
+    scp -i "E:\dis_01\wtrdd_vps_key\id_ed25519" -r $_.FullName wtrdd@51.222.206.109:~/discord-bot/
+}
+
+
+
+1.미니pc 우분트 서버 버전 설치
+2.미니pc ssh 허용
+3.미니 pc 네트워크 확인 설정
+4.데이터베이스 구축
+5.도멘인 dns 재설정
+6.서버 재시작
+7.아이피 변경시 자동 dns 설정시스템 구축
+6.

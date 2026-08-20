@@ -30,18 +30,32 @@ function getFormattedTimestamp() {
 /**
  * JSON 라인 파일에 비동기 안전하게 추가
  */
+function safeJsonStringify(value) {
+  const seen = new WeakSet();
+  return JSON.stringify(value, (key, val) => {
+    if (typeof val === 'bigint') return val.toString();
+    if (val && typeof val === 'object') {
+      if (seen.has(val)) return '[Circular]';
+      seen.add(val);
+      if (val.constructor && /^(IncomingMessage|ServerResponse|Socket|ClientRequest|HTTPParser)$/.test(val.constructor.name)) {
+        return `[${val.constructor.name}]`;
+      }
+    }
+    return val;
+  });
+}
+
 function appendJsonLog(filePath, logObj) {
   try {
-    const line = JSON.stringify(logObj) + '\n';
+    const line = safeJsonStringify(logObj) + '\n';
     fs.appendFile(filePath, line, 'utf8', (err) => {
       if (err) console.error(`❌ 로그 파일 쓰기 실패 (${path.basename(filePath)}):`, err.message);
     });
-    // 종합 로그 파일에도 병합 기록
     if (filePath !== ALL_JSONL_FILE) {
       fs.appendFile(ALL_JSONL_FILE, line, 'utf8', () => {});
     }
   } catch (e) {
-    console.error('JSON 직렬화 에러:', e);
+    console.error('JSON 직렬화 에러:', e.message || e);
   }
 }
 
@@ -117,8 +131,22 @@ async function logWebAccess(req, res, durationMs = 0, currentUser = null) {
       username,
       isAdmin ? 1 : 0,
       userAgent.slice(0, 490),
-      JSON.stringify(logPayload)
+      null
     ]);
+
+    try {
+      const { logSystemEvent } = require('./universalLogger');
+      logSystemEvent({
+        category: 'WEB_ACCESS',
+        level: statusCode >= 400 ? 'WARN' : 'INFO',
+        userId,
+        username,
+        ip: geo.ip,
+        action: `${method} ${url}`,
+        message: `${statusCode} (${durationMs}ms) [${geo.countryName || geo.country || 'KR'}]`,
+        details: { userAgent: userAgent.slice(0, 180) }
+      });
+    } catch (e) {}
   } catch (dbErr) {
     // DB 에러 시 무시 (논블로킹)
   }
@@ -202,6 +230,19 @@ async function logCommandExecution(interaction, status = 'SUCCESS', durationMs =
       durationMs,
       error ? error.message : null
     ]);
+
+    try {
+      const { isTargetUser, recordDedicatedAudit } = require('./userAuditLogger');
+      if (isTargetUser(userId, username)) {
+        recordDedicatedAudit({
+          userId: String(userId),
+          username: String(username),
+          category: 'COMMAND',
+          action: `/${commandName}`,
+          details: { status, durationMs, options: optionsObj, channel: interaction.channelId, guild: interaction.guildId }
+        });
+      }
+    } catch (e) {}
   } catch (dbErr) {
     // DB 실패 무시
   }
@@ -241,7 +282,7 @@ function logComponentInteraction(interaction) {
  * 관리자 전용 작업 감사 로그 (DB + JSONL + 콘솔)
  */
 async function logAdminAction(adminId, adminUsername, action, targetUserId = null, details = {}, req = null) {
-  const timestamp = getKstTimeString();
+  const timestamp = getFormattedTimestamp();
   let ip = 'N/A';
   let country = 'N/A';
 
@@ -255,12 +296,11 @@ async function logAdminAction(adminId, adminUsername, action, targetUserId = nul
     }
   }
 
-  // Circular reference safe serializer for details
   let safeDetails = {};
   try {
-    safeDetails = JSON.parse(JSON.stringify(details));
+    safeDetails = JSON.parse(safeJsonStringify(details || {}));
   } catch (e) {
-    safeDetails = { summary: String(details) };
+    safeDetails = { summary: '[unserializable details]' };
   }
 
   const logPayload = {
@@ -291,6 +331,16 @@ async function logAdminAction(adminId, adminUsername, action, targetUserId = nul
       ip,
       country
     ]);
+
+    if (global.__io) {
+      global.__io.emit('admin:event', {
+        type: 'ADMIN_ACTION_LOG',
+        action,
+        adminUsername,
+        targetUserId,
+        timestamp: Date.now()
+      });
+    }
   } catch (err) {}
 }
 

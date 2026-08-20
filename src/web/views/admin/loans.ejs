@@ -1,0 +1,76 @@
+<%- include('header', { activeMenu: 'loans', pageTitle: '대출 관리 - 관리자', pageHeader: '대출' }) %>
+
+<style>
+  .loan-stat-card {
+    background: #0f172a;
+    border-radius: 12px;
+    padding: 16px 20px;
+    border: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+  .loan-stat-label { font-size: 0.8rem; color: #94a3b8; font-weight: 600; }
+  .loan-stat-val { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; }
+</style>
+
+<!-- 🌟 대출 및 채권 관제 메인 카드 -->
+<div class="card" style="border: 1px solid rgba(129, 140, 248, 0.35); background: #0b1120;">
+  
+  <!-- 상단 헤더 -->
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:16px;">
+    <div>
+      <h2 style="color:#a5b4fc; margin:0; font-size:1.35rem; display:flex; align-items:center; gap:8px;">
+        <span>💳 대출 관제 및 채권 장부 (Loan Registry)</span>
+      </h2>
+      <p style="font-size:0.83rem; color:#94a3b8; margin-top:4px;">
+        서버 대출 현황(이자율 시간당 0.15%, 24시간 만기, 담보 동결)을 모니터링하고 연체 채권을 강제 회수합니다.
+      </p>
+    </div>
+
+    <button type="button" onclick="location.reload()" style="background:#4f46e5; border:none; color:#fff; padding:8px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer; display:flex; align-items:center; gap:6px;">
+      <span>↻ 대출 장부 갱신</span>
+    </button>
+  </div>
+
+  <!-- 📊 3대 핵심 대출 지표 타일 -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:24px;">
+    <div class="loan-stat-card" style="border-left: 4px solid #38bdf8;">
+      <div class="loan-stat-label">📄 진행 중인 대출</div>
+      <div class="loan-stat-val" style="color:#38bdf8;"><%= loanOverview.openCount || 0 %>건</div>
+    </div>
+    <div class="loan-stat-card" style="border-left: 4px solid #ef4444;">
+      <div class="loan-stat-label">🚨 연체 및 위험 대출</div>
+      <div class="loan-stat-val" style="color:#f87171;"><%= loanOverview.overdueCount || 0 %>건</div>
+    </div>
+    <div class="loan-stat-card" style="border-left: 4px solid #fbbf24;">
+      <div class="loan-stat-label">💰 총 잔여 채무 총액</div>
+      <div class="loan-stat-val" style="color:#fbbf24;"><%= formatMoney(loanOverview.debt || 0) %></div>
+    </div>
+  </div>
+
+  <!-- 대출 장부 테이블 -->
+  <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:80px;">대출 ID</th>
+          <th style="width:180px;">차입자 계정</th>
+          <th style="width:100px;">상태</th>
+          <th style="text-align:right; width:150px;">대출 원금</th>
+          <th style="text-align:right; width:150px;">상환 잔액</th>
+          <th style="text-align:right; width:150px;">동결 담보</th>
+          <th style="width:150px;">대출 시각 (KST)</th>
+          <th style="width:150px;">만기 시각 (KST)</th>
+          <th style="text-align:center; width:100px;">강제 집행</th>
+        </tr>
+      </thead>
+      <tbody>
+        <%- loanRowsHtml %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('footer') %>

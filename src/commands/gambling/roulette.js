@@ -1,25 +1,30 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { pool, getOrCreateUser } = require('../../config/database');
-const { createGambleEmbed, createErrorEmbed } = require('../../utils/embedBuilder');
+const { createErrorEmbed } = require('../../utils/embedBuilder');
 const { formatMoney } = require('../../utils/formatters');
+const { safeBigInt, computePayout, applyCashDelta, parseCasinoGambleBet, casinoTooSmallMessage } = require('../../utils/money');
+const { spinRoulette, scaleGambleMultiplier } = require('../../utils/economyBalance');
+const { rouletteFlavor, runStagedEmbed, showEmbed, moneyTail, COLORS } = require('../../utils/gameShow');
+
+const COLOR_LABEL = { RED: '🔴 레드', BLACK: '⚫ 블랙', GREEN: '🟢 그린' };
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('룰렛')
     .setDescription('🎡 카지노 룰렛 (레드/블랙/잭팟 그린) 도박을 진행합니다.')
-    .addStringOption(option =>
+    .addStringOption((option) =>
       option.setName('색상')
         .setDescription('배팅할 색상 선택')
         .setRequired(true)
         .addChoices(
-          { name: '🔴 레드 (2배 / 45% 확률)', value: 'RED' },
-          { name: '⚫ 블랙 (2배 / 45% 확률)', value: 'BLACK' },
-          { name: '🟢 그린 잭팟 (10배 / 10% 확률)', value: 'GREEN' }
+          { name: '🔴 레드 (2배 / 47%)', value: 'RED' },
+          { name: '⚫ 블랙 (2배 / 47%)', value: 'BLACK' },
+          { name: '🟢 그린 잭팟 (15배 / 6%)', value: 'GREEN' }
         )
     )
-    .addStringOption(option =>
+    .addStringOption((option) =>
       option.setName('배팅금액')
-        .setDescription('배팅할 금액 또는 "올인"')
+        .setDescription('배팅할 금액, 한글 단위(예: 5만), 또는 "전액"/"올인"')
         .setRequired(true)
     ),
 
@@ -29,25 +34,20 @@ module.exports = {
     const userId = interaction.user.id;
 
     const userData = await getOrCreateUser(userId);
-    const userCash = BigInt(userData.cash);
+    const userCash = safeBigInt(userData.cash);
 
-    let betAmount = 0n;
-    if (betInput === '올인' || betInput === '전체' || betInput === 'all') {
-      betAmount = userCash;
-    } else {
-      const parsed = parseInt(betInput, 10);
-      if (isNaN(parsed) || parsed <= 0) {
-        return interaction.reply({
-          embeds: [createErrorEmbed('입력 오류', '배팅 금액은 1,000원 이상의 정수 또는 "올인"이어야 합니다.')],
-          flags: MessageFlags.Ephemeral
-        });
-      }
-      betAmount = BigInt(parsed);
+    const betAmount = parseCasinoGambleBet(betInput, userCash);
+    if (betAmount === null) {
+      return interaction.reply({
+        embeds: [createErrorEmbed('입력 오류', '배팅 금액은 1,000원 이상의 정수, 한글 단위(예: 5만), 또는 "전액"/"올인"이어야 합니다.')],
+        flags: MessageFlags.Ephemeral
+      });
     }
 
-    if (betAmount < 1000n) {
+    const tooSmall = casinoTooSmallMessage(betInput, userCash, betAmount);
+    if (tooSmall) {
       return interaction.reply({
-        embeds: [createErrorEmbed('배팅 제한', '최소 배팅 금액은 1,000원입니다.')],
+        embeds: [createErrorEmbed('배팅 제한', tooSmall)],
         flags: MessageFlags.Ephemeral
       });
     }
@@ -59,47 +59,38 @@ module.exports = {
       });
     }
 
-    // 룰렛 결과 뽑기 (0~9: GREEN 10%, 10~54: RED 45%, 55~99: BLACK 45%)
-    const rand = Math.floor(Math.random() * 100);
-    let outcomeColor = '';
-    let outcomeEmoji = '';
-
-    if (rand < 10) {
-      outcomeColor = 'GREEN';
-      outcomeEmoji = '🟢 GREEN';
-    } else if (rand < 55) {
-      outcomeColor = 'RED';
-      outcomeEmoji = '🔴 RED';
-    } else {
-      outcomeColor = 'BLACK';
-      outcomeEmoji = '⚫ BLACK';
-    }
+    const spun = spinRoulette();
+    const outcomeColor = spun.color;
+    const outcomeEmoji = spun.emoji;
 
     let multiplier = 0;
     if (colorChoice === outcomeColor) {
-      multiplier = outcomeColor === 'GREEN' ? 10 : 2;
+      multiplier = scaleGambleMultiplier(spun.winMult);
     }
 
-    const payout = betAmount * BigInt(multiplier);
+    const payout = computePayout(betAmount, multiplier);
     const profit = payout - betAmount;
-    const newCash = userCash + profit;
-
-    await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [newCash.toString(), userId]);
+    const newCash = await applyCashDelta(userId, profit);
     await pool.query(
       'INSERT INTO gambling_logs (user_id, game, bet, payout, profit) VALUES (?, "roulette", ?, ?, ?)',
       [userId, betAmount.toString(), payout.toString(), profit.toString()]
     );
 
-    const embed = createGambleEmbed(
-      '🎡 카지노 룰렛 결과',
-      `**룰렛 정지 위치:** ${outcomeEmoji}\n` +
-      `**내 선택:** \`${colorChoice}\`\n\n` +
-      `${multiplier > 0 ? `🎉 **축하합니다! ${multiplier}배 당첨!**` : '💀 **아쉽게도 패배했습니다.**'}\n\n` +
-      `💰 **배팅금:** ${formatMoney(betAmount)}\n` +
-      `🎁 **획득금:** ${formatMoney(payout)}\n` +
-      `💳 **현재 잔액:** **${formatMoney(newCash)}**`
-    );
+    const isWin = multiplier > 0;
+    const flavor = rouletteFlavor(colorChoice, outcomeColor, outcomeEmoji, isWin);
+    const money = moneyTail(betAmount, payout, newCash);
 
-    await interaction.reply({ embeds: [embed] });
+    await runStagedEmbed(interaction, [
+      { embed: showEmbed('🎡 룰렛 회전', `칩을 ${COLOR_LABEL[colorChoice] || colorChoice}에 올렸습니다.\n휠이 돌아가기 시작합니다...`, COLORS.GAMBLE) },
+      { delay: 800, embed: showEmbed('🎡 구슬이 느려집니다', '마지막 칸을 스치며 속도를 줄입니다...', COLORS.WARNING) },
+      {
+        delay: 900,
+        embed: showEmbed(
+          isWin ? '🎡 적중' : '🎡 빗나감',
+          `**정지:** ${outcomeEmoji} ${COLOR_LABEL[outcomeColor] || outcomeColor}\n**선택:** ${COLOR_LABEL[colorChoice] || colorChoice}\n\n${isWin ? `🎉 **${multiplier}배 당첨**` : '💀 **패배**'}\n_${flavor}_${money}`,
+          isWin ? COLORS.SUCCESS : COLORS.ERROR
+        )
+      }
+    ]);
   }
 };

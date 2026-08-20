@@ -1,0 +1,538 @@
+<%- include('header', { activeMenu: 'logs', pageTitle: '전체 시스템 통합 로그 관제실 - 관리자', pageHeader: '시스템-종합로그' }) %>
+
+<style>
+  .log-chip {
+    background: #1e293b;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #94a3b8;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .log-chip:hover { color: #fff; background: #334155; border-color: rgba(255,255,255,0.25); }
+  .log-chip.is-active { background: #4f46e5; color: #fff; border-color: #6366f1; }
+  .log-chip-err.is-active { background: #dc2626; color: #fff; border-color: #ef4444; }
+  .log-chip-warn.is-active { background: #d97706; color: #fff; border-color: #f59e0b; }
+  
+  .log-line-wrap {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background 0.1s ease;
+  }
+  .log-line-wrap:hover { background: rgba(255, 255, 255, 0.05); }
+  .log-line-num {
+    color: #475569;
+    font-size: 0.75rem;
+    user-select: none;
+    min-width: 36px;
+    text-align: right;
+  }
+  .log-line-content {
+    flex: 1;
+    word-break: break-all;
+  }
+  .log-err-line { background: rgba(239, 68, 68, 0.12); border-left: 3px solid #ef4444; }
+  .log-warn-line { background: rgba(245, 158, 11, 0.1); border-left: 3px solid #f59e0b; }
+  
+  .is-fullscreen-terminal {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9999 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+</style>
+
+<!-- 🌟 실시간 파일 로그 터미널 관제실 (Master Log Streamer) -->
+<div class="card" id="log-main-card" style="border: 1px solid rgba(99, 102, 241, 0.4); background: #0f172a; margin-bottom: 25px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
+    <div>
+      <h2 style="color:#a5b4fc; margin:0; display:flex; align-items:center; gap:8px;">
+        <span>📜 실시간 전체 파일 로그 관제실</span>
+        <span id="log-status-badge" style="background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3); font-size:0.75rem; padding:2px 8px; border-radius:12px; font-weight:700;">● 실시간 스트리밍 중</span>
+      </h2>
+      <p style="font-size:0.82rem; color:#9ca3af; margin-top:4px;">
+        서버의 <b>전체 마스터 로그(system_all.log)</b> 및 카테고리별 정밀 로그를 1원/1초 단위로 실시간 탐색합니다.
+      </p>
+    </div>
+
+    <!-- 우측 상단 툴바 -->
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <label style="display:flex; align-items:center; gap:6px; font-size:0.8rem; color:#cbd5e1; cursor:pointer; background:#1e293b; padding:6px 10px; border-radius:6px; border:1px solid var(--border);">
+        <input type="checkbox" id="log-auto-refresh" checked onchange="toggleAutoRefresh(this.checked)">
+        <span>자동 갱신 (3초)</span>
+      </label>
+
+      <select id="log-file-select" onchange="changeActiveLogFile(this.value)" style="background:#1e293b; border:1px solid var(--border); color:#38bdf8; font-weight:700; padding:6px 10px; border-radius:6px; font-size:0.85rem;">
+        <option value="system_all.log" selected>⚡ 전체 통합 마스터 로그 (system_all.log)</option>
+        <option value="audit_dlhaslflkgh.log">🕵️ @dlhaslflkgh 전용 감시 로그</option>
+        <option value="economy.log">💰 경제 & 자금 이동 로그</option>
+        <option value="gambling.log">🎰 도박 & 카지노 게임 로그</option>
+        <option value="stocks.log">📈 주식 매매 & 주가 틱 로그</option>
+        <option value="web_access.log">🌐 웹사이트 접속 로그</option>
+        <option value="commands.log">⌨️ 디스코드 슬래시 명령어 로그</option>
+        <option value="security.log">🛡️ 웹 방화벽 & 보안 차단 로그</option>
+        <option value="admin_actions.log">👑 관리자 콘솔 작업 로그</option>
+      </select>
+
+      <select id="log-lines-select" onchange="fetchRawLogData()" style="background:#1e293b; border:1px solid var(--border); color:#cbd5e1; padding:6px 8px; border-radius:6px; font-size:0.85rem;">
+        <option value="100">최근 100줄</option>
+        <option value="200" selected>최근 200줄</option>
+        <option value="500">최근 500줄</option>
+        <option value="1000">최근 1000줄</option>
+      </select>
+
+      <button type="button" onclick="fetchRawLogData(true)" style="background:#374151; border:1px solid var(--border); color:#fff; padding:6px 12px; border-radius:6px; font-size:0.85rem; font-weight:700; cursor:pointer;">↻ 새로고침</button>
+      <button type="button" onclick="downloadCurrentLogFile()" style="background:#0284c7; border:none; color:#fff; padding:6px 12px; border-radius:6px; font-size:0.85rem; font-weight:700; cursor:pointer;">📥 다운로드</button>
+    </div>
+  </div>
+
+  <!-- ⚡ 퀵 필터 칩스 바 -->
+  <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:12px; padding:8px 12px; background:#030712; border-radius:8px; border:1px solid rgba(255,255,255,0.06);">
+    <span style="font-size:0.75rem; color:#9ca3af; font-weight:700; margin-right:4px;">⚡ 빠른 필터:</span>
+    <button type="button" class="log-chip is-active" id="chip-all" onclick="applyQuickFilter('')">전체</button>
+    <button type="button" class="log-chip log-chip-err" id="chip-err" onclick="applyQuickFilter('ERROR')">🚨 에러만 [ERROR]</button>
+    <button type="button" class="log-chip log-chip-warn" id="chip-warn" onclick="applyQuickFilter('WARN')">⚠️ 경고만 [WARN]</button>
+    <button type="button" class="log-chip" id="chip-audit" onclick="applyQuickFilter('AUDIT')">🕵️ 정밀감시 [AUDIT]</button>
+    <button type="button" class="log-chip" id="chip-admin" onclick="applyQuickFilter('ADMIN')">👑 관리자작업</button>
+    <button type="button" class="log-chip" id="chip-eco" onclick="applyQuickFilter('ECONOMY')">💰 자금이동</button>
+    <button type="button" class="log-chip" id="chip-gamble" onclick="applyQuickFilter('GAMBLE')">🎰 도박/카지노</button>
+    <button type="button" class="log-chip" id="chip-stock" onclick="applyQuickFilter('STOCK')">📈 주식거래</button>
+    <button type="button" class="log-chip" id="chip-web" onclick="applyQuickFilter('WEB_ACCESS')">🌐 웹접속</button>
+    <button type="button" class="log-chip" id="chip-cmd" onclick="applyQuickFilter('COMMAND')">⌨️ 명령어</button>
+  </div>
+
+  <!-- 검색 및 뷰 조작 툴바 -->
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+    <div style="display:flex; gap:8px; align-items:center; flex:1; min-width:260px;">
+      <input type="text" id="log-search-input" placeholder="로그 실시간 검색 (닉네임, 유저ID, 명령어, 에러 등)" oninput="handleLogSearchInput()" style="width:100%; max-width:400px; background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:7px 12px; border-radius:6px; font-size:0.85rem; font-family:monospace;">
+      <button type="button" onclick="clearLogSearch()" style="background:#1f2937; border:1px solid var(--border); color:#9ca3af; padding:6px 10px; border-radius:6px; font-size:0.8rem; cursor:pointer;">초기화</button>
+    </div>
+
+    <!-- 터미널 옵션 조작 -->
+    <div style="display:flex; gap:8px; align-items:center; font-size:0.8rem; color:#9ca3af; flex-wrap:wrap;">
+      <span id="log-meta-info" style="color:#38bdf8; font-weight:700;">출력: 0줄</span>
+      
+      <!-- 폰트 크기 조절 -->
+      <button type="button" onclick="adjustFontSize(-1)" style="background:#1e293b; border:1px solid var(--border); color:#cbd5e1; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;">A-</button>
+      <button type="button" onclick="adjustFontSize(1)" style="background:#1e293b; border:1px solid var(--border); color:#cbd5e1; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;">A+</button>
+      
+      <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+        <input type="checkbox" id="log-autoscroll" checked>
+        <span>하단 스크롤</span>
+      </label>
+      
+      <button type="button" onclick="clearTerminalView()" style="background:#1f2937; border:1px solid var(--border); color:#9ca3af; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;">🧹 화면비우기</button>
+      <button type="button" onclick="copyLogContent()" style="background:#1f2937; border:1px solid var(--border); color:#e2e8f0; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;">📋 복사</button>
+      <button type="button" id="btn-fullscreen" onclick="toggleFullscreenTerminal()" style="background:#374151; border:1px solid var(--border); color:#fff; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;">🖵 전체화면</button>
+    </div>
+  </div>
+
+  <!-- 🖥️ 터미널 콘솔 화면 -->
+  <div id="log-terminal-container" style="background:#030712; border:1px solid rgba(255,255,255,0.12); border-radius:8px; height:520px; overflow-y:auto; padding:12px; font-family:'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:0.84rem; line-height:1.6; color:#e2e8f0; white-space:pre-wrap; word-break:break-all;">
+    <div style="color:#9ca3af; text-align:center; padding:30px;"><span class="pulse-dot"></span> 로그 스트림을 연결하는 중입니다...</div>
+  </div>
+</div>
+
+
+<!-- 🗃️ DB 구조화 테이블 로그 카드 -->
+<div class="card" style="border: 1px solid var(--border);">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+    <div>
+      <h3 style="color:#e0e7ff; margin:0;">📊 데이터베이스(DB) 정형 로그 테이블</h3>
+      <p style="font-size:0.8rem; color:#9ca3af; margin-top:2px;">DB에 저장된 최근 50건의 정형 기록들을 카테고리별로 조회합니다.</p>
+    </div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+      <button type="button" class="btn-filter is-active" id="btn-log-eco" onclick="switchLogView('eco')">💰 자금 흐름</button>
+      <button type="button" class="btn-filter" id="btn-log-gamble" onclick="switchLogView('gamble')">🎰 도박 (롤백)</button>
+      <button type="button" class="btn-filter" id="btn-log-trades" onclick="switchLogView('trades')">🛒 주식 체결</button>
+      <button type="button" class="btn-filter" id="btn-log-prices" onclick="switchLogView('prices')">📈 주가 틱</button>
+      <button type="button" class="btn-filter" id="btn-log-access" onclick="switchLogView('access')">🌐 웹 접속</button>
+      <button type="button" class="btn-filter" id="btn-log-commands" onclick="switchLogView('commands')">⌨️ 슬래시 명령</button>
+    </div>
+  </div>
+
+  <!-- 1. 자금 흐름 -->
+  <div id="log-sec-eco">
+    <table>
+      <thead>
+        <tr>
+          <th>번호</th>
+          <th>시간 (KST)</th>
+          <th>유저 (@계정)</th>
+          <th>유형</th>
+          <th style="text-align:right;">금액</th>
+          <th style="text-align:right;">변동 전</th>
+          <th style="text-align:right;">변동 후</th>
+          <th>비고</th>
+        </tr>
+      </thead>
+      <tbody>
+        <%- economyRowsHtml %>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 2. 도박 기록 -->
+  <div id="log-sec-gamble" style="display:none;">
+    <table>
+      <thead>
+        <tr>
+          <th>번호</th>
+          <th>시간 (KST)</th>
+          <th>유저</th>
+          <th>게임</th>
+          <th style="text-align:right;">배팅금</th>
+          <th style="text-align:right;">순손익</th>
+          <th style="text-align:right;">변동 전</th>
+          <th style="text-align:right;">변동 후</th>
+          <th>작업</th>
+        </tr>
+      </thead>
+      <tbody>
+        <%- gambleRowsHtml %>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 3. 주식 체결 -->
+  <div id="log-sec-trades" style="display:none;">
+    <table>
+      <thead>
+        <tr>
+          <th>번호</th>
+          <th>시간 (KST)</th>
+          <th>체결 유저</th>
+          <th>종목</th>
+          <th>유형</th>
+          <th style="text-align:right;">체결 수량</th>
+          <th style="text-align:right;">체결 단가</th>
+          <th style="text-align:right;">총 거래액</th>
+        </tr>
+      </thead>
+      <tbody>
+        <%- tradeRowsHtml %>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 4. 주가 틱 -->
+  <div id="log-sec-prices" style="display:none;">
+    <table>
+      <thead>
+        <tr>
+          <th>번호</th>
+          <th>시간 (KST)</th>
+          <th>종목</th>
+          <th style="text-align:right;">이전가</th>
+          <th style="text-align:right;">변동가</th>
+          <th style="text-align:right;">변동률</th>
+          <th>시장 국면</th>
+          <th>사유 / 뉴스</th>
+        </tr>
+      </thead>
+      <tbody>
+        <%- priceRowsHtml %>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 5. 웹 접속 -->
+  <div id="log-sec-access" style="display:none;">
+    <table>
+      <thead>
+        <tr>
+          <th>번호</th>
+          <th>시간 (KST)</th>
+          <th>유저</th>
+          <th>국가/도시</th>
+          <th>요청 경로</th>
+          <th>상태</th>
+          <th>응답</th>
+        </tr>
+      </thead>
+      <tbody>
+        <%- webRowsHtml %>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 6. 슬래시 명령어 -->
+  <div id="log-sec-commands" style="display:none;">
+    <table>
+      <thead>
+        <tr>
+          <th>번호</th>
+          <th>시간 (KST)</th>
+          <th>실행 유저</th>
+          <th>명령어</th>
+          <th>입력 옵션</th>
+          <th>결과</th>
+          <th>처리 속도</th>
+        </tr>
+      </thead>
+      <tbody>
+        <%- cmdRowsHtml %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  let currentLogFile = 'system_all.log';
+  let autoRefreshTimer = null;
+  let rawLogLinesCache = [];
+  let isFetchingLog = false;
+  let searchDebounceTimer = null;
+  let activeQuickFilter = '';
+  let currentFontSize = 0.84;
+  let isFullscreen = false;
+
+  function switchLogView(type) {
+    ['eco', 'gamble', 'trades', 'prices', 'access', 'commands'].forEach(function(t) {
+      const el = document.getElementById('log-sec-' + t);
+      const btn = document.getElementById('btn-log-' + t);
+      if (el) el.style.display = (t === type) ? 'block' : 'none';
+      if (btn) btn.classList.toggle('is-active', t === type);
+    });
+  }
+
+  function changeActiveLogFile(fileName) {
+    currentLogFile = fileName || 'system_all.log';
+    fetchRawLogData(true);
+  }
+
+  function toggleAutoRefresh(enabled) {
+    clearInterval(autoRefreshTimer);
+    const badge = document.getElementById('log-status-badge');
+    if (enabled) {
+      autoRefreshTimer = setInterval(function() {
+        fetchRawLogData(false);
+      }, 3000);
+      if (badge) {
+        badge.style.background = 'rgba(16,185,129,0.15)';
+        badge.style.color = '#34d399';
+        badge.style.borderColor = 'rgba(16,185,129,0.3)';
+        badge.textContent = '● 실시간 스트리밍 중';
+      }
+    } else {
+      if (badge) {
+        badge.style.background = 'rgba(156,163,175,0.15)';
+        badge.style.color = '#9ca3af';
+        badge.style.borderColor = 'rgba(156,163,175,0.3)';
+        badge.textContent = '⏸ 일시 정지됨';
+      }
+    }
+  }
+
+  function handleLogSearchInput() {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(function() {
+      fetchRawLogData(false);
+    }, 250);
+  }
+
+  function clearLogSearch() {
+    const input = document.getElementById('log-search-input');
+    if (input) input.value = '';
+    fetchRawLogData(false);
+  }
+
+  function applyQuickFilter(keyword) {
+    activeQuickFilter = keyword || '';
+    document.querySelectorAll('.log-chip').forEach(function(btn) {
+      btn.classList.remove('is-active');
+    });
+    const targetBtn = keyword ? document.getElementById('chip-' + keyword.toLowerCase().replace('_access', '')) : document.getElementById('chip-all');
+    if (targetBtn) targetBtn.classList.add('is-active');
+
+    renderTerminalContent();
+  }
+
+  function adjustFontSize(delta) {
+    currentFontSize = Math.max(0.7, Math.min(1.3, currentFontSize + (delta * 0.06)));
+    const container = document.getElementById('log-terminal-container');
+    if (container) container.style.fontSize = currentFontSize.toFixed(2) + 'rem';
+  }
+
+  function clearTerminalView() {
+    const container = document.getElementById('log-terminal-container');
+    if (container) container.innerHTML = '<div style="color:#64748b; text-align:center; padding:20px;">화면이 비워졌습니다. 3초 후 다음 로그가 수신됩니다.</div>';
+  }
+
+  function toggleFullscreenTerminal() {
+    const card = document.getElementById('log-main-card');
+    const container = document.getElementById('log-terminal-container');
+    const btn = document.getElementById('btn-fullscreen');
+    isFullscreen = !isFullscreen;
+
+    if (card && container) {
+      if (isFullscreen) {
+        card.classList.add('is-fullscreen-terminal');
+        container.style.height = 'calc(100vh - 160px)';
+        if (btn) btn.textContent = '✕ 창 복원';
+      } else {
+        card.classList.remove('is-fullscreen-terminal');
+        container.style.height = '520px';
+        if (btn) btn.textContent = '🖵 전체화면';
+      }
+    }
+  }
+
+  async function fetchRawLogData(isManual) {
+    if (isFetchingLog) return;
+    isFetchingLog = true;
+
+    const termContainer = document.getElementById('log-terminal-container');
+    const linesSelect = document.getElementById('log-lines-select');
+    const searchInput = document.getElementById('log-search-input');
+
+    const maxLines = linesSelect ? linesSelect.value : 200;
+    const search = searchInput ? searchInput.value.trim() : '';
+
+    try {
+      const url = '/api/admin/logs/raw?file=' + encodeURIComponent(currentLogFile) + '&lines=' + encodeURIComponent(maxLines) + '&search=' + encodeURIComponent(search);
+      const res = await adminFetch(url);
+
+      if (!res.success) {
+        if (termContainer) {
+          termContainer.innerHTML = '<div style="color:#f87171; padding:20px;">⚠️ 로그를 불러오지 못했습니다: ' + escapeHtml(res.error || '권한 부족 또는 파일 접근 오류') + '</div>';
+        }
+        return;
+      }
+
+      rawLogLinesCache = res.lines || [];
+      const totalBytes = res.totalBytes || 0;
+      const sizeKb = (totalBytes / 1024).toFixed(1);
+
+      renderTerminalContent(sizeKb, search);
+    } catch (e) {
+      if (termContainer) {
+        termContainer.innerHTML = '<div style="color:#f87171; padding:20px;">통신 오류가 발생했습니다: ' + escapeHtml(e.message || '네트워크 오류') + '</div>';
+      }
+    } finally {
+      isFetchingLog = false;
+    }
+  }
+
+  function renderTerminalContent(sizeKb, searchVal) {
+    const termContainer = document.getElementById('log-terminal-container');
+    const metaInfo = document.getElementById('log-meta-info');
+    const autoScrollCheck = document.getElementById('log-autoscroll');
+    const search = searchVal !== undefined ? searchVal : ((document.getElementById('log-search-input') || {}).value || '').trim();
+
+    if (!rawLogLinesCache.length) {
+      if (termContainer) termContainer.innerHTML = '<div style="color:#6b7280; padding:20px; text-align:center;">기록된 로그가 아직 없습니다.</div>';
+      if (metaInfo) metaInfo.textContent = '출력: 0줄';
+      return;
+    }
+
+    let filtered = rawLogLinesCache;
+    if (activeQuickFilter) {
+      filtered = filtered.filter(function(l) {
+        return l.includes('[' + activeQuickFilter + ']') || l.includes(activeQuickFilter);
+      });
+    }
+
+    if (metaInfo) {
+      metaInfo.textContent = '출력: ' + filtered.length + '줄' + (sizeKb ? ' (' + sizeKb + ' KB)' : '');
+    }
+
+    if (!filtered.length) {
+      if (termContainer) termContainer.innerHTML = '<div style="color:#6b7280; padding:20px; text-align:center;">필터 조건에 맞는 로그가 없습니다.</div>';
+      return;
+    }
+
+    let html = '';
+    filtered.forEach(function(line, idx) {
+      const lineNum = String(idx + 1).padStart(3, '0');
+      let isErr = line.includes('[ERROR]');
+      let isWarn = line.includes('[WARN]');
+      let lineClass = isErr ? 'log-err-line' : (isWarn ? 'log-warn-line' : '');
+
+      let formatted = escapeHtml(line);
+
+      // 타임스탬프
+      formatted = formatted.replace(/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{3})? KST)\]/g, '<span style="color:#64748b;">[$1]</span>');
+      
+      // 레벨
+      formatted = formatted.replace(/\[INFO\]/g, '<span style="color:#38bdf8; font-weight:700;">[INFO]</span>');
+      formatted = formatted.replace(/\[WARN\]/g, '<span style="color:#fbbf24; font-weight:700;">[WARN]</span>');
+      formatted = formatted.replace(/\[ERROR\]/g, '<span style="color:#f87171; font-weight:700; background:rgba(239,68,68,0.25); padding:1px 4px; border-radius:3px;">[ERROR]</span>');
+      formatted = formatted.replace(/\[AUDIT\]/g, '<span style="color:#fda4af; font-weight:700; background:rgba(244,63,94,0.25); padding:1px 4px; border-radius:3px;">[AUDIT]</span>');
+
+      // 카테고리
+      formatted = formatted.replace(/\[(WEB_ACCESS|ECONOMY|GAMBLE|STOCK|COMMAND|SECURITY|ADMIN|GENERAL)\]/g, '<span style="color:#c084fc; font-weight:700;">[$1]</span>');
+
+      // 유저명
+      formatted = formatted.replace(/\[USER: @([^\]]+)\]/g, '<span style="color:#818cf8; font-weight:700;">[USER: @$1]</span>');
+
+      // 액션
+      formatted = formatted.replace(/\[ACTION: ([^\]]+)\]/g, '<span style="color:#34d399; font-weight:700;">[ACTION: $1]</span>');
+
+      // 검색어 하이라이트
+      if (search) {
+        const reg = new RegExp('(' + escapeRegex(search) + ')', 'gi');
+        formatted = formatted.replace(reg, '<span style="background:#fbbf24; color:#000; font-weight:800; padding:0 3px; border-radius:3px;">$1</span>');
+      }
+
+      html += '<div class="log-line-wrap ' + lineClass + '"><span class="log-line-num">' + lineNum + '</span><span class="log-line-content">' + formatted + '</span></div>';
+    });
+
+    if (termContainer) {
+      termContainer.innerHTML = html;
+      if (autoScrollCheck && autoScrollCheck.checked) {
+        termContainer.scrollTop = termContainer.scrollHeight;
+      }
+    }
+  }
+
+  function downloadCurrentLogFile() {
+    window.location.href = '/api/admin/logs/download/' + encodeURIComponent(currentLogFile);
+  }
+
+  function copyLogContent() {
+    if (!rawLogLinesCache.length) return adminNotice(false, '복사할 로그 내용이 없습니다.');
+    const text = rawLogLinesCache.join('\n');
+    navigator.clipboard.writeText(text).then(function() {
+      adminNotice(true, rawLogLinesCache.length + '줄의 로그를 클립보드에 복사했습니다.');
+    }).catch(function() {
+      adminNotice(false, '클립보드 복사 실패');
+    });
+  }
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // 초기 시작
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      fetchRawLogData(true);
+      toggleAutoRefresh(true);
+    });
+  } else {
+    fetchRawLogData(true);
+    toggleAutoRefresh(true);
+  }
+</script>
+
+<%- include('footer') %>

@@ -1,0 +1,879 @@
+<%- include('header', { activeMenu: 'stocks', pageTitle: '주주 명부 및 주식 관제 - 관리자', pageHeader: '주주-명부' }) %>
+
+<style>
+  .stock-chip {
+    background: #1e293b;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #94a3b8;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .stock-chip:hover { color: #fff; background: #334155; border-color: rgba(255,255,255,0.25); }
+  .stock-chip.is-active { background: #0284c7; color: #fff; border-color: #38bdf8; }
+</style>
+
+<!-- 🌟 1. 신규 주식 상장 & 상장폐지 & 재상장 관리 패널 -->
+<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:18px; margin-bottom:24px;">
+
+  <!-- [A] 👑 관리자 신규 주식 종목 즉시 상장하기 -->
+  <div class="card" style="border: 1px solid rgba(16, 185, 129, 0.35); background: #0f172a; padding: 20px; border-radius: 12px;">
+    <div style="display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:12px; margin-bottom:16px;">
+      <span style="font-size:1.4rem;">🚀</span>
+      <h3 style="margin:0; font-size:1.15rem; color:#34d399; font-weight:800;">신규 주식 즉시 상장 (IPO)</h3>
+    </div>
+    
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:10px;">
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">종목코드 (Ticker)</label>
+          <input type="text" id="new-stock-id" placeholder="예: SAM, NVDA" style="width:100%; text-transform:uppercase; font-weight:800; color:#38bdf8; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">기업명</label>
+          <input type="text" id="new-stock-name" placeholder="예: 삼성전자" style="width:100%; font-weight:700; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff;">
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:10px;">
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">시작 공모가 (원, 5만)</label>
+          <input type="text" id="new-stock-price" placeholder="예: 70000, 5만" style="width:100%; font-weight:800; color:#34d399; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">업종 / 섹터</label>
+          <input type="text" id="new-stock-sector" placeholder="IT/반도체" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff;">
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">기업 개요 및 테마 설명</label>
+        <input type="text" id="new-stock-desc" placeholder="차세대 AI 가속기 및 반도체 제조사" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff;">
+      </div>
+
+      <button type="button" onclick="submitCreateStock()" style="margin-top:4px; background:linear-gradient(135deg, #059669, #10b981); border:none; color:#fff; padding:11px; border-radius:8px; font-weight:800; font-size:0.92rem; cursor:pointer; box-shadow:0 4px 12px rgba(16,185,129,0.35);">
+        🚀 거래소에 신규 주식 상장
+      </button>
+    </div>
+  </div>
+
+  <!-- [B] 📉 상장폐지 & 청산 환급 관리 -->
+  <div class="card" style="border: 1px solid rgba(239, 68, 68, 0.35); background: #0f172a; padding: 20px; border-radius: 12px;">
+    <div style="display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:12px; margin-bottom:16px;">
+      <span style="font-size:1.4rem;">💥</span>
+      <h3 style="margin:0; font-size:1.15rem; color:#f87171; font-weight:800;">상장폐지 & 청산 환급</h3>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:10px;">
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">상장폐지할 종목코드</label>
+          <input type="text" id="delist-stock-id" placeholder="예: BIOX, MINE" style="width:100%; text-transform:uppercase; font-weight:800; color:#f87171; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">주당 청산금</label>
+          <input type="text" id="delist-stock-liq" placeholder="30" value="30" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff;">
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">상장폐지 사유</label>
+        <input type="text" id="delist-stock-reason" placeholder="관리자 직권 상장폐지" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff;">
+      </div>
+
+      <button type="button" onclick="submitDelistStock()" style="margin-top:4px; background:linear-gradient(135deg, #b91c1c, #ef4444); border:none; color:#fff; padding:11px; border-radius:8px; font-weight:800; font-size:0.92rem; cursor:pointer; box-shadow:0 4px 12px rgba(239,68,68,0.35);">
+        💥 선택 종목 상장폐지 & 청산
+      </button>
+
+      <button type="button" onclick="submitLaunchIPO()" style="background:linear-gradient(135deg, #4f46e5, #6366f1); border:none; color:#fff; padding:9px; border-radius:8px; font-weight:800; font-size:0.82rem; cursor:pointer;">
+        🎲 대기 중인 IPO 후보 1개 자동 상장
+      </button>
+    </div>
+  </div>
+
+  <!-- [C] 🎉 상장폐지 종목 전격 재상장 관리 -->
+  <div class="card" style="border: 1px solid rgba(245, 158, 11, 0.35); background: #0f172a; padding: 20px; border-radius: 12px;">
+    <div style="display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:12px; margin-bottom:16px;">
+      <span style="font-size:1.4rem;">🎉</span>
+      <h3 style="margin:0; font-size:1.15rem; color:#fbbf24; font-weight:800;">기업 회생 & 전격 재상장</h3>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:10px;">
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">재상장할 종목코드</label>
+          <input type="text" id="relist-stock-id" placeholder="예: BIOX, MINE" style="width:100%; text-transform:uppercase; font-weight:800; color:#fbbf24; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">재상장 시작 기준가</label>
+          <input type="text" id="relist-stock-price" placeholder="예: 5000, 1만" value="5000" style="width:100%; font-weight:800; color:#34d399; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px;">
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">재상장 승인 사유</label>
+        <input type="text" id="relist-stock-reason" placeholder="예: 기업 구조조정 성공 및 재무 건전성 회복" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff;">
+      </div>
+
+      <button type="button" onclick="submitRelistStock()" style="margin-top:4px; background:linear-gradient(135deg, #d97706, #f59e0b); border:none; color:#1e1b4b; padding:11px; border-radius:8px; font-weight:900; font-size:0.92rem; cursor:pointer; box-shadow:0 4px 12px rgba(245,158,11,0.35);">
+        🎉 선택 종목 거래소 전격 재상장 승인
+      </button>
+
+      <p style="font-size:0.75rem; color:#94a3b8; margin:0; line-height:1.4;">
+        💡 상장폐지 처분되었던 종목을 정상 상태로 복구하고, 증시 속보 공시와 함께 웹/디스코드 실시간 거래를 즉시 재개합니다.
+      </p>
+    </div>
+  </div>
+
+  <!-- [D] ⚡ 주식 액면분할 (Stock Split) 관리 -->
+  <div class="card" style="border: 1px solid rgba(168, 85, 247, 0.35); background: #0f172a; padding: 20px; border-radius: 12px;">
+    <div style="display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:12px; margin-bottom:16px;">
+      <span style="font-size:1.4rem;">⚡</span>
+      <h3 style="margin:0; font-size:1.15rem; color:#c084fc; font-weight:800;">주식 액면분할 (Stock Split)</h3>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:10px;">
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">액면분할할 종목코드</label>
+          <input type="text" id="split-stock-id" placeholder="예: SCRP, WTRD" style="width:100%; text-transform:uppercase; font-weight:800; color:#c084fc; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">분할 배수 (1:N)</label>
+          <select id="split-stock-ratio" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff; font-weight:800;">
+            <option value="2">1 : 2 분할 (주가 1/2, 수량 2배)</option>
+            <option value="5" selected>1 : 5 분할 (주가 1/5, 수량 5배)</option>
+            <option value="10">1 : 10 분할 (주가 1/10, 수량 10배)</option>
+            <option value="20">1 : 20 분할 (주가 1/20, 수량 20배)</option>
+            <option value="50">1 : 50 분할 (주가 1/50, 수량 50배)</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">액면분할 사유</label>
+        <input type="text" id="split-stock-reason" placeholder="유동성 공급 및 대중화 목적 액면분할" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff;">
+      </div>
+
+      <button type="button" onclick="submitStockSplit()" style="margin-top:4px; background:linear-gradient(135deg, #7c3aed, #a855f7); border:none; color:#fff; padding:11px; border-radius:8px; font-weight:800; font-size:0.92rem; cursor:pointer; box-shadow:0 4px 12px rgba(168,85,247,0.35);">
+        ⚡ 선택 종목 전격 액면분할 단행
+      </button>
+
+      <p style="font-size:0.75rem; color:#94a3b8; margin:0; line-height:1.4;">
+        💡 주가를 비율만큼 낮추고 모든 기존 주주의 보유 주식 수를 동일 배수로 늘려 총 평가액을 100% 보존합니다.
+      </p>
+    </div>
+  </div>
+
+  <!-- [E] 🏢 기업 인적분할 (Corporate Spin-off) 관리 -->
+  <div class="card" style="border: 1px solid rgba(16, 185, 129, 0.35); background: #0f172a; padding: 20px; border-radius: 12px;">
+    <div style="display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:12px; margin-bottom:16px;">
+      <span style="font-size:1.4rem;">🏢</span>
+      <h3 style="margin:0; font-size:1.15rem; color:#34d399; font-weight:800;">기업 인적분할 (Spin-off)</h3>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">분할할 모회사코드</label>
+          <input type="text" id="spinoff-parent-id" placeholder="예: SCRP, SPAC" style="width:100%; text-transform:uppercase; font-weight:800; color:#34d399; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">신설 자회사 종목코드</label>
+          <input type="text" id="spinoff-new-id" placeholder="예: SCRP_AI, SPAC_R" style="width:100%; text-transform:uppercase; font-weight:800; color:#38bdf8; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px;">
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap:10px;">
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">신설 자회사 종목명</label>
+          <input type="text" id="spinoff-new-name" placeholder="예: 이지스크랩 인공지능" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">신설사 가치 비중</label>
+          <select id="spinoff-ratio" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff; font-weight:800;">
+            <option value="30">신설 30% / 모회사 70%</option>
+            <option value="40" selected>신설 40% / 모회사 60%</option>
+            <option value="50">신설 50% / 모회사 50%</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">분할 상장 사유</label>
+        <input type="text" id="spinoff-reason" placeholder="미래 신성장 사업부문 전문화 및 주주가치 제고" style="width:100%; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff;">
+      </div>
+
+      <button type="button" onclick="submitStockSpinOff()" style="margin-top:4px; background:linear-gradient(135deg, #059669, #10b981); border:none; color:#fff; padding:11px; border-radius:8px; font-weight:800; font-size:0.92rem; cursor:pointer; box-shadow:0 4px 12px rgba(16,185,129,0.35);">
+        🏢 핵심 사업부 인적분할 & 신설 상장 단행
+      </button>
+
+      <p style="font-size:0.75rem; color:#94a3b8; margin:0; line-height:1.4;">
+        💡 모회사 주가를 분할하고, 기존 주주 전원에게 신설회사 주식을 1:1 지분율대로 100% 무상 배정합니다.
+      </p>
+    </div>
+  </div>
+
+  <!-- [F] 🛡️ 종목별 1회 최대 구매 한도 (Max Buy Limit) 커스텀 설정 -->
+  <div class="card" style="border: 1px solid rgba(245, 158, 11, 0.35); background: #0f172a; padding: 20px; border-radius: 12px;">
+    <div style="display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:12px; margin-bottom:16px;">
+      <span style="font-size:1.4rem;">🛡️</span>
+      <h3 style="margin:0; font-size:1.15rem; color:#facc15; font-weight:800;">종목별 1회 최대 구매 한도 설정</h3>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div style="display:grid; grid-template-columns: 1.1fr 1.4fr; gap:10px;">
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">설정할 종목코드</label>
+          <input type="text" id="limit-stock-id" placeholder="예: BIOX, WTRD" style="width:100%; text-transform:uppercase; font-weight:800; color:#facc15; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">기초 구매 한도 (주, 빈칸=자동)</label>
+          <input type="text" id="limit-stock-amount" placeholder="예: 50000, 100만" style="width:100%; font-weight:700; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff;">
+        </div>
+      </div>
+
+      <div style="display:flex; gap:8px;">
+        <button type="button" onclick="submitStockBuyLimit()" style="flex:2; background:linear-gradient(135deg, #d97706, #f59e0b); border:none; color:#fff; padding:11px; border-radius:8px; font-weight:800; font-size:0.92rem; cursor:pointer; box-shadow:0 4px 12px rgba(245,158,11,0.35);">
+          🛡️ 구매 한도 저장/수정
+        </button>
+        <button type="button" onclick="submitStockBuyLimitReset()" style="flex:1; background:#334155; border:1px solid rgba(255,255,255,0.15); color:#cbd5e1; padding:11px; border-radius:8px; font-weight:700; font-size:0.82rem; cursor:pointer;">
+          초기화 (자동)
+        </button>
+      </div>
+
+      <p style="font-size:0.75rem; color:#94a3b8; margin:0; line-height:1.4;">
+        💡 관리자가 지정한 기초 한도는 거시경제 국면(대호황 2.0배, 경기침체 0.7배 등)과 실시간 연동되어 모든 유저에게 공통 적용됩니다.
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<!-- 🌟 2. 📊 종목별 주가 변동 기록 (24시간 단위) -->
+<div class="card" style="border: 1px solid rgba(99, 102, 241, 0.4); background: #0b1120; margin-bottom: 24px;">
+  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:14px; margin-bottom:18px;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:1.5rem;">📊</span>
+      <div>
+        <h2 style="margin:0; font-size:1.2rem; color:#a5b4fc; font-weight:800;">종목별 주가 변동 기록</h2>
+        <p style="margin:2px 0 0; font-size:0.78rem; color:#64748b;">24시간 단위 OHLC(시가/고가/저가/종가) 집계 + 실시간 틱 로그</p>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <input type="text" id="ph-stock-id" placeholder="종목코드 (빈칸=전체)" style="width:160px; text-transform:uppercase; font-weight:800; color:#a5b4fc; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:7px 12px; border-radius:6px; font-size:0.85rem;">
+      <select id="ph-days" style="background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:7px 12px; border-radius:6px; font-size:0.85rem;">
+        <option value="1">오늘 (1일)</option>
+        <option value="3">3일</option>
+        <option value="7" selected>7일</option>
+        <option value="14">14일</option>
+        <option value="30">30일</option>
+      </select>
+      <button type="button" onclick="loadPriceHistory()" style="background:linear-gradient(135deg,#4f46e5,#6366f1); border:none; color:#fff; padding:7px 18px; border-radius:6px; font-weight:800; font-size:0.85rem; cursor:pointer;">
+        📊 조회
+      </button>
+    </div>
+  </div>
+
+  <!-- 현재가 요약 배지 -->
+  <div id="ph-stock-badges" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px;"></div>
+
+  <!-- 24시간 OHLC 차트 캔버스 -->
+  <div id="ph-chart-wrap" style="display:none; margin-bottom:18px;">
+    <canvas id="ph-chart" height="90"></canvas>
+  </div>
+
+  <!-- 24시간 단위 집계 테이블 -->
+  <div id="ph-daily-wrap" style="display:none; overflow-x:auto; margin-bottom:18px;">
+    <table>
+      <thead>
+        <tr>
+          <th>날짜</th>
+          <th>종목</th>
+          <th style="text-align:right;">시가</th>
+          <th style="text-align:right;">고가</th>
+          <th style="text-align:right;">저가</th>
+          <th style="text-align:right;">종가</th>
+          <th style="text-align:right;">평균 변동률</th>
+          <th style="text-align:right;">틱 수</th>
+          <th style="text-align:center;">등락</th>
+        </tr>
+      </thead>
+      <tbody id="ph-daily-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- 실시간 틱 로그 테이블 -->
+  <div>
+    <div style="font-size:0.82rem; color:#64748b; font-weight:700; margin-bottom:8px;">⚡ 최근 100개 실시간 틱 로그</div>
+    <div id="ph-recent-wrap" style="display:none; overflow-x:auto; max-height:320px; overflow-y:auto;">
+      <table>
+        <thead style="position:sticky; top:0; background:#0b1120;">
+          <tr>
+            <th style="width:150px;">시각 (KST)</th>
+            <th>종목</th>
+            <th style="text-align:right;">이전가</th>
+            <th style="text-align:right;">체결가</th>
+            <th style="text-align:right;">변동률</th>
+            <th>경제 국면</th>
+            <th>사유</th>
+          </tr>
+        </thead>
+        <tbody id="ph-recent-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="ph-empty" style="text-align:center; color:#475569; padding:28px 0; font-size:0.9rem;">
+    📊 종목코드를 입력하거나 빈칸으로 두고 <strong>조회</strong> 버튼을 눌러주세요.
+  </div>
+</div>
+
+<!-- 🌟 3. 주주 명부 메인 카드 -->
+<div class="card" style="border: 1px solid rgba(56, 189, 248, 0.35); background: #0b1120;">
+  
+  <!-- 상단 헤더 & 검색 컨트롤 -->
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:16px;">
+    <div>
+      <h2 style="color:#7dd3fc; margin:0; font-size:1.35rem; display:flex; align-items:center; gap:8px;">
+        <span>📊 실시간 전체 유저 주식 보유 현황 & 주주 명부</span>
+      </h2>
+      <p style="font-size:0.83rem; color:#94a3b8; margin-top:4px;">
+        유저별 주식 보유량, 평단가, 총 평가액, 실시간 손익 및 수익률(ROI)을 모니터링하고 강제 매도 처분할 수 있습니다.
+      </p>
+    </div>
+
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <input type="text" id="admin-holders-search" placeholder="유저 닉네임, Discord ID, 종목명 검색..." oninput="filterAdminStockHolders()" style="background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:8px 14px; border-radius:6px; font-size:0.85rem; width:260px;">
+      <button type="button" onclick="refreshAllStockHolders()" style="background:#0284c7; border:none; color:#fff; padding:8px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer; display:flex; align-items:center; gap:6px;">
+        <span>↻ 주주 명부 갱신</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ⚡ 빠른 종목별 필터 칩스 -->
+  <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:16px; padding:10px 14px; background:#030712; border-radius:8px; border:1px solid rgba(255,255,255,0.06);">
+    <span style="font-size:0.75rem; color:#9ca3af; font-weight:700; margin-right:4px;">⚡ 종목 필터:</span>
+    <button type="button" class="stock-chip is-active" onclick="filterByStockCode('')">전체 종목</button>
+    <button type="button" class="stock-chip" onclick="filterByStockCode('WTRD')">WTRD (월덕건설)</button>
+    <button type="button" class="stock-chip" onclick="filterByStockCode('BANK')">BANK (센트럴뱅크)</button>
+    <button type="button" class="stock-chip" onclick="filterByStockCode('SCRP')">SCRP (스크랩스틱)</button>
+    <button type="button" class="stock-chip" onclick="filterByStockCode('CASN')">CASN (로얄카지노)</button>
+    <button type="button" class="stock-chip" onclick="filterByStockCode('MINE')">MINE (하이퍼채굴)</button>
+    <button type="button" class="stock-chip" onclick="filterByStockCode('AICH')">AICH (넥스트AI)</button>
+    <button type="button" class="stock-chip" onclick="filterByStockCode('SLOT')">SLOT (슬롯머신)</button>
+  </div>
+
+  <!-- 📋 주주 명부 테이블 -->
+  <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:190px;">유저 계정</th>
+          <th style="width:140px;">종목</th>
+          <th style="text-align:right; width:130px;">보유 수량</th>
+          <th style="text-align:right; width:130px;">매수 평단가</th>
+          <th style="text-align:right; width:150px;">총 매수원금</th>
+          <th style="text-align:right; width:150px;">현재 평가금액</th>
+          <th style="text-align:right; width:150px;">평가 손익</th>
+          <th style="text-align:right; width:120px;">수익률(ROI)</th>
+          <th style="text-align:center; width:110px;">관리 작업</th>
+        </tr>
+      </thead>
+      <tbody id="admin-holders-tbody">
+        <%- stockHoldersRowsHtml %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  let allStockHoldersCache = [];
+  let currentStockFilter = '';
+
+  async function refreshAllStockHolders() {
+    const tbody = document.getElementById('admin-holders-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#9ca3af; padding:25px;">주주 명부를 갱신하는 중...</td></tr>';
+    try {
+      const res = await adminFetch('/api/admin/stocks/portfolios/all');
+      if (!res.success) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#f87171; padding:20px;">' + (res.error || '조회 실패') + '</td></tr>';
+        return;
+      }
+      allStockHoldersCache = res.list || [];
+      renderAdminStockHolders(allStockHoldersCache);
+      adminNotice(true, '주주 명부를 성공적으로 갱신했습니다.');
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#f87171; padding:20px;">주주 명부 조회 중 오류가 발생했습니다.</td></tr>';
+    }
+  }
+
+  function filterByStockCode(code) {
+    currentStockFilter = (code || '').toUpperCase();
+    document.querySelectorAll('.stock-chip').forEach(function(chip) {
+      chip.classList.remove('is-active');
+    });
+    if (event && event.target) event.target.classList.add('is-active');
+    filterAdminStockHolders();
+  }
+
+  function filterAdminStockHolders() {
+    const q = String((document.getElementById('admin-holders-search') || {}).value || '').toLowerCase().trim();
+    document.querySelectorAll('#admin-holders-tbody tr').forEach(function(tr) {
+      const txt = tr.textContent.toLowerCase();
+      const matchText = !q || txt.includes(q);
+      const matchStock = !currentStockFilter || txt.includes(currentStockFilter.toLowerCase());
+      tr.style.display = (matchText && matchStock) ? '' : 'none';
+    });
+  }
+
+  function renderAdminStockHolders(list) {
+    const tbody = document.getElementById('admin-holders-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#6b7280; padding:25px;">주식을 보유한 유저가 없습니다.</td></tr>';
+      return;
+    }
+    let html = '';
+    list.forEach(function(item) {
+      const diff = BigInt(item.diffAmount || 0);
+      const isPlus = diff >= 0n;
+      const color = isPlus ? '#34d399' : '#f87171';
+      html += '<tr>' +
+        '<td><div style="font-weight:700; color:#f8fafc;">@' + escapeHtml(item.username) + '</div><code style="font-size:0.72rem; color:#64748b;">' + escapeHtml(item.userId) + '</code></td>' +
+        '<td><span style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); color:#38bdf8; font-weight:700; padding:3px 8px; border-radius:6px; font-size:0.8rem;">' + escapeHtml(item.stockName) + ' (' + escapeHtml(item.stockId) + ')</span></td>' +
+        '<td style="text-align:right; font-weight:700; color:#e2e8f0;">' + Number(item.amount).toLocaleString() + '주</td>' +
+        '<td style="text-align:right; color:#94a3b8;">' + item.avgPriceText + '</td>' +
+        '<td style="text-align:right; color:#cbd5e1;">' + item.investedText + '</td>' +
+        '<td style="text-align:right; color:#fbbf24; font-weight:700;">' + item.currentValueText + '</td>' +
+        '<td style="text-align:right; color:' + color + '; font-weight:700;">' + (isPlus ? '+' : '') + item.diffText + '</td>' +
+        '<td style="text-align:right; color:' + color + '; font-weight:800;">' + (isPlus ? '+' : '') + item.roiText + '</td>' +
+        '<td style="text-align:center;">' +
+          '<button type="button" data-user-id="' + item.userId + '" data-stock-id="' + item.stockId + '" data-amount="' + item.amount + '" onclick="liquidateUserStock(this.dataset.userId, this.dataset.stockId, this.dataset.amount)" class="btn-rollback">강제 매도</button>' +
+        '</td>' +
+      '</tr>';
+    });
+    tbody.innerHTML = html;
+  }
+
+  async function liquidateUserStock(userId, stockId, amount) {
+    if (!confirm('유저 ' + userId + '의 ' + stockId + ' 주식 ' + amount + '주를 전량 시장가 강제 매도 처분하시겠습니까?')) return;
+    try {
+      const res = await adminFetch('/api/admin/stocks/force-sell', {
+        method: 'POST',
+        body: { userId, stockId, amount, confirm: true }
+      });
+      if (res.success) {
+        adminNotice(true, res.message || '강제 매도 완료');
+        refreshAllStockHolders();
+      } else {
+        adminNotice(false, res.error || '강제 매도 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '처리 오류');
+    }
+  }
+
+  // 🚀 신규 주식 종목 상장 요청 (IPO)
+  async function submitCreateStock() {
+    const stockId = String((document.getElementById('new-stock-id') || {}).value || '').toUpperCase().trim();
+    const name = String((document.getElementById('new-stock-name') || {}).value || '').trim();
+    const price = String((document.getElementById('new-stock-price') || {}).value || '').trim();
+    const sector = String((document.getElementById('new-stock-sector') || {}).value || '').trim();
+    const description = String((document.getElementById('new-stock-desc') || {}).value || '').trim();
+    const volatility = parseFloat((document.getElementById('new-stock-volatility') || {}).value || '0.06');
+    const dividendYield = parseFloat((document.getElementById('new-stock-dividend') || {}).value || '2.5');
+
+    if (!stockId || !name || !price) {
+      return adminNotice(false, '종목코드, 기업명, 공모가는 필수 입력 항목입니다.');
+    }
+
+    if (!confirm(`신규 주식 [${name} (${stockId})] 종목을 공모가 ${price}원에 거래소에 상장하시겠습니까?`)) return;
+
+    try {
+      const res = await adminFetch('/api/admin/action/stock-create', {
+        method: 'POST',
+        body: { stockId, name, price, sector, description, volatility, dividendYield }
+      });
+
+      if (res.success) {
+        adminNotice(true, res.message || '신규 주식 상장 완료!');
+        document.getElementById('new-stock-id').value = '';
+        document.getElementById('new-stock-name').value = '';
+        document.getElementById('new-stock-price').value = '';
+        document.getElementById('new-stock-desc').value = '';
+        setTimeout(refreshAllStockHolders, 1000);
+      } else {
+        adminNotice(false, res.error || '신규 주식 상장 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '상장 처리 중 통신 오류가 발생했습니다.');
+    }
+  }
+
+  // 💥 종목 상장폐지 & 청산 환급 요청
+  async function submitDelistStock() {
+    const stockId = String((document.getElementById('delist-stock-id') || {}).value || '').toUpperCase().trim();
+    const liquidationPrice = String((document.getElementById('delist-stock-liq') || {}).value || '30').trim();
+    const reason = String((document.getElementById('delist-stock-reason') || {}).value || '').trim();
+
+    if (!stockId) {
+      return adminNotice(false, '상장폐지할 종목코드를 입력하세요.');
+    }
+
+    if (!confirm(`경고: [${stockId}] 종목을 즉시 최종 상장폐지하고 주주들에게 주당 ${liquidationPrice}원의 청산금을 일괄 환급하시겠습니까? (되돌릴 수 없습니다)`)) return;
+
+    try {
+      const res = await adminFetch('/api/admin/action/stock-delist', {
+        method: 'POST',
+        body: { stockId, liquidationPrice, reason }
+      });
+
+      if (res.success) {
+        adminNotice(true, res.message || '상장폐지 및 청산금 지급 완료!');
+        document.getElementById('delist-stock-id').value = '';
+        document.getElementById('delist-stock-reason').value = '';
+        setTimeout(refreshAllStockHolders, 1000);
+      } else {
+        adminNotice(false, res.error || '상장폐지 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '상장폐지 처리 중 오류가 발생했습니다.');
+    }
+  }
+
+  // 🎲 대기 중인 IPO 후보 자동 상장
+  async function submitLaunchIPO() {
+    if (!confirm('대기 중인 신규 성장 유망 기업을 거래소에 1개 자동 상장하시겠습니까?')) return;
+    try {
+      const res = await adminFetch('/api/admin/action/stock-ipo', {
+        method: 'POST',
+        body: {}
+      });
+
+      if (res.success) {
+        adminNotice(true, res.message || '신규 기업 IPO 상장 완료!');
+        setTimeout(refreshAllStockHolders, 1000);
+      } else {
+        adminNotice(false, res.error || '신규 상장 실패');
+      }
+    } catch (e) {
+      adminNotice(false, 'IPO 상장 처리 중 오류가 발생했습니다.');
+    }
+  }
+
+  // 🎉 상장폐지 종목 전격 재상장 승인
+  async function submitRelistStock() {
+    const stockId = String((document.getElementById('relist-stock-id') || {}).value || '').toUpperCase().trim();
+    const price = String((document.getElementById('relist-stock-price') || {}).value || '5000').trim();
+    const reason = String((document.getElementById('relist-stock-reason') || {}).value || '').trim();
+
+    if (!stockId) {
+      return adminNotice(false, '재상장할 종목코드를 입력하세요.');
+    }
+
+    if (!confirm(`[${stockId}] 종목을 기준가 ${price}원에 거래소로 전격 재상장(Relisting) 승인하시겠습니까?`)) return;
+
+    try {
+      const res = await adminFetch('/api/admin/action/stock-relist', {
+        method: 'POST',
+        body: { stockId, price, reason }
+      });
+
+      if (res.success) {
+        adminNotice(true, res.message || '주식 재상장 승인 완료!');
+        document.getElementById('relist-stock-id').value = '';
+        document.getElementById('relist-stock-reason').value = '';
+        setTimeout(refreshAllStockHolders, 1000);
+      } else {
+        adminNotice(false, res.error || '재상장 승인 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '재상장 처리 중 통신 오류가 발생했습니다.');
+    }
+  }
+
+  // ⚡ 주식 액면분할 (Stock Split) 단행
+  async function submitStockSplit() {
+    const stockId = String((document.getElementById('split-stock-id') || {}).value || '').toUpperCase().trim();
+    const splitRatio = String((document.getElementById('split-stock-ratio') || {}).value || '5').trim();
+    const reason = String((document.getElementById('split-stock-reason') || {}).value || '').trim();
+
+    if (!stockId) {
+      return adminNotice(false, '액면분할할 종목코드를 입력하세요.');
+    }
+
+    if (!confirm(`경고: [${stockId}] 종목을 1:${splitRatio} 비율로 액면분할하시겠습니까?\n(주가는 1/${splitRatio}로 낮아지고, 모든 주주의 보유 주식 수가 ${splitRatio}배로 자동 증가합니다)`)) return;
+
+    try {
+      const res = await adminFetch('/api/admin/action/stock-split', {
+        method: 'POST',
+        body: { stockId, splitRatio, reason }
+      });
+
+      if (res.success) {
+        adminNotice(true, res.message || '주식 액면분할 완료!');
+        document.getElementById('split-stock-id').value = '';
+        document.getElementById('split-stock-reason').value = '';
+        setTimeout(refreshAllStockHolders, 1000);
+      } else {
+        adminNotice(false, res.error || '액면분할 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '액면분할 처리 중 통신 오류가 발생했습니다.');
+    }
+  }
+
+  // 🏢 기업 인적분할 (Corporate Spin-off) 단행
+  async function submitStockSpinOff() {
+    const parentStockId = String((document.getElementById('spinoff-parent-id') || {}).value || '').toUpperCase().trim();
+    const newStockId = String((document.getElementById('spinoff-new-id') || {}).value || '').toUpperCase().trim();
+    const newStockName = String((document.getElementById('spinoff-new-name') || {}).value || '').trim();
+    const splitRatio = String((document.getElementById('spinoff-ratio') || {}).value || '40').trim();
+    const reason = String((document.getElementById('spinoff-reason') || {}).value || '').trim();
+
+    if (!parentStockId || !newStockId || !newStockName) {
+      return adminNotice(false, '모회사코드, 신설 종목코드, 신설 종목명을 모두 입력하세요.');
+    }
+
+    if (!confirm(`[${parentStockId}] 기업에서 [${newStockName} (${newStockId})]을 인적분할 상장하시겠습니까?\n모회사 주주 전원에게 신설회사 주식이 100% 무상 배정됩니다.`)) return;
+
+    try {
+      const res = await adminFetch('/api/admin/action/stock-spinoff', {
+        method: 'POST',
+        body: { parentStockId, newStockId, newStockName, splitRatio, reason }
+      });
+
+      if (res.success) {
+        adminNotice(true, res.message || '기업 인적분할 상장 완료!');
+        document.getElementById('spinoff-parent-id').value = '';
+        document.getElementById('spinoff-new-id').value = '';
+        document.getElementById('spinoff-new-name').value = '';
+        document.getElementById('spinoff-reason').value = '';
+        setTimeout(refreshAllStockHolders, 1000);
+      } else {
+        adminNotice(false, res.error || '기업분할 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '기업 인적분할 처리 중 통신 오류가 발생했습니다.');
+    }
+  }
+
+  // 🛡️ 종목별 1회 최대 구매 한도 설정/수정
+  async function submitStockBuyLimit() {
+    const stockId = String((document.getElementById('limit-stock-id') || {}).value || '').toUpperCase().trim();
+    const rawAmount = String((document.getElementById('limit-stock-amount') || {}).value || '').trim();
+
+    if (!stockId) {
+      return adminNotice(false, '구매 한도를 설정할 종목코드를 입력하세요.');
+    }
+
+    try {
+      let maxLimit = null;
+      if (rawAmount) {
+        // 한글 단위(만, 억) 파싱 지원
+        let clean = rawAmount.replace(/,/g, '').replace(/주/g, '');
+        if (clean.includes('만')) {
+          maxLimit = parseFloat(clean.replace(/만/g, '')) * 10000;
+        } else if (clean.includes('억')) {
+          maxLimit = parseFloat(clean.replace(/억/g, '')) * 100000000;
+        } else {
+          maxLimit = parseFloat(clean);
+        }
+      }
+
+      const res = await adminFetch('/api/admin/action/stock-buy-limit', {
+        method: 'POST',
+        body: { stockId, maxBuyLimit: maxLimit }
+      });
+
+      if (res.success) {
+        adminNotice(true, res.message || '종목 구매 한도 설정 완료!');
+        document.getElementById('limit-stock-id').value = '';
+        document.getElementById('limit-stock-amount').value = '';
+      } else {
+        adminNotice(false, res.error || '구매 한도 설정 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '구매 한도 설정 통신 오류');
+    }
+  }
+
+  async function submitStockBuyLimitReset() {
+    const stockId = String((document.getElementById('limit-stock-id') || {}).value || '').toUpperCase().trim();
+    if (!stockId) {
+      return adminNotice(false, '기본 자동 한도로 초기화할 종목코드를 입력하세요.');
+    }
+
+    if (!confirm(`[${stockId}] 종목의 매수 한도를 주가 기반 자동 산출 모드로 초기화하시겠습니까?`)) return;
+
+    try {
+      const res = await adminFetch('/api/admin/action/stock-buy-limit', {
+        method: 'POST',
+        body: { stockId, maxBuyLimit: null }
+      });
+
+      if (res.success) {
+        adminNotice(true, res.message || '자동 산출 모드로 초기화 완료!');
+        document.getElementById('limit-stock-id').value = '';
+        document.getElementById('limit-stock-amount').value = '';
+      } else {
+        adminNotice(false, res.error || '초기화 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '구매 한도 초기화 통신 오류');
+    }
+  }
+
+  // ── 📊 주가 기록 조회 ──────────────────────────────────────────
+  let _phChart = null;
+
+  function fmtPriceShort(n) {
+    const v = Number(n);
+    if (!isFinite(v)) return n;
+    if (v >= 1e12) return (v / 1e12).toFixed(1) + '조';
+    if (v >= 1e8)  return (v / 1e8).toFixed(1) + '억';
+    if (v >= 1e4)  return (v / 1e4).toFixed(1) + '만';
+    return v.toLocaleString();
+  }
+
+  function fmtPrice(n) {
+    const v = Number(n);
+    if (!isFinite(v)) return n;
+    return v.toLocaleString() + '원';
+  }
+
+  function fmtKST(dt) {
+    if (!dt) return '-';
+    try {
+      return new Date(dt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul',
+        month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch (e) { return String(dt); }
+  }
+
+  async function loadPriceHistory() {
+    const stockId = (document.getElementById('ph-stock-id').value || '').toUpperCase().trim();
+    const days = document.getElementById('ph-days').value;
+
+    document.getElementById('ph-empty').textContent = '⏳ 데이터를 불러오는 중...';
+    document.getElementById('ph-daily-wrap').style.display = 'none';
+    document.getElementById('ph-recent-wrap').style.display = 'none';
+    document.getElementById('ph-chart-wrap').style.display = 'none';
+    document.getElementById('ph-stock-badges').innerHTML = '';
+
+    try {
+      const qs = new URLSearchParams({ days });
+      if (stockId) qs.set('stockId', stockId);
+      const data = await adminFetch(`/api/admin/stock-price-history?${qs}`);
+      if (!data.success) {
+        document.getElementById('ph-empty').textContent = '❌ ' + (data.error || '조회 실패');
+        return;
+      }
+
+      document.getElementById('ph-empty').style.display = 'none';
+
+      // 현재가 배지
+      const badgeEl = document.getElementById('ph-stock-badges');
+      data.stocks.forEach(s => {
+        const cur = Number(s.price), prev = Number(s.prevPrice);
+        const diff = cur - prev;
+        const rate = prev > 0 ? (diff / prev * 100) : 0;
+        const color = diff >= 0 ? '#10b981' : '#ef4444';
+        const sign = diff >= 0 ? '▲' : '▼';
+        badgeEl.innerHTML += `<span style="background:#1e293b; border:1px solid ${color}40; border-radius:8px; padding:6px 12px; font-size:0.8rem; font-weight:700; color:#fff;">
+          <span style="color:#a5b4fc;">${s.stockId}</span> <span style="color:${color};">${fmtPriceShort(s.price)}원</span>
+          <span style="color:${color}; font-size:0.72rem;"> ${sign}${Math.abs(rate).toFixed(2)}%</span>
+          <span style="color:#64748b; font-size:0.7rem;"> 고:${fmtPriceShort(s.high24h)} 저:${fmtPriceShort(s.low24h)}</span>
+        </span>`;
+      });
+
+      // 24시간 OHLC 테이블
+      if (data.daily && data.daily.length) {
+        document.getElementById('ph-daily-wrap').style.display = '';
+        const tbody = document.getElementById('ph-daily-tbody');
+        tbody.innerHTML = data.daily.map(r => {
+          const isUp = Number(r.close) >= Number(r.open);
+          const rateColor = isUp ? '#10b981' : '#ef4444';
+          const rateSign = Number(r.avgChangeRate) >= 0 ? '+' : '';
+          return `<tr>
+            <td style="font-weight:700; color:#a5b4fc;">${r.day}</td>
+            <td><span style="font-size:0.78rem; color:#94a3b8;">${r.stockId || stockId}</span><br><span style="font-size:0.82rem;">${r.stockName || ''}</span></td>
+            <td style="text-align:right; font-family:monospace;">${fmtPriceShort(r.open)}원</td>
+            <td style="text-align:right; font-family:monospace; color:#10b981;">${fmtPriceShort(r.high)}원</td>
+            <td style="text-align:right; font-family:monospace; color:#ef4444;">${fmtPriceShort(r.low)}원</td>
+            <td style="text-align:right; font-family:monospace; font-weight:800; color:${rateColor};">${fmtPriceShort(r.close)}원</td>
+            <td style="text-align:right; color:${rateColor};">${rateSign}${r.avgChangeRate}%</td>
+            <td style="text-align:right; color:#64748b;">${r.tickCount}회</td>
+            <td style="text-align:center;">${isUp ? '🟢 상승' : '🔴 하락'}</td>
+          </tr>`;
+        }).join('');
+
+        // Chart.js 라인 차트 (종가 기준)
+        if (stockId && data.daily.length > 1) {
+          document.getElementById('ph-chart-wrap').style.display = '';
+          if (_phChart) { _phChart.destroy(); _phChart = null; }
+          const labels = data.daily.map(r => r.day);
+          const closes = data.daily.map(r => Number(r.close));
+          const opens  = data.daily.map(r => Number(r.open));
+          const highs  = data.daily.map(r => Number(r.high));
+          const lows   = data.daily.map(r => Number(r.low));
+          const ctx = document.getElementById('ph-chart').getContext('2d');
+          _phChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [
+                { label: '종가', data: closes, borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.12)', tension: 0.35, fill: true, pointRadius: 4 },
+                { label: '고가', data: highs,  borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.3, borderDash: [4,3], pointRadius: 2 },
+                { label: '저가', data: lows,   borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.3, borderDash: [4,3], pointRadius: 2 }
+              ]
+            },
+            options: {
+              responsive: true,
+              plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+              scales: {
+                x: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                y: { ticks: { color: '#94a3b8', font: { size: 10 }, callback: v => fmtPriceShort(v) + '원' }, grid: { color: 'rgba(255,255,255,0.06)' } }
+              }
+            }
+          });
+        }
+      } else {
+        document.getElementById('ph-empty').style.display = '';
+        document.getElementById('ph-empty').textContent = '📭 해당 기간에 기록된 주가 변동 데이터가 없습니다.';
+      }
+
+      // 실시간 틱 로그
+      if (data.recent && data.recent.length) {
+        document.getElementById('ph-recent-wrap').style.display = '';
+        const tbody2 = document.getElementById('ph-recent-tbody');
+        tbody2.innerHTML = data.recent.map(r => {
+          const isUp = Number(r.diff) >= 0;
+          const rateColor = isUp ? '#10b981' : '#ef4444';
+          const sign = isUp ? '▲' : '▼';
+          return `<tr>
+            <td style="font-size:0.78rem; color:#64748b;">${fmtKST(r.createdAt)}</td>
+            <td><span style="font-size:0.77rem; font-weight:700; color:#a5b4fc;">${r.stockId}</span></td>
+            <td style="text-align:right; font-family:monospace; color:#94a3b8;">${fmtPriceShort(r.prevPrice)}원</td>
+            <td style="text-align:right; font-family:monospace; font-weight:800;">${fmtPriceShort(r.newPrice)}원</td>
+            <td style="text-align:right; color:${rateColor}; font-weight:700;">${sign}${Math.abs(r.changeRate)}%</td>
+            <td style="font-size:0.78rem; color:#64748b;">${r.regime || ''}</td>
+            <td style="font-size:0.76rem; color:#475569; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${r.reason || ''}">${r.reason || ''}</td>
+          </tr>`;
+        }).join('');
+      }
+    } catch (e) {
+      document.getElementById('ph-empty').style.display = '';
+      document.getElementById('ph-empty').textContent = '❌ 조회 중 오류: ' + e.message;
+    }
+  }
+
+  // Enter 키로 조회
+  document.getElementById('ph-stock-id').addEventListener('keydown', e => { if (e.key === 'Enter') loadPriceHistory(); });
+</script>
+
+<%- include('footer') %>

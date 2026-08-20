@@ -1,0 +1,395 @@
+<%- include('header', { activeMenu: 'console', pageTitle: '명령 및 조작 - 관리자', pageHeader: '명령-조작' }) %>
+
+<style>
+  .console-panel {
+    background: #0f172a;
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    transition: border-color 0.2s ease;
+  }
+  .console-panel:hover { border-color: rgba(255,255,255,0.15); }
+  .console-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding-bottom: 12px;
+  }
+  .console-panel-title { margin: 0; font-size: 1.1rem; font-weight: 800; }
+  .console-label { font-size: 0.8rem; color: #94a3b8; font-weight: 600; display: block; margin-bottom: 5px; }
+</style>
+
+<!-- 🌟 관리자 명령 조작 콘솔 메인 카드 -->
+<div class="card" style="border: 1px solid rgba(99, 102, 241, 0.35); background: #0b1120;">
+  
+  <!-- 상단 헤더 -->
+  <div style="margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:16px;">
+    <h2 style="color: #c7d2fe; margin:0; font-size:1.35rem; display:flex; align-items:center; gap:8px;">
+      <span>🎮 관리자 다이렉트 명령 & 경제 조작 콘솔</span>
+    </h2>
+    <p style="font-size: 0.83rem; color: #94a3b8; margin-top:4px;">
+      유저 자금 즉시 지급/회수, 주식 시장 국면 강제 전환, 국고 보조금 살포 등 서버 핵심 경제를 원클릭으로 직접 조작합니다.
+    </p>
+  </div>
+
+  <!-- 결과 알림 배너 -->
+  <div id="console-result-box" style="display:none; padding:14px 18px; border-radius:8px; margin-bottom:18px; font-weight:700; font-size:0.95rem;"></div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:20px;">
+    
+    <!-- 1. 자금 지급 / 회수 -->
+    <div class="console-panel" style="border-top: 3px solid #10b981;">
+      <div class="console-panel-header">
+        <span style="font-size:1.4rem;">💵</span>
+        <h3 class="console-panel-title" style="color:#34d399;">유저 자금 즉시 지급 / 회수</h3>
+      </div>
+      
+      <div>
+        <label class="console-label">대상 유저 (Discord ID 또는 닉네임)</label>
+        <input type="text" id="console-target-user" placeholder="예: 1481258930909872239 또는 dlhaslflkgh" style="width:100%;">
+      </div>
+
+      <div>
+        <label class="console-label">금액 (숫자 또는 50만, 10억, 5조, 500양)</label>
+        <input type="text" id="console-amount" placeholder="예: 750000000, 50만, 10억" style="width:100%; color:#34d399; font-weight:800; font-size:0.95rem;">
+      </div>
+
+      <div>
+        <label class="console-label">지급 / 회수 사유 (선택)</label>
+        <input type="text" id="console-reason" placeholder="사유를 입력하세요 (예: 이벤트 상금, 긴급 회수)" style="width:100%;">
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px; margin-top:6px;">
+        <div style="display:flex; gap:10px;">
+          <button type="button" id="btn-console-give-treasury" onclick="execAdminMoney('give', 'treasury')" style="flex:1; background:linear-gradient(135deg, #059669, #10b981); border:none; color:#fff; padding:12px 10px; border-radius:8px; font-weight:800; font-size:0.9rem; cursor:pointer; box-shadow:0 4px 12px rgba(16,185,129,0.3); transition:all 0.15s ease;" title="국고 잔액에서 차감하여 유저에게 지원금으로 지급합니다.">🏛️ 국고에서 지급</button>
+          <button type="button" id="btn-console-give-direct" onclick="execAdminMoney('give', 'direct')" style="flex:1; background:linear-gradient(135deg, #6366f1, #8b5cf6); border:none; color:#fff; padding:12px 10px; border-radius:8px; font-weight:800; font-size:0.9rem; cursor:pointer; box-shadow:0 4px 12px rgba(99,102,241,0.3); transition:all 0.15s ease;" title="국고 차감 없이 관리자 직권으로 즉시 생성/지급합니다.">⚡ 직권 즉시 지급</button>
+        </div>
+        <button type="button" id="btn-console-take" onclick="execAdminMoney('take')" style="width:100%; background:linear-gradient(135deg, #dc2626, #ef4444); border:none; color:#fff; padding:11px; border-radius:8px; font-weight:800; font-size:0.9rem; cursor:pointer; box-shadow:0 4px 12px rgba(239,68,68,0.3); transition:all 0.15s ease;">🔻 유저 자금 회수</button>
+      </div>
+    </div>
+
+    <!-- 2. 주식 시장 국면 전환 -->
+    <div class="console-panel" style="border-top: 3px solid #fbbf24;">
+      <div class="console-panel-header">
+        <span style="font-size:1.4rem;">📈</span>
+        <h3 class="console-panel-title" style="color:#fbbf24;">주식 시장 국면 강제 전환</h3>
+      </div>
+      
+      <div>
+        <label class="console-label">적용할 시장 국면 (Market Regime)</label>
+        <select id="console-regime" style="width:100%;">
+          <option value="0">0. ⚖️ 정상 시장 (Normal Growth)</option>
+          <option value="1">1. 🚀 유동성 랠리 (Liquidity Rally)</option>
+          <option value="2">2. 🐻 약세 조정장 (Bearish Pullback)</option>
+          <option value="3">3. 🩸 패닉 셀 (Panic Crash)</option>
+          <option value="4">4. ⚡ 초변동성 장세 (Extreme Volatility)</option>
+          <option value="5">5. 💎 숏스퀴즈 (Short Squeeze Surge)</option>
+          <option value="6">6. ❄️ 거래 빙하기 (Stagnant Winter)</option>
+          <option value="7" selected>7. 🏦 중앙은행 유동성 살포 (Stimulus Injection)</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="console-label">공시 뉴스 헤드라인 (선택)</label>
+        <input type="text" id="console-regime-news" placeholder="예: [속보] 한국은행, 기준금리 전격 인하 발표" style="width:100%;">
+      </div>
+
+      <div style="margin-top:auto; padding-top:10px;">
+        <button type="button" onclick="execMarketRegime()" style="width:100%; background:linear-gradient(135deg, #d97706, #f59e0b); border:none; color:#fff; padding:12px; border-radius:8px; font-weight:800; font-size:0.95rem; cursor:pointer; box-shadow:0 4px 12px rgba(245,158,11,0.3); transition:all 0.15s ease;">⚡ 시장 국면 즉시 적용</button>
+      </div>
+    </div>
+
+    <!-- 3. 전 유저 국고 보조금 살포 -->
+    <div class="console-panel" style="border-top: 3px solid #8b5cf6;">
+      <div class="console-panel-header">
+        <span style="font-size:1.4rem;">🏛️</span>
+        <h3 class="console-panel-title" style="color:#a78bfa;">전체 유저 대상 국고 지원금 살포</h3>
+      </div>
+      
+      <div>
+        <label class="console-label">1인당 지급액 (숫자 또는 5만, 100만)</label>
+        <input type="text" id="console-stimulus-amount" placeholder="예: 50000, 10만" style="width:100%; color:#a78bfa; font-weight:800;">
+      </div>
+
+      <div>
+        <label class="console-label">지원금 명목</label>
+        <input type="text" id="console-stimulus-reason" placeholder="예: 2026년 설맞이 민생안정 지원금" style="width:100%;">
+      </div>
+
+    </div>
+
+    <!-- 4. 관리자 신규 주식 종목 즉시 상장 -->
+    <div class="console-panel" style="border-top: 3px solid #06b6d4;">
+      <div class="console-panel-header">
+        <span style="font-size:1.4rem;">🚀</span>
+        <h3 class="console-panel-title" style="color:#22d3ee;">신규 주식 종목 즉시 상장 (IPO)</h3>
+      </div>
+      
+      <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:10px;">
+        <div>
+          <label class="console-label">종목코드 (Ticker)</label>
+          <input type="text" id="console-stock-id" placeholder="예: SAM, NVDA" style="width:100%; text-transform:uppercase; font-weight:800; color:#22d3ee;">
+        </div>
+        <div>
+          <label class="console-label">기업명</label>
+          <input type="text" id="console-stock-name" placeholder="예: 삼성전자" style="width:100%; font-weight:700;">
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr; gap:10px;">
+        <div>
+          <label class="console-label">시작 공모가 (예: 50000, 5만)</label>
+          <input type="text" id="console-stock-price" placeholder="예: 70000, 5만" style="width:100%; font-weight:800; color:#34d399;">
+        </div>
+        <div>
+          <label class="console-label">업종/섹터</label>
+          <input type="text" id="console-stock-sector" placeholder="예: IT/반도체" style="width:100%;">
+        </div>
+      </div>
+
+      <div>
+        <label class="console-label">기업 설명</label>
+        <input type="text" id="console-stock-desc" placeholder="예: 메모리 반도체 및 첨단 스마트폰 제조사" style="width:100%;">
+      </div>
+
+      <div style="margin-top:auto; padding-top:10px;">
+        <button type="button" onclick="execCreateStockConsole()" style="width:100%; background:linear-gradient(135deg, #0891b2, #06b6d4); border:none; color:#fff; padding:12px; border-radius:8px; font-weight:800; font-size:0.95rem; cursor:pointer; box-shadow:0 4px 12px rgba(6,182,212,0.3); transition:all 0.15s ease;">🚀 신규 주식 즉시 상장하기</button>
+      </div>
+    </div>
+
+    <!-- 4. 데이터베이스 백업 및 보관소 -->
+    <div class="console-panel" style="border-top: 3px solid #38bdf8; grid-column: 1 / -1;">
+      <div class="console-panel-header" style="justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.4rem;">💾</span>
+          <h3 class="console-panel-title" style="color:#38bdf8;">데이터베이스 백업 &amp; 보관소 관리</h3>
+          <span style="background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); font-size:0.75rem; font-weight:800; padding:2px 8px; border-radius:9999px;">⏰ 6시간 자동 백업 가동 중</span>
+        </div>
+        <button type="button" id="btn-create-backup" onclick="execCreateBackup()" style="background:linear-gradient(135deg, #0284c7, #0ea5e9); border:none; color:#fff; padding:8px 18px; border-radius:8px; font-weight:800; font-size:0.88rem; cursor:pointer; box-shadow:0 4px 12px rgba(14,165,233,0.3);">⚡ 지금 즉시 DB 백업 생성</button>
+      </div>
+      
+      <p style="font-size:0.85rem; color:#94a3b8; margin-top:-6px; margin-bottom:12px;">
+        서버의 모든 계정 자산, 주식 호가/거래 장부, 세금 국고 기록이 실시간 압축 저장되며 30일간 안전하게 보관됩니다.
+      </p>
+
+      <div style="background:#090d16; border:1px solid rgba(255,255,255,0.08); border-radius:10px; overflow:hidden;">
+        <div id="backup-list-loading" style="padding:20px; text-align:center; color:#94a3b8; font-size:0.85rem;">⏳ 백업 보관소 목록 불러오는 중...</div>
+        <div id="backup-list-table-wrap" style="display:none; max-height:240px; overflow-y:auto;">
+          <table style="width:100%; border-collapse:collapse; text-align:left; font-size:0.85rem;">
+            <thead>
+              <tr style="background:rgba(255,255,255,0.04); border-bottom:1px solid rgba(255,255,255,0.08); color:#94a3b8;">
+                <th style="padding:10px 14px;">파일명</th>
+                <th style="padding:10px 14px;">용량</th>
+                <th style="padding:10px 14px;">생성 일시</th>
+                <th style="padding:10px 14px; text-align:right;">작업</th>
+              </tr>
+            </thead>
+            <tbody id="backup-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  function showConsoleResult(ok, message) {
+    const box = document.getElementById('console-result-box');
+    if (!box) return;
+    box.style.display = 'block';
+    box.style.background = ok ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
+    box.style.border = '1px solid ' + (ok ? '#10b981' : '#ef4444');
+    box.style.color = ok ? '#6ee7b7' : '#fca5a5';
+    box.textContent = (ok ? '✅ ' : '❌ ') + message;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  async function execAdminMoney(type, source) {
+    const userId = (document.getElementById('console-target-user') || {}).value.trim();
+    const amount = (document.getElementById('console-amount') || {}).value.trim();
+    const reason = (document.getElementById('console-reason') || {}).value.trim();
+    const btnGiveTreasury = document.getElementById('btn-console-give-treasury');
+    const btnGiveDirect = document.getElementById('btn-console-give-direct');
+    const btnTake = document.getElementById('btn-console-take');
+
+    if (!userId) return showConsoleResult(false, '대상 유저 ID 또는 닉네임을 입력하세요.');
+    if (!amount) return showConsoleResult(false, '금액을 입력하세요.');
+
+    if (btnGiveTreasury) btnGiveTreasury.disabled = true;
+    if (btnGiveDirect) btnGiveDirect.disabled = true;
+    if (btnTake) btnTake.disabled = true;
+
+    try {
+      const res = await adminFetch('/api/admin/action/' + type, {
+        method: 'POST',
+        body: { userId, amount, reason, source: source || 'direct', confirm: true }
+      });
+      if (res.success) {
+        showConsoleResult(true, res.message || '자금 조작이 성공적으로 완료되었습니다.');
+        adminNotice(true, res.message);
+        document.getElementById('console-amount').value = '';
+      } else {
+        showConsoleResult(false, res.error || '자금 조작 처리에 실패했습니다.');
+        adminNotice(false, res.error);
+      }
+    } catch (e) {
+      showConsoleResult(false, '서버 통신 중 오류가 발생했습니다: ' + (e.message || '네트워크 에러'));
+    } finally {
+      if (btnGiveTreasury) btnGiveTreasury.disabled = false;
+      if (btnGiveDirect) btnGiveDirect.disabled = false;
+      if (btnTake) btnTake.disabled = false;
+    }
+  }
+
+  async function execMarketRegime() {
+    const regime = (document.getElementById('console-regime') || {}).value;
+    const news = (document.getElementById('console-regime-news') || {}).value.trim();
+
+    try {
+      const res = await adminFetch('/api/admin/stocks/regime', {
+        method: 'POST',
+        body: { regime, news, confirm: true }
+      });
+      if (res.success) {
+        showConsoleResult(true, res.message || '주식 시장 국면이 즉시 전환되었습니다.');
+        adminNotice(true, res.message);
+      } else {
+        showConsoleResult(false, res.error || '시장 국면 전환 실패');
+      }
+    } catch (e) {
+      showConsoleResult(false, '처리 오류 발생');
+    }
+  }
+
+  async function execStimulusPackage() {
+    const amount = (document.getElementById('console-stimulus-amount') || {}).value.trim();
+    const reason = (document.getElementById('console-stimulus-reason') || {}).value.trim();
+    if (!amount) return showConsoleResult(false, '1인당 지급액을 입력하세요.');
+
+    if (!confirm('정말로 모든 활성 유저에게 ' + amount + '원씩 지원금을 살포하시겠습니까?')) return;
+
+    try {
+      const res = await adminFetch('/api/admin/economy/stimulus', {
+        method: 'POST',
+        body: { amount, reason, confirm: true }
+      });
+      if (res.success) {
+        showConsoleResult(true, res.message || '전체 유저 지원금 살포가 완료되었습니다.');
+        adminNotice(true, res.message);
+        document.getElementById('console-stimulus-amount').value = '';
+      } else {
+        showConsoleResult(false, res.error || '지원금 살포 실패');
+      }
+    } catch (e) {
+      showConsoleResult(false, '처리 오류 발생');
+    }
+  }
+
+  async function loadBackups() {
+    const loading = document.getElementById('backup-list-loading');
+    const wrap = document.getElementById('backup-list-table-wrap');
+    const tbody = document.getElementById('backup-table-body');
+    if (!tbody) return;
+
+    try {
+      const res = await adminFetch('/api/admin/backups');
+      if (res.success && res.backups) {
+        if (loading) loading.style.display = 'none';
+        if (wrap) wrap.style.display = 'block';
+
+        if (!res.backups.length) {
+          tbody.innerHTML = '<tr><td colspan="4" style="padding:16px; text-align:center; color:#94a3b8;">저장된 백업 파일이 없습니다.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = res.backups.map((b, idx) => {
+          const dt = new Date(b.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+          return `
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+              <td style="padding:10px 14px; font-family:monospace; color:#38bdf8; font-weight:700;">💾 ${b.filename}</td>
+              <td style="padding:10px 14px; color:#cbd5e1;">${b.sizeFormatted}</td>
+              <td style="padding:10px 14px; color:#94a3b8; font-size:0.8rem;">${dt}</td>
+              <td style="padding:10px 14px; text-align:right;">
+                <a href="/api/admin/backups/download/${encodeURIComponent(b.filename)}" class="btn-table-action" style="display:inline-block; padding:4px 10px; background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); border-radius:6px; font-weight:700; text-decoration:none; font-size:0.8rem;">⬇️ 다운로드</a>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    } catch (e) {
+      if (loading) loading.textContent = '❌ 백업 목록 조회 실패';
+    }
+  }
+
+  async function execCreateBackup() {
+    const btn = document.getElementById('btn-create-backup');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ DB 백업 생성 중...';
+    }
+
+    try {
+      const res = await adminFetch('/api/admin/backups/create', { method: 'POST' });
+      if (res.success) {
+        showConsoleResult(true, res.message);
+        adminNotice(true, res.message);
+        await loadBackups();
+      } else {
+        showConsoleResult(false, res.error || 'DB 백업 생성 실패');
+      }
+    } catch (e) {
+      showConsoleResult(false, '서버 통신 중 오류가 발생했습니다.');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '⚡ 지금 즉시 DB 백업 생성';
+      }
+    }
+  }
+
+  async function execCreateStockConsole() {
+    const stockId = String((document.getElementById('console-stock-id') || {}).value || '').toUpperCase().trim();
+    const name = String((document.getElementById('console-stock-name') || {}).value || '').trim();
+    const price = String((document.getElementById('console-stock-price') || {}).value || '').trim();
+    const sector = String((document.getElementById('console-stock-sector') || {}).value || '').trim();
+    const description = String((document.getElementById('console-stock-desc') || {}).value || '').trim();
+
+    if (!stockId || !name || !price) {
+      showConsoleResult(false, '종목코드, 기업명, 공모가를 입력하세요.');
+      return;
+    }
+
+    try {
+      const res = await adminFetch('/api/admin/action/stock-create', {
+        method: 'POST',
+        body: { stockId, name, price, sector, description }
+      });
+
+      if (res.success) {
+        showConsoleResult(true, res.message);
+        adminNotice(true, res.message);
+        document.getElementById('console-stock-id').value = '';
+        document.getElementById('console-stock-name').value = '';
+        document.getElementById('console-stock-price').value = '';
+        document.getElementById('console-stock-sector').value = '';
+        document.getElementById('console-stock-desc').value = '';
+      } else {
+        showConsoleResult(false, res.error || '신규 주식 상장 실패');
+      }
+    } catch (e) {
+      showConsoleResult(false, '신규 주식 상장 처리 중 통신 오류가 발생했습니다.');
+    }
+  }
+
+  // 초기 로드 시 백업 목록 갱신
+  document.addEventListener('DOMContentLoaded', loadBackups);
+  setTimeout(loadBackups, 300);
+</script>
+
+<%- include('footer') %>

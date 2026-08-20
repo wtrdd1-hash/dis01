@@ -1,0 +1,12 @@
+[Unit]
+Description=월덕 앱 감시자 (꺼지면 자동 기동)
+After=docker.service wtrdd-status.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/wtrdd/discord-bot/deploy/watchdog/watchdog.sh
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

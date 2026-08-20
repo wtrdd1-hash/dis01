@@ -1,13 +1,16 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { pool, getOrCreateUser } = require('../../config/database');
-const { createGambleEmbed, createErrorEmbed } = require('../../utils/embedBuilder');
+const { createErrorEmbed } = require('../../utils/embedBuilder');
 const { formatMoney } = require('../../utils/formatters');
+const { safeBigInt, computePayout, applyCashDelta, parseCasinoGambleBet, casinoTooSmallMessage } = require('../../utils/money');
+const { flipCoin, COIN_WIN_MULT, scaleGambleMultiplier } = require('../../utils/economyBalance');
+const { coinFlavor, runStagedEmbed, showEmbed, moneyTail, COLORS } = require('../../utils/gameShow');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('동전')
     .setDescription('🪙 동전 앞/뒷면 맞추기 도박을 진행합니다.')
-    .addStringOption(option =>
+    .addStringOption((option) =>
       option.setName('선택')
         .setDescription('앞면 또는 뒷면')
         .setRequired(true)
@@ -16,9 +19,9 @@ module.exports = {
           { name: '뒷면 🪙', value: '뒷면' }
         )
     )
-    .addStringOption(option =>
+    .addStringOption((option) =>
       option.setName('배팅금액')
-        .setDescription('배팅할 금액 또는 "올인"')
+        .setDescription('배팅할 금액, 한글 단위(예: 5만), 또는 "전액"/"올인"')
         .setRequired(true)
     ),
 
@@ -28,25 +31,20 @@ module.exports = {
     const userId = interaction.user.id;
 
     const userData = await getOrCreateUser(userId);
-    const userCash = BigInt(userData.cash);
+    const userCash = safeBigInt(userData.cash);
 
-    let betAmount = 0n;
-    if (betInput === '올인' || betInput === '전체' || betInput === 'all') {
-      betAmount = userCash;
-    } else {
-      const parsed = parseInt(betInput, 10);
-      if (isNaN(parsed) || parsed <= 0) {
-        return interaction.reply({
-          embeds: [createErrorEmbed('입력 오류', '배팅 금액은 1,000원 이상의 정수 또는 "올인"이어야 합니다.')],
-          flags: MessageFlags.Ephemeral
-        });
-      }
-      betAmount = BigInt(parsed);
+    const betAmount = parseCasinoGambleBet(betInput, userCash);
+    if (betAmount === null) {
+      return interaction.reply({
+        embeds: [createErrorEmbed('입력 오류', '배팅 금액은 1,000원 이상의 정수, 한글 단위(예: 5만), 또는 "전액"/"올인"이어야 합니다.')],
+        flags: MessageFlags.Ephemeral
+      });
     }
 
-    if (betAmount < 1000n) {
+    const tooSmall = casinoTooSmallMessage(betInput, userCash, betAmount);
+    if (tooSmall) {
       return interaction.reply({
-        embeds: [createErrorEmbed('배팅 제한', '최소 배팅 금액은 1,000원입니다.')],
+        embeds: [createErrorEmbed('배팅 제한', tooSmall)],
         flags: MessageFlags.Ephemeral
       });
     }
@@ -58,29 +56,32 @@ module.exports = {
       });
     }
 
-    const coinSide = Math.random() < 0.5 ? '앞면' : '뒷면';
+    const coinSide = flipCoin().result;
     const isWin = choice === coinSide;
-
-    // 1.95배 당첨금
-    const payout = isWin ? BigInt(Math.floor(Number(betAmount) * 1.95)) : 0n;
+    const multiplier = isWin ? scaleGambleMultiplier(COIN_WIN_MULT) : 0;
+    const payout = computePayout(betAmount, multiplier);
     const profit = payout - betAmount;
-    const newCash = userCash + profit;
-
-    await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [newCash.toString(), userId]);
+    const newCash = await applyCashDelta(userId, profit);
     await pool.query(
       'INSERT INTO gambling_logs (user_id, game, bet, payout, profit) VALUES (?, "coinflip", ?, ?, ?)',
       [userId, betAmount.toString(), payout.toString(), profit.toString()]
     );
 
-    const embed = createGambleEmbed(
-      '🪙 동전 던지기 결과',
-      `**동전 결과:** \`${coinSide}\` | **내 선택:** \`${choice}\`\n\n` +
-      `${isWin ? '🎉 **승리! 1.95배 당첨금을 받았습니다!**' : '💀 **패배... 예상과 다른 면이 나왔습니다.**'}\n\n` +
-      `💰 **배팅금:** ${formatMoney(betAmount)}\n` +
-      `🎁 **획득금:** ${formatMoney(payout)}\n` +
-      `💳 **현재 잔액:** **${formatMoney(newCash)}**`
-    );
+    const flavor = coinFlavor(choice, coinSide, isWin);
+    const face = coinSide === '앞면' ? '🦅 앞면' : '👑 뒷면';
+    const money = moneyTail(betAmount, payout, newCash);
 
-    await interaction.reply({ embeds: [embed] });
+    await runStagedEmbed(interaction, [
+      { embed: showEmbed('🪙 동전 던지기', `선택을 걸었습니다: **${choice}**\n동전을 공중으로 던집니다...`, COLORS.GAMBLE) },
+      { delay: 700, embed: showEmbed('🪙 회전 중', '마지막 한 바퀴...', COLORS.WARNING) },
+      {
+        delay: 800,
+        embed: showEmbed(
+          isWin ? '🪙 적중' : '🪙 반대면',
+          `**결과:** ${face} | **선택:** ${choice}\n\n${isWin ? `🎉 **승리! ${COIN_WIN_MULT}배**` : '💀 **패배**'}\n_${flavor}_${money}`,
+          isWin ? COLORS.SUCCESS : COLORS.ERROR
+        )
+      }
+    ]);
   }
 };

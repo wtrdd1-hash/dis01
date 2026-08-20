@@ -1,0 +1,114 @@
+<%- include('header', { activeMenu: 'security', pageTitle: '보안 및 IP 차단 - 관리자', pageHeader: '보안-차단' }) %>
+
+<!-- 🌟 보안 및 방화벽 메인 카드 -->
+<div class="card" style="border: 1px solid rgba(239, 68, 68, 0.35); background: #0b1120;">
+  
+  <!-- 상단 헤더 & 수동 차단 폼 -->
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:16px;">
+    <div>
+      <h2 style="color:#f87171; margin:0; font-size:1.35rem; display:flex; align-items:center; gap:8px;">
+        <span>🛡️ 웹 방화벽 & IP 차단 관제 (현재 <%= bannedList.length %>개 차단)</span>
+      </h2>
+      <p style="font-size:0.83rem; color:#94a3b8; margin-top:4px;">
+        악의적인 매크로, DDoS, 웹 어뷰징 및 공격 시도 IP를 실시간으로 격리하고 해제합니다.
+      </p>
+    </div>
+
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <input type="text" id="manual-ban-ip" placeholder="차단할 IP (예: 1.2.3.4)" style="background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:8px 12px; border-radius:6px; font-size:0.85rem; width:180px;">
+      <button type="button" onclick="execManualBan()" style="background:#dc2626; border:none; color:#fff; padding:8px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer; display:flex; align-items:center; gap:6px;">
+        <span>+ IP 수동 차단</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 차단된 IP 목록 -->
+  <div style="margin-bottom: 30px;">
+    <h3 style="color:#fca5a5; margin-bottom:12px; font-size:1.05rem; display:flex; align-items:center; gap:6px;">
+      <span>🚫 현재 차단 격리 중인 IP 목록</span>
+    </h3>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:180px;">IP 주소</th>
+            <th style="width:140px;">국가 / 위치</th>
+            <th>차단 사유</th>
+            <th style="width:130px;">남은 시간</th>
+            <th style="width:160px;">차단 시각 (KST)</th>
+            <th style="text-align:center; width:90px;">작업</th>
+          </tr>
+        </thead>
+        <tbody>
+          <%- bannedRowsHtml %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 최근 보안 이벤트 로그 -->
+  <div style="border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 24px;">
+    <h3 style="color:#fbbf24; margin-bottom:12px; font-size:1.05rem; display:flex; align-items:center; gap:6px;">
+      <span>⚠️ 최근 보안 위협 이벤트 로그 (최근 50건)</span>
+    </h3>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:150px;">시간 (KST)</th>
+            <th style="width:120px;">이벤트 유형</th>
+            <th style="width:130px;">국가 / 위치</th>
+            <th style="width:160px;">IP 주소</th>
+            <th style="width:180px;">요청 경로</th>
+            <th>상세 사유</th>
+            <th style="text-align:center; width:80px;">작업</th>
+          </tr>
+        </thead>
+        <tbody>
+          <%- secEventRowsHtml %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  async function unbanFromLog(ip) {
+    if (!confirm('IP ' + ip + ' 차단을 해제하시겠습니까?')) return;
+    const res = await adminFetch('/api/admin/security/unban', {
+      method: 'POST',
+      body: { ip, confirm: true }
+    });
+    if (res.success) {
+      adminNotice(true, 'IP 차단이 해제되었습니다.');
+      setTimeout(function() { location.reload(); }, 1000);
+    } else {
+      adminNotice(false, res.error || '해제 실패');
+    }
+  }
+
+  async function execManualBan() {
+    const ipInput = document.getElementById('manual-ban-ip');
+    const ip = (ipInput ? ipInput.value : '').trim();
+    if (!ip) return alert('차단할 IP 주소를 입력하세요.');
+    const reason = prompt('IP ' + ip + ' 차단 사유를 입력하세요:', '관리자 수동 차단');
+    if (reason === null) return;
+    
+    try {
+      const res = await adminFetch('/api/admin/security/ban', {
+        method: 'POST',
+        body: { ip, reason: reason.trim() || '관리자 수동 차단', minutes: 1440, confirm: true }
+      });
+      if (res.success) {
+        adminNotice(true, 'IP ' + ip + ' 차단 완료');
+        setTimeout(function() { location.reload(); }, 1000);
+      } else {
+        adminNotice(false, res.error || '차단 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '차단 처리 오류');
+    }
+  }
+</script>
+
+<%- include('footer') %>

@@ -52,16 +52,27 @@ function cleanIp(rawIp) {
   return ip;
 }
 
-// 사설/로컬 IP 여부 검사
+// 사설/로컬/도커 브리지 IP 여부 검사
 function isLocalIp(ip) {
-  return (
-    ip === '127.0.0.1' ||
-    ip === 'localhost' ||
-    ip.startsWith('10.') ||
-    ip.startsWith('192.168.') ||
-    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip) ||
-    ip === '::1'
-  );
+  const v = cleanIp(ip);
+  if (!v || v === 'unknown') return false;
+  if (v === '127.0.0.1' || v === 'localhost' || v === '::1' || v === '0.0.0.0') return true;
+  if (v.startsWith('10.') || v.startsWith('192.168.') || v.startsWith('169.254.')) return true;
+  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(v)) return true;
+  const lower = v.toLowerCase();
+  if (lower.startsWith('fc') || lower.startsWith('fd') || lower.startsWith('fe80:')) return true;
+  return false;
+}
+
+function isValidIp(rawIp) {
+  if (!rawIp) return false;
+  const ip = cleanIp(rawIp);
+  if (!ip || ip === 'unknown') return false;
+  if (ip === 'localhost' || ip === '127.0.0.1') return true;
+  const v4 = /^(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)$/;
+  if (v4.test(ip)) return true;
+  if (ip.includes(':') && /^[0-9a-fA-F:]+$/.test(ip)) return true;
+  return false;
 }
 
 const ipCache = new Map();
@@ -126,5 +137,7 @@ function lookupIp(rawIp) {
 module.exports = {
   cleanIp,
   lookupIp,
-  getFlagEmoji
+  getFlagEmoji,
+  isLocalIp,
+  isValidIp
 };

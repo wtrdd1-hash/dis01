@@ -1,0 +1,424 @@
+<%- include('header', { activeMenu: 'admins', pageTitle: '관리자 계정 관리 - 관리자 센터', pageHeader: '관리자-계정-관리' }) %>
+
+<style>
+  /* 👑 관리자 계정 관리 전용 스타일 */
+  .admin-grid-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 900px) {
+    .admin-grid-row { grid-template-columns: 1fr; }
+  }
+
+  .admin-list-card {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: all 0.18s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .admin-list-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--grad-card);
+    pointer-events: none;
+    opacity: 0.4;
+  }
+  .admin-list-card > * { position: relative; z-index: 1; }
+  .admin-list-card:hover {
+    border-color: var(--border-strong);
+    transform: translateX(2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  }
+  .admin-list-card.protected {
+    border-left: 4px solid #f59e0b;
+    background: linear-gradient(90deg, rgba(245,158,11,0.08) 0%, rgba(15,23,42,0.6) 30%);
+  }
+  .admin-list-card.super {
+    border-left: 4px solid #8b5cf6;
+    background: linear-gradient(90deg, rgba(139,92,246,0.08) 0%, rgba(15,23,42,0.6) 30%);
+  }
+  .admin-list-card.admin {
+    border-left: 4px solid var(--primary);
+  }
+
+  .admin-list-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--grad-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    font-weight: 900;
+    color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(99,102,241,0.35);
+  }
+  .admin-list-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .admin-list-name {
+    font-weight: 800;
+    color: #fff;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .admin-list-discord {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .admin-list-meta {
+    display: flex;
+    gap: 12px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .admin-list-meta b { color: #fff; }
+
+  .admin-list-action {
+    flex-shrink: 0;
+  }
+
+  .badge-role {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+  .badge-role.super { background: linear-gradient(135deg, #4f46e5, #8b5cf6); color: #fff; }
+  .badge-role.admin { background: rgba(99,102,241,0.18); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.4); }
+  .badge-role.protected { background: linear-gradient(135deg, #b45309, #f59e0b); color: #fff; }
+
+  .add-admin-form {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr 1.5fr auto;
+    gap: 10px;
+    align-items: center;
+  }
+  @media (max-width: 800px) {
+    .add-admin-form {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .stat-card-mini {
+    background: linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(15,23,42,0.7) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s ease;
+  }
+  .stat-card-mini:hover { transform: translateY(-2px); border-color: var(--border-strong); }
+  .stat-card-mini .icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+  }
+  .stat-card-mini .body { flex: 1; min-width: 0; }
+  .stat-card-mini .body .label { font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-bottom: 2px; }
+  .stat-card-mini .body .value { font-size: 1.35rem; font-weight: 900; letter-spacing: -0.01em; }
+  .stat-card-mini .body .sub { font-size: 0.72rem; color: var(--text-muted); }
+</style>
+
+<!-- 📊 상단 KPI 통계 (4개) -->
+<div class="admin-stat-grid" style="margin-bottom: 22px;">
+  <div class="stat-card-mini">
+    <div class="icon" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">👑</div>
+    <div class="body">
+      <div class="label">전체 관리자</div>
+      <div class="value" id="stat-total" style="color:#c084fc;">-명</div>
+      <div class="sub">DB + 환경변수 통합</div>
+    </div>
+  </div>
+  <div class="stat-card-mini">
+    <div class="icon" style="background: linear-gradient(135deg, #f59e0b, #ec4899);">⭐</div>
+    <div class="body">
+      <div class="label">SUPER_ADMIN</div>
+      <div class="value" id="stat-super" style="color:#fbbf24;">-명</div>
+      <div class="sub">최고 권한</div>
+    </div>
+  </div>
+  <div class="stat-card-mini">
+    <div class="icon" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">🛡️</div>
+    <div class="body">
+      <div class="label">ADMIN</div>
+      <div class="value" id="stat-admin" style="color:#a5b4fc;">-명</div>
+      <div class="sub">일반 관리자</div>
+    </div>
+  </div>
+  <div class="stat-card-mini">
+    <div class="icon" style="background: linear-gradient(135deg, #b45309, #f59e0b);">🔒</div>
+    <div class="body">
+      <div class="label">보호 관리자</div>
+      <div class="value" id="stat-protected" style="color:#fbbf24;">1명</div>
+      <div class="sub">시스템 영구 고정 ID</div>
+    </div>
+  </div>
+</div>
+
+<!-- ➕ 관리자 추가 + 📋 명부 -->
+<div class="admin-grid-row">
+
+  <!-- ➕ 새 관리자 등록 -->
+  <div class="card">
+    <h2>➕ 새 관리자 등록</h2>
+    <p style="font-size:0.82rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.55;">
+      <b style="color:#fbbf24;">⭐ SUPER_ADMIN</b>은 다른 관리자 추가/삭제 권한을 가지며, <b style="color:#a5b4fc;">🛡️ ADMIN</b>은 일반 관제 권한만 부여됩니다.
+    </p>
+    <div class="add-admin-form">
+      <input type="text" id="add-discord-id" placeholder="Discord ID (16~22자리 숫자)" autocomplete="off">
+      <input type="text" id="add-username" placeholder="유저명 (선택)" autocomplete="off">
+      <select id="add-role">
+        <option value="ADMIN">🛡️ ADMIN</option>
+        <option value="SUPER_ADMIN">⭐ SUPER_ADMIN</option>
+      </select>
+      <input type="text" id="add-note" placeholder="메모 (선택)" autocomplete="off">
+      <button type="button" class="btn-primary" onclick="submitAddAdmin()">➕ 등록</button>
+    </div>
+    <div style="margin-top: 14px; padding: 12px 14px; background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); border-radius: var(--radius-sm); font-size: 0.78rem; color: #fcd34d;">
+      ⚠️ SUPER_ADMIN 권한이 없으면 관리자 추가가 거부됩니다. <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px;">886478189520637992</code>는 절대 박탈 불가.
+    </div>
+  </div>
+
+  <!-- 📋 관리자 명부 -->
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 14px;">
+      <h2 style="margin:0;">📋 관리자 명부</h2>
+      <button type="button" class="btn-secondary" onclick="loadAdminsList()">↻ 새로고침</button>
+    </div>
+    <div id="admin-list-count" style="font-size:0.78rem; color: var(--text-muted); margin-bottom: 12px;"></div>
+    <div id="admin-list-container">
+      <div style="text-align:center; padding: 30px 0; color: var(--text-muted);">
+        <div style="font-size: 2rem; margin-bottom: 8px;">⏳</div>
+        <div>관리자 목록을 불러오는 중...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 🚫 박탈 확인 모달 -->
+<div id="admin-remove-modal" class="modal-backdrop">
+  <div class="modal-card">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 18px;">
+      <h3 style="margin:0; color:#f87171; font-size:1.15rem; display:flex; align-items:center; gap:8px;">
+        🚫 관리자 권한 박탈
+      </h3>
+      <button type="button" onclick="closeAdminRemoveModal()" style="background:transparent; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer; line-height:1;">&times;</button>
+    </div>
+    <input type="hidden" id="remove-target-id">
+    <div style="margin-bottom: 14px;">
+      <div style="font-size:0.78rem; color: var(--text-muted); margin-bottom: 4px;">대상 관리자</div>
+      <div id="remove-target-name" style="font-size:1.05rem; font-weight: 800; color: #fff;">-</div>
+    </div>
+    <div style="margin-bottom: 14px;">
+      <label style="font-size:0.78rem; color: var(--text-muted); font-weight: 700; display:block; margin-bottom: 6px;">박탈 사유 (선택)</label>
+      <input type="text" id="remove-reason" placeholder="예: 권한 남용 / 퇴출 / 실수" style="width:100%;">
+    </div>
+    <div style="background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 18px; font-size:0.78rem; color:#fca5a5;">
+      ⚠️ 박탈 즉시 해당 계정은 관리자 페이지 및 API 접근이 차단됩니다.
+    </div>
+    <div style="display:flex; gap: 10px;">
+      <button type="button" class="btn-danger" onclick="submitRemoveAdmin()" style="flex:1;">🚫 즉시 박탈</button>
+      <button type="button" class="btn-secondary" onclick="closeAdminRemoveModal()">취소</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function(){
+    const meta = document.createElement('meta');
+    meta.name = 'current-admin-id';
+    meta.content = '<%= adminUser && adminUser.id ? adminUser.id : "" %>';
+    document.head.appendChild(meta);
+  })();
+
+  function currentAdminId() {
+    const m = document.querySelector('meta[name="current-admin-id"]');
+    return m ? m.content : '';
+  }
+
+  function escapeHtmlSafe(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function renderAdminCard(a) {
+    const isProtected = a.isProtected;
+    const isSuper = a.role === 'SUPER_ADMIN';
+    const meId = currentAdminId();
+    const canRemove = !isProtected && meId && meId !== a.discordId;
+    const cls = isProtected ? 'protected' : (isSuper ? 'super' : 'admin');
+
+    let badge = '';
+    if (isProtected) {
+      badge = '<span class="badge-role protected">🔒 시스템 보호</span>';
+    } else if (isSuper) {
+      badge = '<span class="badge-role super">⭐ SUPER_ADMIN</span>';
+    } else {
+      badge = '<span class="badge-role admin">🛡️ ADMIN</span>';
+    }
+
+    const initial = (a.username && a.username[0]) || '?';
+    const actionBtn = canRemove
+      ? `<button type="button" class="btn-danger" style="padding:8px 14px; font-size:0.82rem;" onclick="openAdminRemoveModal('${escapeHtmlSafe(a.discordId)}', '${escapeHtmlSafe(a.username)}')">박탈</button>`
+      : '<span style="color:var(--text-muted); font-size:0.78rem; padding: 8px 0;">—</span>';
+
+    const noteHtml = a.note
+      ? `<div style="font-size:0.78rem; color: var(--text-sub); margin-top:4px; word-break: break-word;">📝 ${a.note}</div>`
+      : '';
+
+    return `
+      <div class="admin-list-card ${cls}">
+        <div class="admin-list-avatar">${escapeHtmlSafe(initial.toUpperCase())}</div>
+        <div class="admin-list-info">
+          <div class="admin-list-name">
+            @${escapeHtmlSafe(a.username || '-')}
+            ${badge}
+          </div>
+          <div class="admin-list-discord">${escapeHtmlSafe(a.discordId)}</div>
+          ${noteHtml}
+          <div class="admin-list-meta">
+            <span>🗓️ 등록일 <b>${escapeHtmlSafe(new Date(a.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }))}</b></span>
+            <span>👤 등록자 <b>${escapeHtmlSafe(a.addedByUsername || 'SYSTEM')}</b></span>
+          </div>
+        </div>
+        <div class="admin-list-action">${actionBtn}</div>
+      </div>
+    `;
+  }
+
+  async function loadAdminsList() {
+    const container = document.getElementById('admin-list-container');
+    const countEl = document.getElementById('admin-list-count');
+    try {
+      const res = await adminFetch('/api/admin/admin-mgmt/admins/list', { method: 'GET' });
+      if (!res.success) {
+        if (container) {
+          container.innerHTML = '<div style="text-align:center; padding: 30px; color: #f87171;">❌ ' + (res.error || '조회 실패') + '</div>';
+        }
+        return;
+      }
+      const list = res.admins || [];
+      let superCount = 0, adminCount = 0;
+      list.forEach(a => {
+        if (a.role === 'SUPER_ADMIN') superCount++;
+        if (a.role === 'ADMIN') adminCount++;
+      });
+
+      if (!list.length) {
+        container.innerHTML = '<div style="text-align:center; padding: 30px; color: var(--text-muted);">📭 등록된 관리자가 없습니다.</div>';
+      } else {
+        container.innerHTML = list.map(renderAdminCard).join('');
+      }
+
+      document.getElementById('stat-total').textContent = list.length + '명';
+      document.getElementById('stat-super').textContent = superCount + '명';
+      document.getElementById('stat-admin').textContent = adminCount + '명';
+      if (countEl) countEl.textContent = '총 ' + list.length + '명의 관리자가 등록되어 있습니다.';
+    } catch (e) {
+      if (container) container.innerHTML = '<div style="text-align:center; padding: 30px; color: #f87171;">❌ 통신 오류</div>';
+    }
+  }
+
+  async function submitAddAdmin() {
+    const discordId = document.getElementById('add-discord-id').value.trim();
+    const username = document.getElementById('add-username').value.trim();
+    const role = document.getElementById('add-role').value;
+    const note = document.getElementById('add-note').value.trim();
+
+    if (!discordId) { adminNotice(false, '⚠️ Discord ID를 입력하세요.'); return; }
+    if (!/^\d{16,22}$/.test(discordId)) { adminNotice(false, '⚠️ Discord ID는 16~22자리 숫자(눈송이)여야 합니다.'); return; }
+    if (discordId === '886478189520637992') { adminNotice(false, '🔒 시스템 절대 보호 관리자는 별도 권한 구조를 가지며 추가 작업이 불필요합니다.'); return; }
+
+    try {
+      const res = await adminFetch('/api/admin/admin-mgmt/admins/add', {
+        method: 'POST',
+        body: { discordId, username, role, note }
+      });
+      if (res.success) {
+        adminNotice(true, res.message || '✅ 관리자 등록 완료');
+        document.getElementById('add-discord-id').value = '';
+        document.getElementById('add-username').value = '';
+        document.getElementById('add-note').value = '';
+        setTimeout(loadAdminsList, 400);
+      } else {
+        adminNotice(false, res.error || '❌ 관리자 등록 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '❌ 통신 오류가 발생했습니다.');
+    }
+  }
+
+  function openAdminRemoveModal(discordId, username) {
+    document.getElementById('remove-target-id').value = discordId;
+    document.getElementById('remove-target-name').textContent = '@' + username + ' (' + discordId + ')';
+    document.getElementById('remove-reason').value = '';
+    document.getElementById('admin-remove-modal').classList.add('show');
+  }
+
+  function closeAdminRemoveModal() {
+    document.getElementById('admin-remove-modal').classList.remove('show');
+  }
+
+  // 모달 배경 클릭 시 닫기
+  document.getElementById('admin-remove-modal').addEventListener('click', function(ev) {
+    if (ev.target.id === 'admin-remove-modal') closeAdminRemoveModal();
+  });
+
+  async function submitRemoveAdmin() {
+    const discordId = document.getElementById('remove-target-id').value;
+    const reason = document.getElementById('remove-reason').value.trim();
+    if (!discordId) return;
+    try {
+      const res = await adminFetch('/api/admin/admin-mgmt/admins/remove', {
+        method: 'POST',
+        body: { discordId, reason }
+      });
+      if (res.success) {
+        adminNotice(true, res.message || '✅ 관리자 박탈 완료');
+        closeAdminRemoveModal();
+        setTimeout(loadAdminsList, 400);
+      } else {
+        adminNotice(false, res.error || '❌ 관리자 박탈 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '❌ 통신 오류');
+    }
+  }
+
+  loadAdminsList();
+</script>
+
+<%- include('footer') %>

@@ -2,6 +2,8 @@ const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { pool, getOrCreateUser } = require('../../config/database');
 const { createSuccessEmbed, createErrorEmbed } = require('../../utils/embedBuilder');
 const { formatMoney, formatNumber } = require('../../utils/formatters');
+const { safeBigInt, withUserLock, isAllInAmount } = require('../../utils/money');
+const { quoteTradeTax, applyCreditMinusTax } = require('../../utils/taxEngine');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -9,7 +11,7 @@ module.exports = {
     .setDescription('보유 중인 주식을 매도합니다.')
     .addStringOption(option =>
       option.setName('종목코드')
-        .setDescription('종목 ID (예: WTRD, MINE, CASN, BANK, NEKO, CHKN, SLOT, SCRP)')
+        .setDescription('종목 ID (예: WTRD, AICH, SPAC, BIOX, LUXU, AUTO, MINE, CASN, BANK, NEKO, CHKN, SLOT, SCRP)')
         .setRequired(true)
     )
     .addStringOption(option =>
@@ -31,7 +33,8 @@ module.exports = {
       WHERE us.user_id = ? AND us.stock_id = ?
     `, [userId, stockIdInput]);
 
-    if (userStocks.length === 0 || BigInt(userStocks[0].amount) <= 0n) {
+    const { amountToUnits, unitsToAmountStr, mulPriceAmount } = require('../../utils/moneyScale');
+    if (userStocks.length === 0 || amountToUnits(userStocks[0].amount) <= 0n) {
       return interaction.reply({
         embeds: [createErrorEmbed('매도 불가', `\`${stockIdInput}\` 종목을 보유하고 있지 않습니다. \`/포트폴리오\`를 확인하세요.`)],
         flags: MessageFlags.Ephemeral
@@ -39,75 +42,80 @@ module.exports = {
     }
 
     const holding = userStocks[0];
-    const currentAmount = Number(holding.amount);
-    const stockPrice = BigInt(holding.price);
-    const totalSpent = BigInt(holding.total_spent || 0);
+    const currentUnits = amountToUnits(holding.amount);
+    const stockPrice = safeBigInt(holding.price);
+    const totalSpent = safeBigInt(holding.total_spent);
 
-    let sellAmount = 0;
-    const lowerInput = amountInput.toLowerCase();
-    if (lowerInput === '전량' || lowerInput === '올인' || lowerInput === '최대' || lowerInput === '전체' || lowerInput === 'all' || lowerInput === 'max') {
-      sellAmount = currentAmount;
+    let sellUnits = 0n;
+    if (isAllInAmount(amountInput)) {
+      sellUnits = currentUnits;
     } else {
-      const parsed = parseFloat(amountInput);
-      if (isNaN(parsed) || parsed < 0.0001) {
+      const cleaned = amountInput.replace(/,/g, '').trim();
+      sellUnits = amountToUnits(cleaned);
+      if (sellUnits <= 0n) {
+        const { parseMoneyInput } = require('../../utils/moneyScale');
+        const parsed = parseMoneyInput(cleaned);
+        if (typeof parsed === 'bigint' && parsed > 0n) sellUnits = parsed * 10000n;
+      }
+      if (sellUnits <= 0n) {
         return interaction.reply({
-          embeds: [createErrorEmbed('입력 오류', '매도 수량은 0.0001 이상의 수 또는 "전량" / "최대"이어야 합니다.')],
+          embeds: [createErrorEmbed('입력 오류', '매도 수량은 0.0001 이상의 수 또는 "전액" / "전량"이어야 합니다.')],
           flags: MessageFlags.Ephemeral
         });
       }
-      sellAmount = Math.round(parsed * 10000) / 10000;
     }
 
-    if (sellAmount > currentAmount + 0.00001) {
-      const displayHolding = (currentAmount % 1 === 0) ? currentAmount.toLocaleString() : currentAmount.toFixed(4);
+    if (sellUnits > currentUnits) {
       return interaction.reply({
-        embeds: [createErrorEmbed('수량 초과', `보유 수량(${displayHolding}주)보다 많은 수량을 매도할 수 없습니다.`)],
+        embeds: [createErrorEmbed('수량 초과', `보유 수량(${unitsToAmountStr(currentUnits)}주)보다 많은 수량을 매도할 수 없습니다.`)],
         flags: MessageFlags.Ephemeral
       });
     }
 
-    const totalProceeds = BigInt(Math.floor(Number(stockPrice) * sellAmount));
-    const userData = await getOrCreateUser(userId);
-    const newCash = BigInt(userData.cash || 0) + totalProceeds;
+    const sellAmountStr = unitsToAmountStr(sellUnits);
+    const totalProceeds = mulPriceAmount(stockPrice, sellAmountStr);
+    await getOrCreateUser(userId);
 
-    // 비례하여 total_spent 감소
-    const spentRatio = Math.min(1.0, sellAmount / (currentAmount || 1));
-    const spentDeduction = BigInt(Math.round(Number(totalSpent) * spentRatio));
+    const spentDeduction = currentUnits > 0n ? (totalSpent * sellUnits) / currentUnits : 0n;
     const newTotalSpent = totalSpent > spentDeduction ? totalSpent - spentDeduction : 0n;
-    const newAmountNum = Math.max(0, Math.round((currentAmount - sellAmount) * 10000) / 10000);
+    const newUnits = currentUnits - sellUnits;
 
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-
-      await connection.query('UPDATE users SET cash = ? WHERE discord_id = ?', [newCash.toString(), userId]);
-
-      if (newAmountNum <= 0.00001) {
-        await connection.query('DELETE FROM user_stocks WHERE user_id = ? AND stock_id = ?', [userId, stockIdInput]);
+    const taxQuote = quoteTradeTax(userId, totalProceeds);
+    const newCash = await withUserLock(userId, async () => {
+      const credited = await applyCreditMinusTax(
+        userId,
+        interaction.user.username,
+        totalProceeds,
+        taxQuote.tax,
+        'TAX_TRADE',
+        `주식 매도 거래세 [${holding.stock_id}]`
+      );
+      const after = credited.after;
+      if (newUnits <= 0n) {
+        await pool.query('DELETE FROM user_stocks WHERE user_id = ? AND stock_id = ?', [userId, stockIdInput]);
       } else {
-        await connection.query(
+        await pool.query(
           'UPDATE user_stocks SET amount = ?, total_spent = ? WHERE user_id = ? AND stock_id = ?',
-          [newAmountNum.toFixed(4), newTotalSpent.toString(), userId, stockIdInput]
+          [unitsToAmountStr(newUnits), newTotalSpent.toString(), userId, stockIdInput]
         );
       }
+      return after;
+    });
 
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
+    const displaySellAmount = unitsToAmountStr(sellUnits);
+    const displayRemainAmount = unitsToAmountStr(newUnits);
 
-    const displaySellAmount = (sellAmount % 1 === 0) ? sellAmount.toLocaleString() : sellAmount.toFixed(4);
-    const displayRemainAmount = (newAmountNum % 1 === 0) ? newAmountNum.toLocaleString() : newAmountNum.toFixed(4);
-
+    const taxLine = taxQuote.tax > 0n
+      ? `**거래세 (${(taxQuote.rate * 100).toFixed(1)}%):** -${formatMoney(taxQuote.tax)}\n`
+      : '';
     const embed = createSuccessEmbed(
       '주식 매도 완료',
       `**종목:** \`[${holding.stock_id}]\` ${holding.name}\n` +
       `**매도 수량:** **${displaySellAmount}주**\n` +
       `**체결 단가:** ${formatMoney(stockPrice)}\n` +
-      `**총 정산 금액:** **+${formatMoney(totalProceeds)}**\n\n` +
+      `**매도 대금:** ${formatMoney(totalProceeds)}\n` +
+      taxLine +
+      `**실수령:** **+${formatMoney(taxQuote.netSell)}**\n\n` +
       `💳 **현재 보유 현금:** ${formatMoney(newCash)}\n` +
       `📦 **남은 주식 수량:** ${displayRemainAmount}주`
     );

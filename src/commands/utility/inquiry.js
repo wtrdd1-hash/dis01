@@ -3,6 +3,8 @@ const { pool, getOrCreateUser } = require('../../config/database');
 const config = require('../../config/config');
 const { createSuccessEmbed, createErrorEmbed } = require('../../utils/embedBuilder');
 const { formatMoney } = require('../../utils/formatters');
+const { sumHoldingValue, computeNetWorth } = require('../../utils/economyBalance');
+const { sanitizeInquiryCategory, isDiscordCdnUrl } = require('../../utils/sanitize');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -37,11 +39,11 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    const title = interaction.options.getString('제목').trim();
-    const content = interaction.options.getString('내용').trim();
-    const category = interaction.options.getString('분류') || '일반 문의';
+    const title = interaction.options.getString('제목').trim().slice(0, 100);
+    const content = interaction.options.getString('내용').trim().slice(0, 4000);
+    const category = sanitizeInquiryCategory(interaction.options.getString('분류') || '일반 문의');
     const attachment = interaction.options.getAttachment('사진');
-    const imageUrl = attachment ? attachment.url : null;
+    const imageUrl = (attachment && isDiscordCdnUrl(attachment.url)) ? attachment.url : null;
 
     const userId = interaction.user.id;
     const username = interaction.user.username;
@@ -60,6 +62,18 @@ module.exports = {
         flags: MessageFlags.Ephemeral
       });
     }
+    if (title.length > 100) {
+      return interaction.reply({
+        embeds: [createErrorEmbed('입력 오류', '문의 제목은 100자 이하여야 합니다.')],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+    if (content.length > 4000) {
+      return interaction.reply({
+        embeds: [createErrorEmbed('입력 오류', '문의 내용은 4000자 이하여야 합니다.')],
+        flags: MessageFlags.Ephemeral
+      });
+    }
 
     try {
       const userData = await getOrCreateUser(userId, username, avatar);
@@ -75,12 +89,10 @@ module.exports = {
           JOIN stocks s ON h.stock_id = s.stock_id
           WHERE h.user_id = ?
         `, [userId]);
-        for (const h of holdings) {
-          stockVal += BigInt(Math.floor(Number(h.amount) * Number(h.price)));
-        }
+        stockVal = sumHoldingValue(holdings);
       } catch (e) {}
 
-      const netWorth = userCash + userBank + stockVal;
+      const netWorth = computeNetWorth(userCash, userBank, stockVal);
 
       const [result] = await pool.query(`
         INSERT INTO inquiries (user_id, username, avatar, category, title, content, image_url, status)

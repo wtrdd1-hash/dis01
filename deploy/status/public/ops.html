@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#1e1f22">
+  <title>월덕 상태 · 관리자</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+  <style>
+    :root {
+      --bg-tertiary: #1e1f22; --bg-secondary: #2b2d31; --bg-frame: #111214;
+      --border-subtle: rgba(255,255,255,.06); --text: #dbdee1; --text-header: #f2f3f5;
+      --text-muted: #949ba4; --brand: #5865f2; --danger: #f23f42; --online: #23a559;
+      --font: "Pretendard", "Noto Sans KR", sans-serif; --radius: 8px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: var(--font); background: var(--bg-tertiary); color: var(--text); }
+    .topbar { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; background: var(--bg-frame); }
+    .topbar a, .topbar button { color: #949ba4; background: none; border: 0; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 20px 64px; }
+    h1 { font-size: 22px; color: var(--text-header); margin: 0 0 14px; }
+    .card { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+    label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+    input { width: 100%; max-width: 420px; background: #383a40; border: 1px solid transparent; color: #fff; border-radius: 8px; padding: 10px 12px; }
+    button.primary { background: var(--brand); color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+    .err { color: var(--danger); font-size: 13px; margin-top: 8px; }
+    .row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
+    .logbox { background: #111214; color: #dbdee1; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; max-height: 420px; overflow: auto; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; }
+    select { background: #383a40; color: #fff; border: 0; border-radius: 8px; padding: 8px 10px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a href="/">← 공개 상태</a>
+    <button type="button" id="logoutBtn" class="hidden">로그아웃</button>
+  </header>
+  <div class="wrap">
+    <h1>관리자 콘솔</h1>
+    <div class="card" id="loginCard">
+      <p style="color:#949ba4;font-size:13px;margin-top:0">메인 앱이 내려가도 여기로 들어올 수 있게, 상태 페이지 전용 키로 막혀 있습니다. 키는 서버 `.env`의 `STATUS_OPS_KEY` 입니다.</p>
+      <label for="key">운영 키</label>
+      <input id="key" type="password" autocomplete="current-password">
+      <div style="margin-top:12px"><button class="primary" type="button" id="loginBtn">로그인</button></div>
+      <div class="err" id="loginErr"></div>
+    </div>
+    <div id="dash" class="hidden">
+      <div class="card" id="overview"></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px">
+          <strong>컨테이너 로그</strong>
+          <select id="logName"></select>
+        </div>
+        <div class="logbox" id="logs">불러오는 중…</div>
+      </div>
+      <div class="card" id="events"></div>
+    </div>
+  </div>
+  <script>
+    const loginCard = document.getElementById('loginCard');
+    const dash = document.getElementById('dash');
+    const logoutBtn = document.getElementById('logoutBtn');
+    async function login() {
+      document.getElementById('loginErr').textContent = '';
+      const res = await fetch('/ops/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: document.getElementById('key').value })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        document.getElementById('loginErr').textContent = data.error || '로그인에 실패했습니다.';
+        return;
+      }
+      showDash();
+    }
+    async function showDash() {
+      loginCard.classList.add('hidden');
+      dash.classList.remove('hidden');
+      logoutBtn.classList.remove('hidden');
+      await refresh();
+    }
+    async function refresh() {
+      const res = await fetch('/ops/api/overview', { cache: 'no-store' });
+      if (res.status === 401) {
+        loginCard.classList.remove('hidden');
+        dash.classList.add('hidden');
+        logoutBtn.classList.add('hidden');
+        return;
+      }
+      const data = await res.json();
+      const health = data.health || {};
+      const boxes = Object.values(data.containers || {});
+      document.getElementById('overview').innerHTML =
+        '<div class="row"><span>전체</span><b>' + (health.overall || '-') + '</b></div>' +
+        boxes.map((c) => '<div class="row"><span>' + c.name + ' <code>' + c.container + '</code></span><b>' + (c.status || '-') + ' / ' + (c.health || '-') + ' / rst ' + (c.restartCount || 0) + '</b></div>').join('');
+      const sel = document.getElementById('logName');
+      if (!sel.options.length) {
+        (data.logTargets || []).forEach((name) => {
+          const opt = document.createElement('option');
+          opt.value = name; opt.textContent = name; sel.appendChild(opt);
+        });
+        sel.addEventListener('change', loadLogs);
+      }
+      document.getElementById('events').innerHTML = (health.events || []).slice(0, 20).map((ev) =>
+        '<div class="row"><span>' + (ev.ts || '') + '</span><b>' + (ev.action || '') + ' · ' + (ev.reason || '') + '</b></div>'
+      ).join('') || '<div class="row">이벤트 없음</div>';
+      await loadLogs();
+    }
+    async function loadLogs() {
+      const name = document.getElementById('logName').value || 'wtrdd-discord-app';
+      const res = await fetch('/ops/api/logs?name=' + encodeURIComponent(name), { cache: 'no-store' });
+      const data = await res.json();
+      document.getElementById('logs').textContent = (data.lines || []).join('\n') || (data.error || '로그 없음');
+    }
+    document.getElementById('loginBtn').addEventListener('click', login);
+    document.getElementById('key').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
+    logoutBtn.addEventListener('click', async () => { await fetch('/ops/logout', { method: 'POST' }); location.reload(); });
+    fetch('/ops/api/overview').then((r) => { if (r.ok) showDash(); });
+    setInterval(() => { if (!dash.classList.contains('hidden')) refresh(); }, 8000);
+  </script>
+</body>
+</html>

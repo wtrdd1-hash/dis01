@@ -9,6 +9,9 @@ const {
 const { pool, getOrCreateUser } = require('../../config/database');
 const { createGambleEmbed, createErrorEmbed } = require('../../utils/embedBuilder');
 const { formatMoney } = require('../../utils/formatters');
+const { safeBigInt, computePayout, applyCashDelta, parseCasinoGambleBet, casinoTooSmallMessage, withUserLock } = require('../../utils/money');
+const { scaleGambleMultiplier } = require('../../utils/economyBalance');
+const { openAndHoldBet, increaseBet, claimSession, updateSession } = require('../../utils/blackjackStore');
 
 const SUITS = ['♠️', '♥️', '♦️', '♣️'];
 const VALUES = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
@@ -64,7 +67,7 @@ module.exports = {
     .setDescription('🃏 대화형 버튼 클릭 기반 블랙잭 카지노 게임을 플레이합니다.')
     .addStringOption(option =>
       option.setName('배팅금액')
-        .setDescription('배팅할 금액 또는 "올인"')
+        .setDescription('배팅할 금액, 한글 단위(예: 5만), 또는 "전액"/"올인"')
         .setRequired(true)
     ),
 
@@ -72,51 +75,63 @@ module.exports = {
     const betInput = interaction.options.getString('배팅금액').trim();
     const userId = interaction.user.id;
 
-    const userData = await getOrCreateUser(userId);
-    const userCash = BigInt(userData.cash);
+    const start = await withUserLock(userId, async () => {
+      const userData = await getOrCreateUser(userId);
+      const userCash = safeBigInt(userData.cash);
 
-    let betAmount = 0n;
-    if (betInput === '올인' || betInput === '전체' || betInput === 'all') {
-      betAmount = userCash;
-    } else {
-      const parsed = parseInt(betInput, 10);
-      if (isNaN(parsed) || parsed <= 0) {
-        return interaction.reply({
-          embeds: [createErrorEmbed('입력 오류', '배팅 금액은 1,000원 이상의 정수 또는 "올인"이어야 합니다.')],
-          flags: MessageFlags.Ephemeral
-        });
+      let betAmount = parseCasinoGambleBet(betInput, userCash);
+      if (betAmount === null) {
+        return { error: '배팅 금액은 1,000원 이상의 정수, 한글 단위(예: 5만), 또는 "전액"/"올인"이어야 합니다.' };
       }
-      betAmount = BigInt(parsed);
-    }
+      const tooSmall = casinoTooSmallMessage(betInput, userCash, betAmount);
+      if (tooSmall) {
+        return { error: tooSmall };
+      }
+      if (userCash < betAmount) {
+        return { error: `보유 현금(${formatMoney(userCash)})이 배팅금(${formatMoney(betAmount)})보다 부족합니다.` };
+      }
 
-    if (betAmount < 1000n) {
+      const deck = createDeck();
+      const playerHand = [deck.pop(), deck.pop()];
+      const dealerHand = [deck.pop(), deck.pop()];
+
+      try {
+        await openAndHoldBet(userId, 'discord', betAmount, userCash, {
+          playerHand,
+          dealerHand,
+          deck
+        });
+      } catch (e) {
+        if (e.code === 'BJ_IN_PROGRESS' || e.status === 409) {
+          return { error: '이미 진행 중인 블랙잭이 있습니다. (웹 또는 다른 게임)' };
+        }
+        if (e.code === 'INSUFFICIENT_CASH') {
+          return { error: `보유 현금(${formatMoney(userCash)})이 배팅금(${formatMoney(betAmount)})보다 부족합니다.` };
+        }
+        throw e;
+      }
+
+      const playerScore = calculateScore(playerHand);
+      const dealerScore = calculateScore(dealerHand);
+      return { betAmount, deck, playerHand, dealerHand, playerScore, dealerScore, userCash };
+    });
+
+    if (start.error) {
       return interaction.reply({
-        embeds: [createErrorEmbed('배팅 제한', '최소 배팅 금액은 1,000원입니다.')],
+        embeds: [createErrorEmbed('블랙잭', start.error)],
         flags: MessageFlags.Ephemeral
       });
     }
 
-    if (userCash < betAmount) {
-      return interaction.reply({
-        embeds: [createErrorEmbed('현금 부족', `보유 현금(${formatMoney(userCash)})이 배팅금(${formatMoney(betAmount)})보다 부족합니다.`)],
-        flags: MessageFlags.Ephemeral
-      });
-    }
+    let { betAmount, deck, playerHand, dealerHand, playerScore, dealerScore } = start;
 
-    const deck = createDeck();
-    const playerHand = [deck.pop(), deck.pop()];
-    const dealerHand = [deck.pop(), deck.pop()];
-
-    let playerScore = calculateScore(playerHand);
-    let dealerScore = calculateScore(dealerHand);
-
-    // 즉시 블랙잭 판정
     if (playerScore === 21) {
-      const payout = BigInt(Math.floor(Number(betAmount) * 2.5));
-      const profit = payout - betAmount;
-      const newCash = userCash + profit;
-
-      await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [newCash.toString(), userId]);
+      const payout = computePayout(betAmount, scaleGambleMultiplier(2.5));
+      const newCash = await withUserLock(userId, async () => {
+        const claimed = await claimSession(userId, 'settled');
+        if (!claimed) return applyCashDelta(userId, 0n);
+        return applyCashDelta(userId, payout);
+      });
 
       const embed = createGambleEmbed(
         '🃏 블랙잭 - 💥 내츄럴 블랙잭 잭팟!',
@@ -163,13 +178,17 @@ module.exports = {
       }
 
       if (i.customId === 'double') {
-        const doubleBet = betAmount * 2n;
-        if (userCash < doubleBet) {
-          return i.reply({ content: '더블다운을 위한 잔액이 부족합니다.', ephemeral: true });
+        try {
+          await withUserLock(userId, async () => {
+            await increaseBet(userId, betAmount);
+            betAmount = betAmount * 2n;
+            playerHand.push(deck.pop());
+            playerScore = calculateScore(playerHand);
+            await updateSession(userId, { bet: betAmount, state: { playerHand, dealerHand, deck } });
+          });
+        } catch (e) {
+          return i.reply({ content: e.message || '더블다운을 위한 잔액이 부족합니다.', ephemeral: true });
         }
-        betAmount = doubleBet;
-        playerHand.push(deck.pop());
-        playerScore = calculateScore(playerHand);
         collector.stop('finished');
         await i.deferUpdate();
         return;
@@ -178,6 +197,9 @@ module.exports = {
       if (i.customId === 'hit') {
         playerHand.push(deck.pop());
         playerScore = calculateScore(playerHand);
+        try {
+          await updateSession(userId, { state: { playerHand, dealerHand, deck } });
+        } catch (e) {}
 
         if (playerScore >= 21) {
           collector.stop('finished');
@@ -185,7 +207,6 @@ module.exports = {
           return;
         }
 
-        // 더블다운 버튼 비활성화 후 메시지 업데이트
         const updatedRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('hit').setLabel('🎯 히트 (Hit)').setStyle(ButtonStyle.Primary),
           new ButtonBuilder().setCustomId('stand').setLabel('✋ 스탠드 (Stand)').setStyle(ButtonStyle.Success)
@@ -218,10 +239,10 @@ module.exports = {
         multiplier = 0;
         outcomeMsg = '💀 **버스트! 21점을 초과하여 패배하셨습니다.**';
       } else if (dealerScore > 21) {
-        multiplier = 2;
+        multiplier = scaleGambleMultiplier(2);
         outcomeMsg = '🎉 **딜러 버스트! 딜러가 21점을 넘겨 승리하셨습니다! (2배)**';
       } else if (playerScore > dealerScore) {
-        multiplier = 2;
+        multiplier = scaleGambleMultiplier(2);
         outcomeMsg = '🎉 **승리! 딜러보다 높은 점수로 승리하셨습니다! (2배)**';
       } else if (playerScore === dealerScore) {
         multiplier = 1;
@@ -231,15 +252,24 @@ module.exports = {
         outcomeMsg = '💀 **패배! 딜러의 점수가 더 높습니다.**';
       }
 
-      const payout = betAmount * BigInt(multiplier);
+      const payout = computePayout(betAmount, multiplier);
       const profit = payout - betAmount;
-      const newCash = userCash + profit;
-
-      await pool.query('UPDATE users SET cash = ? WHERE discord_id = ?', [newCash.toString(), userId]);
-      await pool.query(
-        'INSERT INTO gambling_logs (user_id, game, bet, payout, profit) VALUES (?, "blackjack", ?, ?, ?)',
-        [userId, betAmount.toString(), payout.toString(), profit.toString()]
-      );
+      let claimed = null;
+      const newCash = await withUserLock(userId, async () => {
+        claimed = await claimSession(userId, 'settled');
+        if (!claimed) return applyCashDelta(userId, 0n);
+        return applyCashDelta(userId, payout);
+      });
+      if (!claimed) {
+        outcomeMsg = '♻️ **봇 재시작으로 배팅금이 이미 환불되었습니다.**';
+      } else {
+        try {
+          await pool.query(
+            'INSERT INTO gambling_logs (user_id, game, bet, payout, profit) VALUES (?, "blackjack", ?, ?, ?)',
+            [userId, betAmount.toString(), payout.toString(), profit.toString()]
+          );
+        } catch (e) {}
+      }
 
       const finalEmbed = createGambleEmbed(
         '🃏 블랙잭 게임 종료 결과',

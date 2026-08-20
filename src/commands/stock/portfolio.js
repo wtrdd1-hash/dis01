@@ -2,6 +2,8 @@ const { SlashCommandBuilder } = require('discord.js');
 const { pool } = require('../../config/database');
 const { createStockEmbed } = require('../../utils/embedBuilder');
 const { formatMoney, formatNumber, formatPercent } = require('../../utils/formatters');
+const { evalStockValue } = require('../../utils/economyBalance');
+const { safeBigInt } = require('../../utils/money');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -32,9 +34,9 @@ module.exports = {
 
     for (const r of rows) {
       const amountNum = Number(r.amount);
-      const spent = BigInt(r.total_spent || 0);
-      const currentPrice = BigInt(r.price);
-      const evalValue = BigInt(Math.floor(amountNum * Number(currentPrice)));
+      const spent = BigInt(String(r.total_spent || 0).split('.')[0] || '0');
+      const currentPrice = safeBigInt(r.price);
+      const evalValue = evalStockValue(r.amount, r.price);
 
       totalInvestment += spent;
       totalEvaluation += evalValue;
