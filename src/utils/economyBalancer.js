@@ -241,6 +241,9 @@ function getIntensity(issueSeverity, wealthRatio) {
 }
 
 async function applyAutoBalancing(report) {
+  if (!report) {
+    report = await analyzeEconomyHealth();
+  }
   const actions = [];
   const { issues, indicators } = report;
 
@@ -685,6 +688,7 @@ module.exports = {
   getDynamicSettings,
   getLastReport,
   analyzeEconomyHealth,
+  applyAutoBalancing,
   loadDynamicSettingsFromDb,
   setTaxPolicyOverride,
   getBalancerSchedule

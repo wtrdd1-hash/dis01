@@ -216,15 +216,8 @@ async function getPot() {
 }
 
 function decorateNearMiss(game, isWin, details) {
-  if (isWin) return { nearMiss: false };
-  if (game !== '슬롯머신' && game !== '즉석복권') return { nearMiss: false };
-  if (Math.random() > 0.32) return { nearMiss: false };
-  const poolSym = game === '슬롯머신'
-    ? ['🍒', '🍋', '🍇', '🍉', '🔔', '💎', '7️⃣']
-    : ['💰', '🦆', '💎', '7️⃣', '💣', '⭐'];
-  const hot = Math.random() < 0.55 ? '7️⃣' : '💎';
-  const other = poolSym.filter((s) => s !== hot)[Math.floor(Math.random() * (poolSym.length - 1))];
-  return { nearMiss: true, displayReels: [hot, hot, other] };
+  // 실제 서버 판정 릴 심볼과 화면 릴 심볼의 100% 정합성을 위해 인위적 displayReels 변조 비활성화
+  return { nearMiss: false };
 }
 
 function emitAll(event, payload) {

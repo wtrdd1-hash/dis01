@@ -19,6 +19,7 @@ const { createGameRoutes } = require('./routes/gameRoutes');
 const { createEconomyRoutes } = require('./routes/economyRoutes');
 const { createStockRoutes } = require('./routes/stockRoutes');
 const { createAdminRoutes } = require('./routes/adminRoutes');
+const { createAdminManagementRoutes } = require('./routes/adminManagementRoutes');
 const { createCasinoLoopRoutes } = require('./routes/casinoLoopRoutes');
 const { createBusinessRoutes } = require('./routes/businessRoutes');
 const { createMineRoutes } = require('./routes/mineRoutes');
@@ -4788,7 +4789,7 @@ function startWebServer(client) {
                   return;
                 }
 
-                const landed = data.displayReels || data.symbols || [];
+                const landed = data.displayReels || data.symbols || (data.payload && data.payload.symbols) || (data.details && data.details.symbols) || [];
                 if (fx) await fx.stopReelsInOrder(slots, landed, 'lotto');
                 else {
                   slots.forEach(function(el, i) {
@@ -7362,7 +7363,14 @@ function startWebServer(client) {
   })(app);
 
   // 🔌 관리자 JSON API 라우터 마운트 (HTML 페이지 라우터 뒤에 위치)
-  app.use('/admin', createAdminRoutes(getSessionUser));
+  const adminApiRouter = createAdminRoutes(getSessionUser);
+  const adminMgmtRouter = createAdminManagementRoutes();
+  app.use('/api/admin/admin-mgmt', adminMgmtRouter);
+  app.use('/admin/admin-mgmt', adminMgmtRouter);
+  app.use('/api/admin', adminApiRouter);
+  app.use('/admin', adminApiRouter);
+  app.use('/api/admin', adminMgmtRouter);
+  app.use('/admin', adminMgmtRouter);
 
 
 

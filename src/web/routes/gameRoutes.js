@@ -312,8 +312,10 @@ function createGameRoutes(getSessionUser) {
           game: '즉석복권',
           multiplier: scratched.multiplier,
           isWin: scratched.isWin,
+          symbols: scratched.symbols,
+          displayReels: scratched.symbols,
           details: { symbols: scratched.symbols, multiplier: scratched.multiplier },
-          payload: { symbols: scratched.symbols, flavor },
+          payload: { symbols: scratched.symbols, displayReels: scratched.symbols, flavor },
           message: scratched.isWin
             ? `🎉 복권 당첨! [${r1} | ${r2} | ${r3}] (${scratched.multiplier}배) +${formatMoney(computePayout(betAmount, scratched.multiplier))}!`
             : `💀 복권 꽝! [${r1} | ${r2} | ${r3}] -${formatMoney(betAmount)}`

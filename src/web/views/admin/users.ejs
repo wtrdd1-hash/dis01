@@ -413,7 +413,7 @@
     try {
       const res = await adminFetch('/api/admin/action/user-ban', {
         method: 'POST',
-        body: { userId, durationHours, reason }
+        body: { userId, durationHours, reason, confirm: true }
       });
 
       if (res.success) {
@@ -435,7 +435,7 @@
     try {
       const res = await adminFetch('/api/admin/action/user-unban', {
         method: 'POST',
-        body: { userId, reason: '관리자 차단 해제' }
+        body: { userId, reason: '관리자 차단 해제', confirm: true }
       });
 
       if (res.success) {
