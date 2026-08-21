@@ -729,7 +729,9 @@ function startWebServer(client) {
   app.use('/api/p2p', require('./routes/p2pRoutes')(session.getPlayUser));
   app.use('/api', createEconomyRoutes(session.getPlayUser));
   app.use('/api/business', createBusinessRoutes(session.getPlayUser));
-  app.use('/api', createStockRoutes(getSessionUser));
+  app.use('/api/stocks', createStockRoutes(session.getPlayUser));
+  app.use('/api/stock', createStockRoutes(session.getPlayUser));
+  app.use('/api', createStockRoutes(session.getPlayUser));
   app.use('/auth', createLocalAuthRoutes());
   app.use(createHelpRoutes(session.getPlayUser));
 

@@ -41,6 +41,12 @@ function formatKoreanMoney(val) {
       --accent-gold: #F59E0B;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html {
+      min-height: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
     body {
       background: var(--bg-dark);
       background-image: 
@@ -50,9 +56,11 @@ function formatKoreanMoney(val) {
       color: #f8fafc;
       font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
       min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       flex-direction: column;
       overflow-x: hidden;
+      overflow-y: auto !important;
     }
 
     /* 🌐 고품격 글로벌 핀테크 헤더 */
