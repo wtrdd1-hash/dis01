@@ -3,21 +3,21 @@
 <style>
   /* 📈 핀테크 주식 거래소 전용 스타일 */
   .stock-header-strip {
-    background: rgba(15, 23, 42, 0.8);
+    background: rgba(15, 23, 42, 0.85);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
-    padding: 14px 20px;
-    margin-bottom: 16px;
+    border-radius: 14px;
+    padding: 12px 18px;
+    margin-bottom: 14px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 10px;
   }
 
   .countdown-bar-container {
-    width: 140px;
-    height: 6px;
+    width: 120px;
+    height: 5px;
     background: rgba(255, 255, 255, 0.08);
     border-radius: 3px;
     overflow: hidden;
@@ -33,46 +33,53 @@
   .portfolio-card {
     background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
     border: 1px solid rgba(99, 102, 241, 0.3);
-    border-radius: 18px;
-    padding: 20px;
-    margin-bottom: 24px;
+    border-radius: 16px;
+    padding: 16px 20px;
+    margin-bottom: 18px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   }
 
   .holdings-table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 12px;
+    margin-top: 10px;
     font-size: 13px;
   }
   .holdings-table th {
     text-align: left;
     color: #64748b;
-    padding: 8px 12px;
+    padding: 8px 10px;
     font-weight: 700;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
   .holdings-table td {
-    padding: 12px;
+    padding: 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     color: #f8fafc;
   }
 
+  .stock-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
   .stock-filter-bar {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     overflow-x: auto;
-    padding-bottom: 8px;
-    margin-bottom: 18px;
     scrollbar-width: none;
   }
   .stock-filter-btn {
     background: rgba(30, 41, 59, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 20px;
-    padding: 6px 14px;
+    border-radius: 18px;
+    padding: 5px 12px;
     color: #94a3b8;
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
@@ -84,35 +91,85 @@
     color: #fff;
   }
 
+  .view-toggle-btn {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .view-toggle-btn.active {
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.4);
+    background: rgba(56, 189, 248, 0.1);
+  }
+
+  /* 콤팩트 카드 그리드 (짤림 방지 최적화) */
   .stocks-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
-    padding-bottom: 90px; /* 💡 하단 짤림 방지 마진 확보 */
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+    margin-bottom: 30px;
   }
 
   .stock-card {
-    background: rgba(15, 23, 42, 0.85);
+    background: rgba(15, 23, 42, 0.88);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 18px;
-    padding: 18px;
+    border-radius: 14px;
+    padding: 14px;
     backdrop-filter: blur(12px);
-    transition: all 0.25s ease;
+    transition: all 0.2s ease;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    min-height: 200px;
+    box-sizing: border-box;
   }
   .stock-card:hover {
-    border-color: rgba(99, 102, 241, 0.4);
-    transform: translateY(-3px);
-    box-shadow: 0 12px 25px rgba(0, 0, 0, 0.4);
+    border-color: rgba(99, 102, 241, 0.45);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
   }
 
   .sparkline-svg {
     width: 100%;
-    height: 38px;
-    margin: 10px 0;
+    height: 28px;
+    margin: 6px 0;
+  }
+
+  /* 📋 실시간 호가 테이블 뷰 */
+  .stocks-table-view {
+    display: none;
+    width: 100%;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 30px;
+  }
+  .stocks-table-view table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  .stocks-table-view th {
+    background: rgba(30, 41, 59, 0.6);
+    color: #94a3b8;
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 700;
+  }
+  .stocks-table-view td {
+    padding: 12px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .stocks-table-view tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
   }
 
   /* 매수/매도 모달 */
@@ -130,10 +187,10 @@
   .order-modal-box {
     background: #0f172a;
     border: 1px solid rgba(99, 102, 241, 0.4);
-    border-radius: 20px;
-    max-width: 420px;
+    border-radius: 18px;
+    max-width: 400px;
     width: 100%;
-    padding: 24px;
+    padding: 22px;
     box-shadow: 0 20px 50px rgba(0,0,0,0.8);
   }
   .pct-btn {
@@ -155,55 +212,52 @@
   }
 </style>
 
-<main style="flex:1; padding:20px 16px; width:100%; max-width:1240px; margin:0 auto;">
+<main style="flex:1; padding:16px 16px 140px 16px; width:100%; max-width:1240px; margin:0 auto; box-sizing:border-box;">
 
   <!-- ⏱️ 상단 슬림 시장 상태 스트립 -->
   <div class="stock-header-strip">
-    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-      <span style="font-size:12px; font-weight:800; padding:4px 10px; background:rgba(99,102,241,0.2); color:#818cf8; border-radius:8px;">실시간 주식 시장</span>
-      <span id="market-regime-badge" style="font-size:12px; font-weight:800; padding:4px 10px; background:rgba(245,158,11,0.2); color:#fbbf24; border-radius:8px;">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span style="font-size:11.5px; font-weight:800; padding:3px 8px; background:rgba(99,102,241,0.2); color:#818cf8; border-radius:6px;">실시간 거래소</span>
+      <span id="market-regime-badge" style="font-size:11.5px; font-weight:800; padding:3px 8px; background:rgba(245,158,11,0.2); color:#fbbf24; border-radius:6px;">
         <%= (typeof regime !== 'undefined' && regime && regime.name) ? regime.name : '🦆 월덕 경제 번영기' %>
       </span>
-      <div style="display:flex; align-items:center; gap:8px;">
+      <div style="display:flex; align-items:center; gap:6px;">
         <div class="countdown-bar-container">
           <div id="countdown-bar" class="countdown-bar-fill"></div>
         </div>
-        <span id="countdown-text" style="font-size:12px; font-family:'JetBrains Mono',monospace; color:#38bdf8; font-weight:700;">30초</span>
+        <span id="countdown-text" style="font-size:11.5px; font-family:'JetBrains Mono',monospace; color:#38bdf8; font-weight:700;">30초</span>
       </div>
     </div>
 
-    <!-- 우측 일일 배당금 수령 버튼 -->
+    <!-- 우측 배당금 수령 버튼 -->
     <div>
-      <button onclick="claimDividends()" style="padding:8px 16px; font-weight:800; background:linear-gradient(135deg,#059669,#10b981); border:none; border-radius:10px; color:#fff; cursor:pointer; font-size:12.5px; display:flex; align-items:center; gap:6px; box-shadow:0 0 15px rgba(16,185,129,0.3);">
-        <span>💰</span> <span>보유 주식 배당금 수령</span>
+      <button onclick="claimDividends()" style="padding:6px 14px; font-weight:800; background:linear-gradient(135deg,#059669,#10b981); border:none; border-radius:8px; color:#fff; cursor:pointer; font-size:12px; display:flex; align-items:center; gap:5px; box-shadow:0 0 12px rgba(16,185,129,0.3);">
+        <span>💰</span> <span>배당금 수령</span>
       </button>
     </div>
   </div>
 
   <!-- 💼 내 보유 주식 포트폴리오 (My Portfolio) -->
   <div class="portfolio-card">
-    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-      <div style="display:flex; align-items:center; gap:10px;">
-        <span style="font-size:24px;">💼</span>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:20px;">💼</span>
         <div>
-          <h2 style="font-size:17px; font-weight:900; color:#fff; margin:0;">내 보유 주식 포트폴리오</h2>
-          <p style="font-size:12px; color:#94a3b8; margin:2px 0 0 0;">보유 중인 주식 자산 및 실시간 평가 손익</p>
+          <h2 style="font-size:15.5px; font-weight:900; color:#fff; margin:0;">내 보유 주식 포트폴리오</h2>
         </div>
       </div>
 
-      <div style="display:flex; gap:16px;">
-        <div style="background:rgba(15,23,42,0.6); padding:8px 16px; border-radius:12px; border:1px solid rgba(255,255,255,0.08);">
-          <span style="font-size:11px; color:#94a3b8;">총 주식 평가액</span>
-          <div id="portfolio-total-val" style="font-size:16px; font-weight:900; color:#38bdf8; font-family:'JetBrains Mono',monospace;">
-            <%= Number(totalStockVal || 0).toLocaleString() %>원
-          </div>
-        </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-size:12px; color:#94a3b8;">총 평가액:</span>
+        <strong id="portfolio-total-val" style="font-size:15px; font-weight:900; color:#38bdf8; font-family:'JetBrains Mono',monospace;">
+          <%= Number(totalStockVal || 0).toLocaleString() %>원
+        </strong>
       </div>
     </div>
 
     <!-- 보유 주식 목록 테이블 -->
     <% if (holdings && holdings.length > 0) { %>
-      <div style="overflow-x:auto; margin-top:14px;">
+      <div style="overflow-x:auto; margin-top:10px;">
         <table class="holdings-table">
           <thead>
             <tr>
@@ -237,24 +291,35 @@
         </table>
       </div>
     <% } else { %>
-      <div style="margin-top:14px; padding:18px; text-align:center; background:rgba(15,23,42,0.4); border-radius:12px; color:#64748b; font-size:13px;">
-        현재 보유 중인 주식이 없습니다. 아래 시장에서 원하시는 종목을 매수해 보세요! 🚀
+      <div style="margin-top:10px; padding:12px; text-align:center; background:rgba(15,23,42,0.4); border-radius:10px; color:#64748b; font-size:12.5px;">
+        현재 보유 중인 주식이 없습니다. 아래 시장에서 종목을 매수해 보세요! 🚀
       </div>
     <% } %>
   </div>
 
-  <!-- 🏷️ 섹터 필터 -->
-  <div class="stock-filter-bar">
-    <button class="stock-filter-btn active" onclick="filterSector('ALL')">전체 종목 (<%= (stocks || []).length %>)</button>
-    <button class="stock-filter-btn" onclick="filterSector('TECH')">🚀 IT & AI 반도체</button>
-    <button class="stock-filter-btn" onclick="filterSector('FIN')">🏦 금융 & 지주</button>
-    <button class="stock-filter-btn" onclick="filterSector('BIO')">🧬 바이오 & 제약</button>
-    <button class="stock-filter-btn" onclick="filterSector('CONS')">🍗 푸드 & 소비재</button>
-    <button class="stock-filter-btn" onclick="filterSector('ENTRY')">⭐ 초보 입문주</button>
+  <!-- 툴바 (섹터 필터 + 카드/테이블 뷰 토글) -->
+  <div class="stock-toolbar">
+    <div class="stock-filter-bar">
+      <button class="stock-filter-btn active" onclick="filterSector('ALL')">전체 종목 (<%= (stocks || []).length %>)</button>
+      <button class="stock-filter-btn" onclick="filterSector('TECH')">🚀 IT·AI</button>
+      <button class="stock-filter-btn" onclick="filterSector('FIN')">🏦 금융</button>
+      <button class="stock-filter-btn" onclick="filterSector('BIO')">🧬 바이오</button>
+      <button class="stock-filter-btn" onclick="filterSector('CONS')">🍗 소비재</button>
+      <button class="stock-filter-btn" onclick="filterSector('ENTRY')">⭐ 초보</button>
+    </div>
+
+    <div style="display:flex; gap:6px;">
+      <button id="btn-view-cards" class="view-toggle-btn active" onclick="switchView('cards')">
+        <span>🎴</span> <span>카드 뷰</span>
+      </button>
+      <button id="btn-view-table" class="view-toggle-btn" onclick="switchView('table')">
+        <span>📋</span> <span>테이블 뷰</span>
+      </button>
+    </div>
   </div>
 
-  <!-- 📈 18개 상장 종목 카드 그리드 (Fintech 2.0 - 짤림 방지 패딩 적용) -->
-  <div class="stocks-grid">
+  <!-- 🎴 1. 콤팩트 카드 뷰 (짤림 방지) -->
+  <div id="stocks-cards-container" class="stocks-grid">
     <% (stocks || []).forEach(stock => { 
         const price = Number(stock.price || 0);
         const prevPrice = Number(stock.prev_price || stock.price || 1);
@@ -266,54 +331,94 @@
     %>
       <div class="stock-card" data-stock-id="<%= stock.stock_id %>" data-sector="<%= stock.stock_id %>">
         <div>
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
             <div>
-              <span style="font-size:11px; font-weight:800; color:#818cf8; font-family:'JetBrains Mono',monospace;"><%= stock.code || stock.stock_id %></span>
-              <h3 style="font-size:15px; font-weight:800; color:#fff; margin:2px 0 0 0; line-height:1.3;"><%= stock.name %></h3>
+              <span style="font-size:10.5px; font-weight:800; color:#818cf8; font-family:'JetBrains Mono',monospace;"><%= stock.code || stock.stock_id %></span>
+              <h3 style="font-size:14px; font-weight:800; color:#fff; margin:2px 0 0 0; line-height:1.2;"><%= stock.name %></h3>
             </div>
-            <span data-stock-rate="<%= stock.stock_id %>" style="font-size:12px; font-weight:800; padding:2px 7px; border-radius:6px; background:<%= isUp ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)' %>; color:<%= color %>; font-family:'JetBrains Mono',monospace;">
+            <span data-stock-rate="<%= stock.stock_id %>" style="font-size:11.5px; font-weight:800; padding:2px 6px; border-radius:5px; background:<%= isUp ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)' %>; color:<%= color %>; font-family:'JetBrains Mono',monospace;">
               <%= sign %><%= rate.toFixed(2) %>%
             </span>
           </div>
 
           <!-- 실시간 호가 -->
-          <div style="margin-top:4px;">
-            <div data-stock-price="<%= stock.stock_id %>" style="font-size:19px; font-weight:900; color:#38bdf8; font-family:'JetBrains Mono',monospace; transition:color 0.3s ease;">
+          <div style="margin-top:2px;">
+            <div data-stock-price="<%= stock.stock_id %>" style="font-size:17.5px; font-weight:900; color:#38bdf8; font-family:'JetBrains Mono',monospace; transition:color 0.3s ease;">
               <%= price.toLocaleString() %>원
             </div>
           </div>
 
           <!-- SVG 미니 스파크라인 추세선 -->
-          <svg class="sparkline-svg" viewBox="0 0 100 30" preserveAspectRatio="none">
+          <svg class="sparkline-svg" viewBox="0 0 100 28" preserveAspectRatio="none">
             <defs>
               <linearGradient id="grad-<%= stock.stock_id %>" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="<%= strokeColor %>" stop-opacity="0.3"/>
                 <stop offset="100%" stop-color="<%= strokeColor %>" stop-opacity="0"/>
               </linearGradient>
             </defs>
-            <path id="spark-fill-<%= stock.stock_id %>" d="<%= isUp ? 'M0,25 Q25,20 50,15 T100,5 L100,30 L0,30 Z' : 'M0,5 Q25,12 50,20 T100,28 L100,30 L0,30 Z' %>" fill="url(#grad-<%= stock.stock_id %>)"/>
-            <path id="spark-line-<%= stock.stock_id %>" d="<%= isUp ? 'M0,25 Q25,20 50,15 T100,5' : 'M0,5 Q25,12 50,20 T100,28' %>" fill="none" stroke="<%= strokeColor %>" stroke-width="2" stroke-linecap="round"/>
+            <path id="spark-fill-<%= stock.stock_id %>" d="<%= isUp ? 'M0,22 Q25,18 50,12 T100,4 L100,28 L0,28 Z' : 'M0,4 Q25,10 50,18 T100,24 L100,28 L0,28 Z' %>" fill="url(#grad-<%= stock.stock_id %>)"/>
+            <path id="spark-line-<%= stock.stock_id %>" d="<%= isUp ? 'M0,22 Q25,18 50,12 T100,4' : 'M0,4 Q25,10 50,18 T100,24' %>" fill="none" stroke="<%= strokeColor %>" stroke-width="2" stroke-linecap="round"/>
           </svg>
         </div>
 
         <!-- 매수/매도 버튼 -->
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;">
-          <button onclick="openOrderModal('BUY', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:8px; font-weight:800; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); border-radius:10px; color:#34d399; cursor:pointer; font-size:13px; transition:all 0.15s ease;">매수</button>
-          <button onclick="openOrderModal('SELL', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:8px; font-weight:800; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); border-radius:10px; color:#f87171; cursor:pointer; font-size:13px; transition:all 0.15s ease;">매도</button>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px;">
+          <button onclick="openOrderModal('BUY', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:7px; font-weight:800; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); border-radius:8px; color:#34d399; cursor:pointer; font-size:12px; transition:all 0.15s ease;">매수</button>
+          <button onclick="openOrderModal('SELL', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:7px; font-weight:800; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); border-radius:8px; color:#f87171; cursor:pointer; font-size:12px; transition:all 0.15s ease;">매도</button>
         </div>
       </div>
     <% }) %>
   </div>
 
+  <!-- 📋 2. 실시간 호가 테이블 뷰 (전체 한눈에 보기) -->
+  <div id="stocks-table-container" class="stocks-table-view">
+    <table>
+      <thead>
+        <tr>
+          <th>종목 코드</th>
+          <th>기업명</th>
+          <th>현재가</th>
+          <th>변동률 (30초)</th>
+          <th>빠른 주문</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (stocks || []).forEach(stock => { 
+            const price = Number(stock.price || 0);
+            const prevPrice = Number(stock.prev_price || stock.price || 1);
+            const rate = prevPrice > 0 ? ((price - prevPrice) / prevPrice) * 100 : 0;
+            const isUp = rate >= 0;
+            const sign = isUp ? '+' : '';
+            const color = isUp ? '#34d399' : '#f87171';
+        %>
+          <tr data-stock-id="<%= stock.stock_id %>">
+            <td style="font-family:'JetBrains Mono',monospace; color:#818cf8; font-weight:700;"><%= stock.code || stock.stock_id %></td>
+            <td><strong style="color:#fff;"><%= stock.name %></strong></td>
+            <td data-stock-price="<%= stock.stock_id %>" style="font-family:'JetBrains Mono',monospace; font-weight:900; color:#38bdf8;"><%= price.toLocaleString() %>원</td>
+            <td data-stock-rate="<%= stock.stock_id %>" style="font-family:'JetBrains Mono',monospace; font-weight:800; color:<%= color %>;">
+              <%= sign %><%= rate.toFixed(2) %>%
+            </td>
+            <td>
+              <div style="display:flex; gap:6px;">
+                <button onclick="openOrderModal('BUY', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:4px 10px; font-weight:800; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); border-radius:6px; color:#34d399; cursor:pointer; font-size:11.5px;">매수</button>
+                <button onclick="openOrderModal('SELL', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:4px 10px; font-weight:800; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); border-radius:6px; color:#f87171; cursor:pointer; font-size:11.5px;">매도</button>
+              </div>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+
   <!-- 🛒 원클릭 주문 모달 (10%, 25%, 50%, MAX) -->
   <div id="order-modal" class="order-modal-backdrop" onclick="if(event.target===this) closeOrderModal()">
     <div class="order-modal-box">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <h3 id="modal-order-title" style="font-size:17px; font-weight:800; color:#fff; margin:0;">주식 매수 주문</h3>
-        <button onclick="closeOrderModal()" style="background:none; border:none; color:#94a3b8; font-size:20px; cursor:pointer;">✕</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h3 id="modal-order-title" style="font-size:16px; font-weight:800; color:#fff; margin:0;">주식 매수 주문</h3>
+        <button onclick="closeOrderModal()" style="background:none; border:none; color:#94a3b8; font-size:18px; cursor:pointer;">✕</button>
       </div>
 
-      <div style="background:rgba(30,41,59,0.6); border-radius:12px; padding:12px; margin-bottom:14px; font-size:13px;">
+      <div style="background:rgba(30,41,59,0.6); border-radius:10px; padding:10px; margin-bottom:12px; font-size:12.5px;">
         <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
           <span style="color:#94a3b8;">종목명</span>
           <strong id="modal-stock-name" style="color:#fff;">-</strong>
@@ -325,24 +430,24 @@
       </div>
 
       <!-- 수량 퍼센트 버튼 -->
-      <div style="display:flex; gap:6px; margin-bottom:12px;">
+      <div style="display:flex; gap:5px; margin-bottom:10px;">
         <button class="pct-btn" onclick="setOrderPercent(0.1)">10%</button>
         <button class="pct-btn" onclick="setOrderPercent(0.25)">25%</button>
         <button class="pct-btn" onclick="setOrderPercent(0.5)">50%</button>
         <button class="pct-btn" onclick="setOrderPercent(1.0)">최대 (MAX)</button>
       </div>
 
-      <div style="margin-bottom:16px;">
-        <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:6px; font-weight:700;">주문 수량</label>
-        <input type="number" id="modal-order-amount" value="1" min="1" oninput="updateModalTotal()" style="width:100%; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:10px 14px; color:#fff; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px;">
+      <div style="margin-bottom:14px;">
+        <label style="display:block; font-size:11.5px; color:#94a3b8; margin-bottom:4px; font-weight:700;">주문 수량</label>
+        <input type="number" id="modal-order-amount" value="1" min="1" oninput="updateModalTotal()" style="width:100%; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px 12px; color:#fff; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; box-sizing:border-box;">
       </div>
 
-      <div style="display:flex; justify-content:space-between; margin-bottom:18px; font-size:14px;">
+      <div style="display:flex; justify-content:space-between; margin-bottom:16px; font-size:13.5px;">
         <span style="color:#94a3b8;">총 예상 금액</span>
-        <strong id="modal-order-total" style="color:#34d399; font-family:'JetBrains Mono',monospace; font-size:16px;">0원</strong>
+        <strong id="modal-order-total" style="color:#34d399; font-family:'JetBrains Mono',monospace; font-size:15px;">0원</strong>
       </div>
 
-      <button id="modal-submit-btn" onclick="submitOrder()" style="width:100%; padding:13px; font-weight:900; border:none; border-radius:12px; color:#fff; cursor:pointer; font-size:15px; background:linear-gradient(135deg,#059669,#10b981); box-shadow:0 0 20px rgba(16,185,129,0.3);">
+      <button id="modal-submit-btn" onclick="submitOrder()" style="width:100%; padding:12px; font-weight:900; border:none; border-radius:10px; color:#fff; cursor:pointer; font-size:14px; background:linear-gradient(135deg,#059669,#10b981); box-shadow:0 0 16px rgba(16,185,129,0.3);">
         주문 확인 및 체결
       </button>
     </div>
@@ -387,29 +492,30 @@
         const color = isUp ? '#34d399' : '#f87171';
         const stroke = isUp ? '#10b981' : '#ef4444';
 
-        // 1. 주식 카드 가격 및 등락률 갱신
-        const priceEl = document.querySelector(`[data-stock-price="${sid}"]`);
-        const rateEl = document.querySelector(`[data-stock-rate="${sid}"]`);
-        if (priceEl) {
-          priceEl.innerText = newPrice.toLocaleString() + '원';
-          priceEl.style.color = color;
-          setTimeout(() => { priceEl.style.color = '#38bdf8'; }, 2500);
-        }
-        if (rateEl) {
-          rateEl.innerText = `${sign}${rate.toFixed(2)}%`;
-          rateEl.style.color = color;
-          rateEl.style.background = isUp ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
-        }
+        // 1. 주식 카드 및 테이블 가격/등락률 갱신 (전체 다중 엘리먼트 업데이트)
+        document.querySelectorAll(`[data-stock-price="${sid}"]`).forEach(el => {
+          el.innerText = newPrice.toLocaleString() + '원';
+          el.style.color = color;
+          setTimeout(() => { el.style.color = '#38bdf8'; }, 2500);
+        });
+
+        document.querySelectorAll(`[data-stock-rate="${sid}"]`).forEach(el => {
+          el.innerText = `${sign}${rate.toFixed(2)}%`;
+          el.style.color = color;
+          if (el.tagName === 'SPAN') {
+            el.style.background = isUp ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
+          }
+        });
 
         // 2. 스파크라인 차트 색상 갱신
         const sparkLine = document.getElementById(`spark-line-${sid}`);
         const sparkFill = document.getElementById(`spark-fill-${sid}`);
         if (sparkLine) {
           sparkLine.setAttribute('stroke', stroke);
-          sparkLine.setAttribute('d', isUp ? 'M0,25 Q25,20 50,15 T100,5' : 'M0,5 Q25,12 50,20 T100,28');
+          sparkLine.setAttribute('d', isUp ? 'M0,22 Q25,18 50,12 T100,4' : 'M0,4 Q25,10 50,18 T100,24');
         }
         if (sparkFill) {
-          sparkFill.setAttribute('d', isUp ? 'M0,25 Q25,20 50,15 T100,5 L100,30 L0,30 Z' : 'M0,5 Q25,12 50,20 T100,28 L100,30 L0,30 Z');
+          sparkFill.setAttribute('d', isUp ? 'M0,22 Q25,18 50,12 T100,4 L100,28 L0,28 Z' : 'M0,4 Q25,10 50,18 T100,24 L100,28 L0,28 Z');
         }
 
         // 3. 내 보유 주식 테이블 실시간 평가액 갱신
@@ -436,7 +542,6 @@
   }
 
   function openOrderModal(action, stockId, stockName, price) {
-    // 실시간 최신 가격 읽어오기
     const priceEl = document.querySelector(`[data-stock-price="${stockId}"]`);
     if (priceEl) {
       const parsed = parseInt(priceEl.innerText.replace(/[^0-9]/g, ''));
@@ -518,13 +623,36 @@
     } catch (e) { alert('배당금 수령 요청 실패'); }
   }
 
+  function switchView(mode) {
+    const cardCont = document.getElementById('stocks-cards-container');
+    const tableCont = document.getElementById('stocks-table-container');
+    const btnCard = document.getElementById('btn-view-cards');
+    const btnTable = document.getElementById('btn-view-table');
+
+    if (mode === 'cards') {
+      cardCont.style.display = 'grid';
+      tableCont.style.display = 'none';
+      btnCard.classList.add('active');
+      btnTable.classList.remove('active');
+    } else {
+      cardCont.style.display = 'none';
+      tableCont.style.display = 'block';
+      btnCard.classList.remove('active');
+      btnTable.classList.add('active');
+    }
+  }
+
   function filterSector(sector) {
     document.querySelectorAll('.stock-filter-btn').forEach(b => b.classList.remove('active'));
     event.target.classList.add('active');
     const cards = document.querySelectorAll('.stock-card');
+    const tableRows = document.querySelectorAll('#stocks-table-container tbody tr');
+    
     cards.forEach(card => {
-      if (sector === 'ALL') card.style.display = 'flex';
-      else card.style.display = 'flex';
+      card.style.display = 'flex';
+    });
+    tableRows.forEach(row => {
+      row.style.display = '';
     });
   }
 </script>
