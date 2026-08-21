@@ -1308,6 +1308,22 @@ function startWebServer(client) {
   };
 
 
+  const AuthController = require('./controllers/AuthController');
+  const PageController = require('./controllers/PageController');
+
+  app.get('/auth/discord', AuthController.loginWithDiscord);
+  app.get('/auth/discord/callback', AuthController.discordCallback);
+  app.get(['/logout', '/auth/logout'], AuthController.logout);
+
+  app.get(['/', '/home'], PageController.renderHome);
+  app.get(['/plaza', '/metaverse', '/map', '/world'], PageController.renderPlaza);
+  app.get(['/stocks', '/stock'], PageController.renderStocks);
+  app.get(['/casino', '/gamble'], PageController.renderCasino);
+  app.get(['/arcade', '/puzzle', '/game'], PageController.renderArcade);
+  app.get(['/mining', '/mine', '/clicker'], PageController.renderMining);
+  app.get(['/ranking', '/leaderboard'], PageController.renderRanking);
+  app.get(['/shop', '/cosmetics', '/wardrobe', '/dressroom', '/prestige', '/workshop', '/duckhouse'], PageController.renderShop);
+
   app.get('/api/leaderboard', async (req, res) => {
     try {
       const rows = await getCachedLeaderboard();
@@ -1352,25 +1368,15 @@ function startWebServer(client) {
       const isGuestPlay = false;
       const playUser = currentUser;
 
-      // 🦆 비로그인 방문자 (Guest) -> 공식 랜딩 홈 페이지 렌더링
+      // 🦆 비로그인 방문자 (Guest) -> 즉시 대시보드 및 가상경제/메타버스 체험 가능하도록 게스트 세션 발급
       if (!playUser) {
-        const { renderLandingPage } = require('./landingPage');
-        let treasuryBalance = '0';
+        const guestId = 'guest_' + Math.random().toString(36).slice(2, 9);
+        const guestUsername = '여행자덕_' + Math.floor(Math.random() * 900 + 100);
+        const newLocal = { id: guestId, username: guestUsername, avatar: 'https://cdn.discordapp.com/embed/avatars/0.png' };
         try {
-          const { readTreasury } = require('../utils/taxEngine');
-          treasuryBalance = String(await readTreasury() || '0');
+          session.setLocalUserCookie(res, req, newLocal);
         } catch (e) {}
-
-        const landingHtml = renderLandingPage({
-          stocks,
-          leaderboard: leaderboardRows,
-          regime,
-          news,
-          treasuryBalance,
-          discordLoginUrl,
-          stockCount: (stocks && stocks.length) || 18
-        });
-        return res.send(landingHtml);
+        currentUser = newLocal;
       }
 
       const pageTax = await getPublicTaxViewSafe(discordUser && discordUser.id);
@@ -3738,6 +3744,7 @@ function startWebServer(client) {
 
               const titles = {
                 'tab-stocks': '주식-시장',
+                'tab-plaza': '메타버스-광장',
                 'tab-chat': '광장',
                 'tab-horse': '경마',
                 'tab-casino': '카지노',
@@ -3762,6 +3769,9 @@ function startWebServer(client) {
               if (tabId === 'tab-p2p' && typeof loadP2PState === 'function') loadP2PState();
               if (tabId === 'tab-business' && typeof loadBusinesses === 'function') loadBusinesses();
               if (tabId === 'tab-arcade' && window.Arcade && typeof window.Arcade.load === 'function') window.Arcade.load();
+               if (tabId === 'tab-plaza' && typeof MetaversePlazaEngine === 'function') {
+                 if (!window.__metaEngine) window.__metaEngine = new MetaversePlazaEngine('metaverse-canvas', 'metaverse-container');
+               }
 
               // 🔥 새로고침 시에도 현재 메뉴 상태 유지 (localStorage + URL Hash)
               try {
@@ -7325,6 +7335,35 @@ function startWebServer(client) {
           <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
           ${jsTag('js/help-popup.js')}
           ${jsTag('js/bank-loan.js')}
+          
+          <!-- 📱 모바일 전용 반응형 하단 네비게이션 바 -->
+          <nav class="mobile-bottom-nav">
+            <button type="button" class="mob-nav-btn active" data-tab="tab-plaza" onclick="switchTab('tab-plaza')">
+              <span class="mob-icon">🌐</span>
+              <span class="mob-label">광장</span>
+            </button>
+            <button type="button" class="mob-nav-btn" data-tab="tab-stocks" onclick="switchTab('tab-stocks')">
+              <span class="mob-icon">📈</span>
+              <span class="mob-label">주식</span>
+            </button>
+            <button type="button" class="mob-nav-btn" data-tab="tab-shop" onclick="window.location.href='/shop'">
+              <span class="mob-icon">🛍️</span>
+              <span class="mob-label">상점</span>
+            </button>
+            <button type="button" class="mob-nav-btn" data-tab="tab-casino" onclick="switchTab('tab-casino')">
+              <span class="mob-icon">🎰</span>
+              <span class="mob-label">게임</span>
+            </button>
+            <button type="button" class="mob-nav-btn" data-tab="tab-clicker" onclick="switchTab('tab-clicker')">
+              <span class="mob-icon">⛏️</span>
+              <span class="mob-label">채굴</span>
+            </button>
+            <button type="button" class="mob-nav-btn" onclick="toggleMobileSidebar()">
+              <span class="mob-icon">☰</span>
+              <span class="mob-label">메뉴</span>
+            </button>
+          </nav>
+          ${jsTag('js/metaversePlaza.js')}
           ${getAutoRefreshClient()}
         </body>
         </html>

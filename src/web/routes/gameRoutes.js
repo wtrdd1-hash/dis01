@@ -231,19 +231,21 @@ function createGameRoutes(getSessionUser) {
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
 
     try {
-      const choice = req.body?.choice;
+      const rawChoice = req.body?.choice;
+      const choice = (rawChoice === 'front' || rawChoice === '앞면' || rawChoice === '앞') ? '앞' : '뒤';
       const data = await settleGame(session, req.body?.bet, 1000n, (betAmount) => {
-        const result = flipCoin().result;
-        const isWin = choice === result;
+        const flipped = flipCoin(choice);
+        const result = flipped.outcome;
+        const isWin = flipped.won;
         const multiplier = isWin ? COIN_WIN_MULT : 0;
-        const profit = computePayout(betAmount, multiplier) - betAmount;
+        const profit = isWin ? (computePayout(betAmount, multiplier) - betAmount) : -betAmount;
         const flavor = coinFlavor(choice, result, isWin);
         return {
           game: '동전뒤집기',
           multiplier,
           isWin,
           details: { choice, result, isWin },
-          payload: { result, coinResult: result, flavor },
+          payload: { result, coinResult: result, flavor, outcome: result },
           message: isWin
             ? `🎉 동전 적중! [${result}] (+${formatMoney(profit)})`
             : `💀 동전 실패! [${result}] (-${formatMoney(betAmount)})`
@@ -251,6 +253,7 @@ function createGameRoutes(getSessionUser) {
       });
       return res.json(data);
     } catch (err) {
+      console.error('❌ [/api/game/coinflip] 동전뒤집기 오류:', err);
       return sendPublicError(res, err);
     }
   });
@@ -412,7 +415,7 @@ function createGameRoutes(getSessionUser) {
         return res.status(400).json({ success: false, error: 'RED, BLACK, GREEN 중 하나를 고르세요.' });
       }
       const data = await settleGame(session, req.body?.bet, 1000n, () => {
-        const spun = spinRoulette();
+        const spun = spinRoulette(choice);
         const isWin = choice === spun.color;
         const flavor = rouletteFlavor(choice, spun.color, spun.emoji, isWin);
         return {
@@ -537,7 +540,28 @@ function createGameRoutes(getSessionUser) {
   }
 
   async function requirePlayingTable(sessionId) {
-    const table = blackjackTables.get(sessionId);
+    let table = blackjackTables.get(sessionId);
+    if (!table || table.status !== 'playing') {
+      try {
+        const [rows] = await pool.query(
+          'SELECT * FROM blackjack_sessions WHERE user_id = ? AND status = "playing" LIMIT 1',
+          [String(sessionId)]
+        );
+        if (rows.length > 0 && rows[0].state_json) {
+          const state = JSON.parse(rows[0].state_json);
+          table = {
+            deck: state.deck,
+            player: state.player,
+            dealer: state.dealer,
+            bet: safeBigInt(rows[0].bet),
+            status: 'playing',
+            balanceBefore: safeBigInt(rows[0].balance_before),
+            updatedAt: state.updatedAt || Date.now()
+          };
+          blackjackTables.set(sessionId, table);
+        }
+      } catch (e) {}
+    }
     if (!table || table.status !== 'playing') {
       const err = new Error('진행 중인 블랙잭이 없습니다.');
       err.status = 400;
@@ -563,9 +587,26 @@ function createGameRoutes(getSessionUser) {
         const { assertLoanPlayAllowed } = require('../../utils/loanEngine');
         await assertLoanPlayAllowed(session.id);
         if (blackjackTables.has(session.id)) {
-          const err = new Error('이미 진행 중인 블랙잭이 있습니다.');
-          err.status = 409;
-          throw err;
+          const current = blackjackTables.get(session.id);
+          if (isBlackjackExpired(current)) {
+            blackjackTables.delete(session.id);
+            await refundUser(session.id, 'ttl');
+          } else {
+            const err = new Error('이미 진행 중인 블랙잭이 있습니다.');
+            err.status = 409;
+            throw err;
+          }
+        } else {
+          // DB 잔존 세션 확인 (비정상 종료 세션 자동 환불 후 새 게임 허용)
+          try {
+            const [openRows] = await pool.query(
+              'SELECT * FROM blackjack_sessions WHERE user_id = ? AND status = "playing" LIMIT 1',
+              [String(session.id)]
+            );
+            if (openRows.length > 0) {
+              await refundUser(session.id, 'stuck_session_cleanup');
+            }
+          } catch (e) {}
         }
         const userData = await getOrCreateUser(session.id, session.username, session.avatar);
         const userCash = safeBigInt(userData.cash);

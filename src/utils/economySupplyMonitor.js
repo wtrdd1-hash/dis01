@@ -156,7 +156,7 @@ async function collectUserSnapshot() {
   // 환속속도 (24h 거래액 / M2) - 실제 경제처럼 화폐 순환 속도 추적
   const [volRows] = await pool.query(`
     SELECT
-      COALESCE(SUM(CAST(amount AS DECIMAL(65,0))), 0) AS vol24h
+      COALESCE(SUM(CAST(bet AS DECIMAL(65,0))), 0) AS vol24h
     FROM gambling_logs
     WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
       AND is_rolled_back = 0

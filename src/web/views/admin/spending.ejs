@@ -1,0 +1,905 @@
+<%- include('header', { pageTitle: '가상경제 소비 & 외형 & 덕하우스 전권 관리', pageHeader: '가상경제 소비 & 외형 & 덕하우스 관리', activeMenu: 'spending' }) %>
+
+<style>
+  :root {
+    --admin-bg-card: rgba(18, 24, 38, 0.9);
+    --admin-border: rgba(255, 255, 255, 0.08);
+    --admin-accent-primary: #6366f1;
+    --admin-accent-gold: #f59e0b;
+    --admin-accent-emerald: #10b981;
+    --admin-accent-rose: #ef4444;
+    --admin-accent-purple: #a855f7;
+    --admin-text-main: #f8fafc;
+    --admin-text-muted: #94a3b8;
+  }
+
+  .admin-container {
+    padding: 24px 32px 60px;
+    max-width: 1440px;
+    margin: 0 auto;
+  }
+
+  /* 네비게이션 탭 바 */
+  .spending-tabs-bar {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--admin-border);
+    padding-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .spending-tab-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-weight: 800;
+    font-size: 13px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--admin-text-muted);
+    border: 1px solid var(--admin-border);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+  }
+  .spending-tab-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+  .spending-tab-btn.active {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(168, 85, 247, 0.35));
+    border-color: #6366f1;
+    color: #fff;
+    box-shadow: 0 0 14px rgba(99, 102, 241, 0.3);
+  }
+
+  .panel-section { display: none; }
+  .panel-section.active { display: block; animation: fadeIn 0.25s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* 관리자 카드 공통 */
+  .admin-card {
+    background: var(--admin-bg-card);
+    border: 1px solid var(--admin-border);
+    border-radius: 18px;
+    padding: 24px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    backdrop-filter: blur(12px);
+    margin-bottom: 24px;
+  }
+  .card-header-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--admin-border);
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .card-header-flex h3 {
+    font-size: 16px;
+    font-weight: 800;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* KPI 통계 카드 */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .kpi-card {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid var(--admin-border);
+    border-radius: 14px;
+    padding: 18px 20px;
+  }
+  .kpi-label { font-size: 12px; color: var(--admin-text-muted); font-weight: 700; }
+  .kpi-val { font-size: 22px; font-weight: 900; color: #fff; margin-top: 4px; }
+
+  /* 입력 폼 & 버튼 */
+  .admin-input, .admin-select {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #fff;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.2s;
+  }
+  .admin-input:focus, .admin-select:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+  }
+  .admin-btn {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    border: none;
+    color: #fff;
+    font-weight: 800;
+    font-size: 13px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .admin-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  }
+  .admin-btn-gold {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: #000;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+  }
+  .admin-btn-danger {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid #ef4444;
+    color: #fca5a5;
+  }
+  .admin-btn-danger:hover {
+    background: #ef4444;
+    color: #fff;
+  }
+
+  /* 테이블 스타일 */
+  .admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .admin-table th {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 12px 14px;
+    text-align: left;
+    color: var(--admin-text-muted);
+    font-weight: 700;
+    border-bottom: 1px solid var(--admin-border);
+  }
+  .admin-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    color: #e2e8f0;
+  }
+  .admin-table tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  /* 희귀도 배지 */
+  .badge-tag {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 6px;
+    display: inline-block;
+  }
+  .badge-COMMON { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+  .badge-RARE { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+  .badge-EPIC { background: rgba(236, 72, 153, 0.15); color: #f472b6; }
+  .badge-LEGENDARY { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4); }
+
+  @media (max-width: 900px) {
+    .admin-container { padding: 12px; }
+    .spending-tabs-bar { gap: 6px; }
+    .spending-tabs-bar { grid-template-columns: 1fr 1fr; }
+    .spending-tab-btn { width: 100%; justify-content: center; }
+    #selected-user-panel > div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+    .admin-card { padding: 16px; border-radius: 12px; }
+    .admin-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  }
+</style>
+
+<div class="admin-container">
+  
+  <!-- 상단 네비게이션 탭 -->
+  <div class="spending-tabs-bar">
+    <button type="button" class="spending-tab-btn active" onclick="switchSpendingTab('users')" id="tab-btn-users">
+      <i class="fa-solid fa-user-gear"></i> 유저 제어
+    </button>
+    <button type="button" class="spending-tab-btn" onclick="switchSpendingTab('catalog')" id="tab-btn-catalog">
+      <i class="fa-solid fa-store"></i> 카탈로그
+    </button>
+    <button type="button" class="spending-tab-btn" onclick="switchSpendingTab('workshop')" id="tab-btn-workshop">
+      <i class="fa-solid fa-hammer"></i> 제작 레시피
+    </button>
+    <button type="button" class="spending-tab-btn" onclick="switchSpendingTab('ledger')" id="tab-btn-ledger">
+      <i class="fa-solid fa-receipt"></i> 소각 원장
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 탭 1: 👤 유저 전권 제어 센터 (User Cockpit) -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div id="panel-users" class="panel-section active">
+    
+    <div class="admin-card">
+      <div class="card-header-flex">
+        <h3><i class="fa-solid fa-magnifying-glass"></i> 유저 실시간 검색</h3>
+        <span style="font-size:12px; color:var(--admin-text-muted);">아이템 지급·회수, 조각 수량, 덕하우스 레벨을 즉시 관리합니다.</span>
+      </div>
+
+      <div style="display:flex; gap:10px; max-width:600px; margin-bottom:18px;">
+        <input type="text" id="user-search-input" class="admin-input" placeholder="유저 닉네임 또는 Discord ID 입력 후 Enter..." onkeydown="if(event.key==='Enter') searchSpendingUsers()">
+        <button type="button" class="admin-btn" onclick="searchSpendingUsers()"><i class="fa-solid fa-search"></i> 검색</button>
+      </div>
+
+      <div id="user-search-results" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; margin-bottom:20px;"></div>
+
+      <!-- 선택된 유저 제어 대시보드 -->
+      <div id="selected-user-panel" style="display:none; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.3); border-radius:16px; padding:24px;">
+        
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--admin-border); padding-bottom:16px; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h2 id="detail-user-name" style="font-size:20px; font-weight:900; color:#fff;">유저명</h2>
+            <div id="detail-user-id" style="font-size:12px; color:var(--admin-text-muted); margin-top:2px;">ID: -</div>
+          </div>
+          <div style="display:flex; gap:20px; text-align:right;">
+            <div>
+              <div style="font-size:11px; color:var(--admin-text-muted);">현금 잔액</div>
+              <div id="detail-user-cash" style="font-size:18px; font-weight:900; color:#34d399;">0원</div>
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--admin-text-muted);">황금 깃털 조각</div>
+              <div id="detail-user-shards" style="font-size:18px; font-weight:900; color:#fbbf24;">0개</div>
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--admin-text-muted);">덕하우스 등급</div>
+              <div id="detail-user-house" style="font-size:18px; font-weight:900; color:#a855f7;">Lv.1</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3개 영역 분할: 1. 아이템 지급 | 2. 재료 & 하우스 제어 | 3. 보유 인벤토리 -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:24px;">
+          
+          <!-- 1. 아이템 강제 지급 (Grant) -->
+          <div style="background:rgba(15,23,42,0.6); border:1px solid var(--admin-border); border-radius:14px; padding:18px;">
+            <h4 style="margin-bottom:14px; color:#a855f7; font-size:14px; font-weight:800;"><i class="fa-solid fa-gift"></i> 아이템 / 외형 강제 지급 (Grant)</h4>
+            
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              <div>
+                <label style="font-size:11px; color:var(--admin-text-muted); display:block; margin-bottom:4px;">빠른 프리셋 선택</label>
+                <select class="admin-select" id="grant-preset-select" onchange="applyGrantPreset(this.value)">
+                  <option value="">-- 상점 카탈로그에서 선택 (자동완성) --</option>
+                </select>
+              </div>
+
+              <div>
+                <label style="font-size:11px; color:var(--admin-text-muted); display:block; margin-bottom:4px;">아이템 키 (item_key)</label>
+                <input type="text" id="grant-item-key" class="admin-input" placeholder="예: frame_cyber_circuit">
+              </div>
+
+              <div>
+                <label style="font-size:11px; color:var(--admin-text-muted); display:block; margin-bottom:4px;">표시 이름 (name)</label>
+                <input type="text" id="grant-item-name" class="admin-input" placeholder="예: 사이버 서킷 테두리">
+              </div>
+
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div>
+                  <label style="font-size:11px; color:var(--admin-text-muted); display:block; margin-bottom:4px;">아이템 종류</label>
+                  <select id="grant-item-type" class="admin-select">
+                    <option value="PROFILE_FRAME">프로필 테두리 (PROFILE_FRAME)</option>
+                    <option value="NAME_COLOR">닉네임 색상 (NAME_COLOR)</option>
+                    <option value="BADGE">명예 배지 (BADGE)</option>
+                    <option value="HOUSE_SKIN">덕하우스 스킨 (HOUSE_SKIN)</option>
+                    <option value="BUSINESS_SKIN">사업장 간판 (BUSINESS_SKIN)</option>
+                    <option value="COLLECTION">컬렉션 장식품 (COLLECTION)</option>
+                    <option value="AURA">오라 (AURA)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:11px; color:var(--admin-text-muted); display:block; margin-bottom:4px;">유효 기간</label>
+                  <select id="grant-duration" class="admin-select">
+                    <option value="0">영구 (Permanent)</option>
+                    <option value="604800">7일 (604,800초)</option>
+                    <option value="2592000">30일 (2,592,000초)</option>
+                  </select>
+                </div>
+              </div>
+
+              <button type="button" class="admin-btn" style="margin-top:6px;" onclick="submitGrantItem()">
+                <i class="fa-solid fa-plus-circle"></i> 유저에게 즉시 지급
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. 재료 및 덕하우스 레벨 전권 제어 -->
+          <div style="background:rgba(15,23,42,0.6); border:1px solid var(--admin-border); border-radius:14px; padding:18px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <h4 style="margin-bottom:14px; color:#fbbf24; font-size:14px; font-weight:800;"><i class="fa-solid fa-sliders"></i> 제작 재료 & 덕하우스 제어</h4>
+              
+              <!-- 황금 깃털 조각 -->
+              <div style="margin-bottom:18px;">
+                <label style="font-size:11px; color:var(--admin-text-muted); display:block; margin-bottom:4px;">황금 깃털 조각 수량 설정</label>
+                <div style="display:flex; gap:8px;">
+                  <input type="number" id="ctrl-shards-input" class="admin-input" min="0" placeholder="수량 입력">
+                  <button type="button" class="admin-btn admin-btn-gold" onclick="submitSetShards()">설정</button>
+                </div>
+                <div style="display:flex; gap:6px; margin-top:6px;">
+                  <button type="button" class="admin-btn" style="padding:4px 8px; font-size:11px; background:rgba(255,255,255,0.06);" onclick="adjustShardsInput(10)">+10개</button>
+                  <button type="button" class="admin-btn" style="padding:4px 8px; font-size:11px; background:rgba(255,255,255,0.06);" onclick="adjustShardsInput(50)">+50개</button>
+                  <button type="button" class="admin-btn" style="padding:4px 8px; font-size:11px; background:rgba(255,255,255,0.06);" onclick="adjustShardsInput(100)">+100개</button>
+                </div>
+              </div>
+
+              <!-- 덕하우스 레벨 -->
+              <div>
+                <label style="font-size:11px; color:var(--admin-text-muted); display:block; margin-bottom:4px;">덕하우스 레벨 강제 변경 (Lv.1~5)</label>
+                <div style="display:flex; gap:8px;">
+                  <select id="ctrl-house-level" class="admin-select">
+                    <option value="1">Lv.1 기본 방 (3슬롯)</option>
+                    <option value="2">Lv.2 응접실 (5슬롯)</option>
+                    <option value="3">Lv.3 개인 전시관 (8슬롯)</option>
+                    <option value="4">Lv.4 프라이빗 살롱 (12슬롯)</option>
+                    <option value="5">Lv.5 월덕 궁전 (18슬롯)</option>
+                  </select>
+                  <button type="button" class="admin-btn" onclick="submitSetHouseLevel()">변경</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top:14px; padding:10px; background:rgba(0,0,0,0.3); border-radius:8px; font-size:12px; color:var(--admin-text-muted);">
+              🛡️ 모든 변경 사항은 관리자 감사 로그(`admin_logs`)에 기록됩니다.
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 3. 유저 보유 인벤토리 & 회수 (Revoke) 목록 -->
+        <div>
+          <h4 style="margin-bottom:12px; color:#fff; font-size:14px; font-weight:800;"><i class="fa-solid fa-box-open"></i> 보유 인벤토리 & 강제 회수 목록</h4>
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>아이템명</th>
+                <th>키</th>
+                <th>타입</th>
+                <th>유효기간</th>
+                <th>장착여부</th>
+                <th style="text-align:right;">관리</th>
+              </tr>
+            </thead>
+            <tbody id="user-inventory-tbody"></tbody>
+          </table>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 탭 2: 🛍️ 명예 상점 카탈로그 관리자 -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div id="panel-catalog" class="panel-section">
+    <div class="admin-card">
+      <div class="card-header-flex">
+        <h3><i class="fa-solid fa-store"></i> 명예 상점 카탈로그 상품 목록</h3>
+        <button type="button" class="admin-btn" onclick="openCatalogModal()"><i class="fa-solid fa-plus"></i> 신규 상품 등록</button>
+      </div>
+
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>아이콘</th>
+            <th>상품명</th>
+            <th>아이템 키</th>
+            <th>분류</th>
+            <th>가격</th>
+            <th>유효기간</th>
+            <th>희귀도</th>
+            <th>로테이션</th>
+            <th>상태</th>
+            <th style="text-align:right;">관리</th>
+          </tr>
+        </thead>
+        <tbody id="catalog-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 탭 3: 🔨 컬렉션 제작 레시피 관리자 -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div id="panel-workshop" class="panel-section">
+    <div class="admin-card">
+      <div class="card-header-flex">
+        <h3><i class="fa-solid fa-hammer"></i> 컬렉션 제작 레시피 목록</h3>
+        <button type="button" class="admin-btn" onclick="openRecipeModal()"><i class="fa-solid fa-plus"></i> 신규 레시피 등록</button>
+      </div>
+
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>아이콘</th>
+            <th>완성작 이름</th>
+            <th>레시피 키</th>
+            <th>결과 키</th>
+            <th>필요 조각</th>
+            <th>제작비 (소각)</th>
+            <th>희귀도</th>
+            <th>상태</th>
+            <th style="text-align:right;">관리</th>
+          </tr>
+        </thead>
+        <tbody id="workshop-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- 탭 4: 📊 화폐 소각(Sink) 원장 & 통계 -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div id="panel-ledger" class="panel-section">
+    
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">🔥 총 소비 화폐 소각 누적액</div>
+        <div class="kpi-val" style="color:#ef4444;" id="kpi-total-burned">0원</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">🛍️ 명예 상점 누적 소각</div>
+        <div class="kpi-val" style="color:#a855f7;" id="kpi-shop-burned">0원</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">🔨 제작소 수수료 소각</div>
+        <div class="kpi-val" style="color:#10b981;" id="kpi-craft-burned">0원</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">🏰 덕하우스 확장 소각</div>
+        <div class="kpi-val" style="color:#fbbf24;" id="kpi-house-burned">0원</div>
+      </div>
+    </div>
+
+    <div class="admin-card">
+      <div class="card-header-flex">
+        <h3><i class="fa-solid fa-receipt"></i> 최근 소비·소각 원장 감사 로그 (최신 50건)</h3>
+        <button type="button" class="admin-btn" style="background:rgba(255,255,255,0.06);" onclick="loadLedgerData()"><i class="fa-solid fa-rotate"></i> 새로고침</button>
+      </div>
+
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>시간</th>
+            <th>카테고리</th>
+            <th>유저 ID</th>
+            <th>소각 금액</th>
+            <th>사유</th>
+            <th>메타데이터</th>
+          </tr>
+        </thead>
+        <tbody id="ledger-tbody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+  let currentSelectedUserId = null;
+  let catalogPresetsCache = [];
+
+  function switchSpendingTab(tab) {
+    document.querySelectorAll('.panel-section').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.spending-tab-btn').forEach(el => el.classList.remove('active'));
+    
+    document.getElementById('panel-' + tab).classList.add('active');
+    document.getElementById('tab-btn-' + tab).classList.add('active');
+
+    if (tab === 'catalog') loadCatalogData();
+    if (tab === 'workshop') loadWorkshopAdminData();
+    if (tab === 'ledger') loadLedgerData();
+  }
+
+  // ─── 👤 1. 유저 검색 & 전권 관리 ──────────────────────────────
+  async function searchSpendingUsers() {
+    const q = document.getElementById('user-search-input').value.trim();
+    if (!q) return;
+    try {
+      const res = await fetch('/api/admin/spending/users/search?q=' + encodeURIComponent(q));
+      const data = await res.json();
+      const wrap = document.getElementById('user-search-results');
+      if (data.success && data.users.length) {
+        wrap.innerHTML = data.users.map(u => `
+          <div style="background:rgba(255,255,255,0.03); border:1px solid var(--admin-border); border-radius:12px; padding:12px 16px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;" onclick="selectSpendingUser('${u.discordId}')">
+            <div>
+              <div style="font-weight:800; color:#fff;">${escapeHtml(u.username)}</div>
+              <div style="font-size:11px; color:var(--admin-text-muted);">${u.discordId}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:13px; font-weight:800; color:#34d399;">${Number(u.cash).toLocaleString()}원</div>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        wrap.innerHTML = '<p style="color:var(--admin-text-muted); padding:10px;">검색된 유저가 없습니다.</p>';
+      }
+    } catch (e) {
+      alert('유저 검색 실패');
+    }
+  }
+
+  async function selectSpendingUser(userId) {
+    currentSelectedUserId = userId;
+    try {
+      const res = await fetch('/api/admin/spending/users/' + userId);
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('selected-user-panel').style.display = 'block';
+        document.getElementById('detail-user-name').textContent = data.user.username;
+        document.getElementById('detail-user-id').textContent = 'Discord ID: ' + data.user.discordId;
+        document.getElementById('detail-user-cash').textContent = Number(data.user.cash).toLocaleString() + '원';
+        document.getElementById('detail-user-shards').textContent = (data.materials.goldenFeatherShards || 0) + '개';
+        document.getElementById('ctrl-shards-input').value = data.materials.goldenFeatherShards || 0;
+        document.getElementById('detail-user-house').textContent = 'Lv.' + data.duckHouse.level;
+        document.getElementById('ctrl-house-level').value = data.duckHouse.level;
+
+        // 인벤토리 렌더링
+        const tbody = document.getElementById('user-inventory-tbody');
+        if (data.inventory.length) {
+          tbody.innerHTML = data.inventory.map(i => {
+            const isEquipped = Object.values(data.loadout).some(l => l.inventoryId === i.id);
+            return `
+              <tr>
+                <td>${i.id}</td>
+                <td style="font-weight:800;">${escapeHtml(i.name)}</td>
+                <td><code>${i.itemKey}</code></td>
+                <td><span class="badge-tag badge-COMMON">${i.itemType}</span></td>
+                <td>${i.expiresAt ? new Date(i.expiresAt).toLocaleDateString() : '영구'}</td>
+                <td>${isEquipped ? '<span style="color:#34d399; font-weight:800;">장착중</span>' : '<span style="color:#64748b;">미장착</span>'}</td>
+                <td style="text-align:right;">
+                  <button type="button" class="admin-btn admin-btn-danger" style="padding:4px 10px; font-size:11px;" onclick="revokeUserItem(${i.id}, '${escapeHtml(i.name)}')">
+                    <i class="fa-solid fa-trash"></i> 회수/삭제
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--admin-text-muted); padding:20px;">보유 중인 아이템이 없습니다.</td></tr>';
+        }
+
+        // 프리셋 채우기
+        loadGrantPresets();
+      }
+    } catch (e) {
+      alert('유저 상세 조회 실패');
+    }
+  }
+
+  async function loadGrantPresets() {
+    if (catalogPresetsCache.length) return;
+    try {
+      const res = await fetch('/api/admin/spending/catalog');
+      const data = await res.json();
+      if (data.success) {
+        catalogPresetsCache = data.items;
+        const sel = document.getElementById('grant-preset-select');
+        sel.innerHTML = '<option value="">-- 상점 카탈로그에서 선택 (자동완성) --</option>' + 
+          data.items.map(i => `<option value="${i.itemKey}">[${i.rarity}] ${i.name} (${i.itemType})</option>`).join('');
+      }
+    } catch (e) {}
+  }
+
+  function applyGrantPreset(key) {
+    if (!key) return;
+    const item = catalogPresetsCache.find(i => i.itemKey === key);
+    if (!item) return;
+    document.getElementById('grant-item-key').value = item.itemKey;
+    document.getElementById('grant-item-name').value = item.name;
+    document.getElementById('grant-item-type').value = item.itemType;
+    document.getElementById('grant-duration').value = item.isPermanent ? '0' : String(item.durationSeconds);
+  }
+
+  async function submitGrantItem() {
+    if (!currentSelectedUserId) return alert('유저를 먼저 선택하세요.');
+    const itemKey = document.getElementById('grant-item-key').value.trim();
+    const name = document.getElementById('grant-item-name').value.trim();
+    const itemType = document.getElementById('grant-item-type').value;
+    const durationSeconds = parseInt(document.getElementById('grant-duration').value, 10);
+
+    if (!itemKey || !name) return alert('아이템 키와 이름을 입력하세요.');
+    try {
+      const res = await fetch(`/api/admin/spending/users/${currentSelectedUserId}/grant-item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemKey, name, itemType, durationSeconds })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        selectSpendingUser(currentSelectedUserId);
+      } else {
+        alert('지급 실패: ' + data.error);
+      }
+    } catch (e) {
+      alert('서버 통신 오류');
+    }
+  }
+
+  async function revokeUserItem(inventoryId, name) {
+    if (!confirm(`[${name}] 아이템을 강제 회수/삭제하시겠습니까?`)) return;
+    try {
+      const res = await fetch(`/api/admin/spending/users/${currentSelectedUserId}/revoke-item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inventoryId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        selectSpendingUser(currentSelectedUserId);
+      } else {
+        alert('회수 실패: ' + data.error);
+      }
+    } catch (e) {
+      alert('서버 통신 오류');
+    }
+  }
+
+  function adjustShardsInput(amt) {
+    const el = document.getElementById('ctrl-shards-input');
+    el.value = (parseInt(el.value, 10) || 0) + amt;
+  }
+
+  async function submitSetShards() {
+    if (!currentSelectedUserId) return alert('유저를 먼저 선택하세요.');
+    const quantity = parseInt(document.getElementById('ctrl-shards-input').value, 10) || 0;
+    try {
+      const res = await fetch(`/api/admin/spending/users/${currentSelectedUserId}/materials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ materialKey: 'golden_feather_shard', quantity })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        selectSpendingUser(currentSelectedUserId);
+      } else {
+        alert('설정 실패: ' + data.error);
+      }
+    } catch (e) {
+      alert('서버 오류');
+    }
+  }
+
+  async function submitSetHouseLevel() {
+    if (!currentSelectedUserId) return alert('유저를 먼저 선택하세요.');
+    const level = parseInt(document.getElementById('ctrl-house-level').value, 10);
+    try {
+      const res = await fetch(`/api/admin/spending/users/${currentSelectedUserId}/duck-house-level`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        selectSpendingUser(currentSelectedUserId);
+      } else {
+        alert('변경 실패: ' + data.error);
+      }
+    } catch (e) {
+      alert('서버 오류');
+    }
+  }
+
+  // ─── 🛍️ 2. 명예 상점 카탈로그 관리 ───────────────────────────
+  async function loadCatalogData() {
+    try {
+      const res = await fetch('/api/admin/spending/catalog');
+      const data = await res.json();
+      const tbody = document.getElementById('catalog-tbody');
+      if (data.success && data.items.length) {
+        tbody.innerHTML = data.items.map(item => `
+          <tr>
+            <td style="font-size:20px;">${item.icon}</td>
+            <td style="font-weight:800;">${escapeHtml(item.name)}</td>
+            <td><code>${item.itemKey}</code></td>
+            <td><span class="badge-tag badge-COMMON">${item.itemType}</span></td>
+            <td style="font-weight:800; color:#34d399;">${Number(item.price).toLocaleString()}원</td>
+            <td>${item.isPermanent ? '영구' : (item.durationSeconds / 86400) + '일'}</td>
+            <td><span class="badge-tag badge-${item.rarity}">${item.rarity}</span></td>
+            <td>${item.rotationGroup}</td>
+            <td>${item.isActive ? '<span style="color:#34d399;">판매중</span>' : '<span style="color:#ef4444;">비활성</span>'}</td>
+            <td style="text-align:right;">
+              <button type="button" class="admin-btn admin-btn-danger" style="padding:3px 8px; font-size:11px;" onclick="deleteCatalogItem('${item.itemKey}')">삭제</button>
+            </td>
+          </tr>
+        `).join('');
+      } else {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">등록된 카탈로그가 없습니다.</td></tr>';
+      }
+    } catch (e) {}
+  }
+
+  async function openCatalogModal() {
+    const itemKey = prompt('아이템 키 (item_key, 예: color_gold_glow):');
+    if (!itemKey) return;
+    const name = prompt('상품 이름 (name):');
+    if (!name) return;
+    const price = prompt('가격 (price):', '10000');
+    if (!price) return;
+
+    try {
+      const res = await fetch('/api/admin/spending/catalog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemKey,
+          name,
+          itemType: 'NAME_COLOR',
+          price: parseInt(price, 10),
+          durationSeconds: 604800,
+          isPermanent: false,
+          rarity: 'COMMON',
+          rotationGroup: 'WEEKLY_A',
+          icon: '✨',
+          isActive: true
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        loadCatalogData();
+      } else {
+        alert('등록 실패: ' + data.error);
+      }
+    } catch (e) {
+      alert('서버 오류');
+    }
+  }
+
+  async function deleteCatalogItem(itemKey) {
+    if (!confirm(`[${itemKey}] 상품을 삭제하시겠습니까?`)) return;
+    try {
+      const res = await fetch('/api/admin/spending/catalog/' + itemKey, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        loadCatalogData();
+      } else {
+        alert('삭제 실패: ' + data.error);
+      }
+    } catch (e) {
+      alert('서버 오류');
+    }
+  }
+
+  // ─── 🔨 3. 컬렉션 제작 레시피 관리 ─────────────────────────
+  async function loadWorkshopAdminData() {
+    try {
+      const res = await fetch('/api/admin/spending/workshop');
+      const data = await res.json();
+      const tbody = document.getElementById('workshop-tbody');
+      if (data.success && data.recipes.length) {
+        tbody.innerHTML = data.recipes.map(r => `
+          <tr>
+            <td style="font-size:20px;">${r.icon}</td>
+            <td style="font-weight:800;">${escapeHtml(r.name)}</td>
+            <td><code>${r.recipeKey}</code></td>
+            <td><code>${r.resultItemKey}</code></td>
+            <td style="color:#fbbf24; font-weight:800;">🪶 ${r.materialCost}개</td>
+            <td style="color:#34d399; font-weight:800;">${Number(r.cashCost).toLocaleString()}원</td>
+            <td><span class="badge-tag badge-${r.rarity}">${r.rarity}</span></td>
+            <td>${r.isActive ? '<span style="color:#34d399;">활성</span>' : '<span style="color:#ef4444;">비활성</span>'}</td>
+            <td style="text-align:right;">
+              <button type="button" class="admin-btn admin-btn-danger" style="padding:3px 8px; font-size:11px;" onclick="deleteRecipeItem('${r.recipeKey}')">삭제</button>
+            </td>
+          </tr>
+        `).join('');
+      } else {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px;">등록된 레시피가 없습니다.</td></tr>';
+      }
+    } catch (e) {}
+  }
+
+  async function openRecipeModal() {
+    const recipeKey = prompt('레시피 키 (예: craft_custom_trophy):');
+    if (!recipeKey) return;
+    const name = prompt('완성 아이템 이름:');
+    if (!name) return;
+    const materialCost = prompt('필요 황금 깃털 조각 수량:', '10');
+    const cashCost = prompt('필요 제작비 (원):', '50000');
+
+    try {
+      const res = await fetch('/api/admin/spending/workshop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipeKey,
+          resultItemKey: 'trophy_' + recipeKey,
+          name,
+          materialCost: parseInt(materialCost, 10),
+          cashCost: parseInt(cashCost, 10),
+          rarity: 'RARE',
+          icon: '🏆',
+          isActive: true
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        loadWorkshopAdminData();
+      } else {
+        alert('등록 실패: ' + data.error);
+      }
+    } catch (e) {
+      alert('서버 오류');
+    }
+  }
+
+  async function deleteRecipeItem(recipeKey) {
+    if (!confirm(`[${recipeKey}] 레시피를 삭제하시겠습니까?`)) return;
+    try {
+      const res = await fetch('/api/admin/spending/workshop/' + recipeKey, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        loadWorkshopAdminData();
+      } else {
+        alert('삭제 실패: ' + data.error);
+      }
+    } catch (e) {
+      alert('서버 오류');
+    }
+  }
+
+  // ─── 📊 4. 소각 원장 & 감사 통계 ─────────────────────────────
+  async function loadLedgerData() {
+    try {
+      const res = await fetch('/api/admin/spending/ledger');
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('kpi-total-burned').textContent = Number(data.totalBurned || 0).toLocaleString() + '원';
+        
+        let shopAmt = 0, craftAmt = 0, houseAmt = 0;
+        data.byCategory.forEach(c => {
+          if (c.category === 'PRESTIGE_PURCHASE') shopAmt = Number(c.total);
+          if (c.category === 'CRAFT_FEE') craftAmt = Number(c.total);
+          if (c.category === 'HOUSE_UPGRADE') houseAmt = Number(c.total);
+        });
+        document.getElementById('kpi-shop-burned').textContent = shopAmt.toLocaleString() + '원';
+        document.getElementById('kpi-craft-burned').textContent = craftAmt.toLocaleString() + '원';
+        document.getElementById('kpi-house-burned').textContent = houseAmt.toLocaleString() + '원';
+
+        const tbody = document.getElementById('ledger-tbody');
+        if (data.recentSinks.length) {
+          tbody.innerHTML = data.recentSinks.map(l => `
+            <tr>
+              <td>${new Date(l.created_at).toLocaleString()}</td>
+              <td><span class="badge-tag badge-LEGENDARY">${l.category}</span></td>
+              <td><code>${l.user_id || '-'}</code></td>
+              <td style="color:#ef4444; font-weight:800;">-${Number(l.amount).toLocaleString()}원</td>
+              <td>${escapeHtml(l.reason || '')}</td>
+              <td style="font-size:11px; color:var(--admin-text-muted);">${JSON.stringify(l.metadata || {})}</td>
+            </tr>
+          `).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">기록된 소각 로그가 없습니다.</td></tr>';
+        }
+      }
+    } catch (e) {}
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+</script>

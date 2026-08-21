@@ -1,0 +1,273 @@
+<%- include('layout/header', { pageTitle: '카지노 & 엔터테인먼트 허브', activePage: 'casino' }) %>
+
+<main style="flex:1; padding:24px 16px; width:100%; max-width:1240px; margin:0 auto;">
+  
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
+    <div>
+      <h1 style="font-size:24px; font-weight:900; color:#f8fafc; margin:0; display:flex; align-items:center; gap:10px;">
+        <span>🎰</span> 월덕 카지노 & 핫게임 엔터테인먼트 허브
+      </h1>
+      <p style="font-size:14px; color:#94a3b8; margin:4px 0 0 0;">
+        플링코, 마인즈, 블랙잭, 777 슬롯머신, 즉석복권, 오리 레이스 경마 등 100% 공정 확률 게임.
+      </p>
+    </div>
+    
+    <div style="display:flex; gap:10px;">
+      <a href="/arcade" style="padding:10px 18px; font-weight:800; background:linear-gradient(135deg,#06b6d4,#3b82f6); border-radius:12px; text-decoration:none; color:#fff; font-size:13px; display:flex; align-items:center; gap:6px;">
+        <span>🎮</span> <span>보석 맞추기 퍼즐</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- 게임 그리드 -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:20px;">
+    
+    <!-- 1. 플링코 (Plinko) -->
+    <div style="background:rgba(15,23,42,0.85); border:1px solid rgba(244,63,94,0.3); border-radius:20px; padding:24px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <span style="font-size:32px;">🔴</span>
+          <span style="font-size:12px; font-weight:800; padding:4px 10px; background:rgba(244,63,94,0.15); color:#fb7185; border-radius:20px; border:1px solid rgba(244,63,94,0.3);">최대 100x</span>
+        </div>
+        <h3 style="font-size:19px; font-weight:800; color:#fff; margin:0 0 6px 0;">플링코 (Plinko 12-Pin)</h3>
+        <p style="font-size:13px; color:#94a3b8; line-height:1.5; margin:0 0 16px 0;">12개 핀을 타고 낙하하는 물리 시뮬레이션! 중앙보다 외곽일수록 배율이 폭발합니다.</p>
+      </div>
+
+      <div>
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <input type="number" id="plinko-bet" value="1000" min="100" step="500" style="flex:1; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:10px 14px; color:#fff; font-family:'JetBrains Mono',monospace; font-weight:700;">
+          <select id="plinko-risk" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:0 12px; color:#fff; font-weight:700;">
+            <option value="low">로우 (안정)</option>
+            <option value="medium" selected>미디엄 (표준)</option>
+            <option value="high">하이 (대박)</option>
+          </select>
+        </div>
+        <button onclick="playPlinkoGame()" style="width:100%; padding:12px; font-weight:900; background:linear-gradient(135deg,#f43f5e,#fb7185); border:none; border-radius:12px; color:#fff; cursor:pointer; font-size:15px; box-shadow:0 0 20px rgba(244,63,94,0.3);">공 떨어뜨리기</button>
+      </div>
+    </div>
+
+    <!-- 2. 마인즈 (Mines 5x5) -->
+    <div style="background:rgba(15,23,42,0.85); border:1px solid rgba(16,185,129,0.3); border-radius:20px; padding:24px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <span style="font-size:32px;">💣</span>
+          <span style="font-size:12px; font-weight:800; padding:4px 10px; background:rgba(16,185,129,0.15); color:#34d399; border-radius:20px; border:1px solid rgba(16,185,129,0.3);">지뢰 피하기</span>
+        </div>
+        <h3 style="font-size:19px; font-weight:800; color:#fff; margin:0 0 6px 0;">마인즈 (Mines 5x5)</h3>
+        <p style="font-size:13px; color:#94a3b8; line-height:1.5; margin:0 0 16px 0;">25개 타일 중 숨겨진 지뢰를 피해 보석을 찾으세요. 원할 때 언제든 즉시 캐시아웃!</p>
+      </div>
+
+      <div>
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <input type="number" id="mines-bet" value="2000" min="500" step="1000" style="flex:1; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:10px 14px; color:#fff; font-family:'JetBrains Mono',monospace; font-weight:700;">
+          <select id="mines-count" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:0 12px; color:#fff; font-weight:700;">
+            <option value="1">지뢰 1개 (쉬움)</option>
+            <option value="3" selected>지뢰 3개 (표준)</option>
+            <option value="5">지뢰 5개 (고배율)</option>
+          </select>
+        </div>
+        <button onclick="startMinesGame()" style="width:100%; padding:12px; font-weight:900; background:linear-gradient(135deg,#059669,#10b981); border:none; border-radius:12px; color:#fff; cursor:pointer; font-size:15px; box-shadow:0 0 20px rgba(16,185,129,0.3);">마인즈 탐사 시작</button>
+      </div>
+    </div>
+
+    <!-- 3. 블랙잭 (Blackjack) -->
+    <div style="background:rgba(15,23,42,0.85); border:1px solid rgba(168,85,247,0.3); border-radius:20px; padding:24px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <span style="font-size:32px;">🃏</span>
+          <span style="font-size:12px; font-weight:800; padding:4px 10px; background:rgba(168,85,247,0.15); color:#c084fc; border-radius:20px; border:1px solid rgba(168,85,247,0.3);">21점 대전</span>
+        </div>
+        <h3 style="font-size:19px; font-weight:800; color:#fff; margin:0 0 6px 0;">블랙잭 (Blackjack)</h3>
+        <p style="font-size:13px; color:#94a3b8; line-height:1.5; margin:0 0 16px 0;">딜러와의 1대1 두뇌 심리전. 21점에 가장 가깝게 카드를 완성하세요.</p>
+      </div>
+
+      <div>
+        <div style="margin-bottom:12px;">
+          <input type="number" id="bj-bet" value="5000" min="1000" step="1000" style="width:100%; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:10px 14px; color:#fff; font-family:'JetBrains Mono',monospace; font-weight:700;">
+        </div>
+        <button onclick="startBlackjackGame()" style="width:100%; padding:12px; font-weight:900; background:linear-gradient(135deg,#9333ea,#c084fc); border:none; border-radius:12px; color:#fff; cursor:pointer; font-size:15px; box-shadow:0 0 20px rgba(168,85,247,0.3);">베팅 및 카드 받기</button>
+      </div>
+    </div>
+
+    <!-- 4. 슬롯머신 777 -->
+    <div style="background:rgba(15,23,42,0.85); border:1px solid rgba(251,191,36,0.3); border-radius:20px; padding:24px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <span style="font-size:32px;">🎰</span>
+          <span style="font-size:12px; font-weight:800; padding:4px 10px; background:rgba(251,191,36,0.15); color:#fbbf24; border-radius:20px; border:1px solid rgba(251,191,36,0.3);">777 잭팟</span>
+        </div>
+        <h3 style="font-size:19px; font-weight:800; color:#fff; margin:0 0 6px 0;">행운의 777 슬롯머신</h3>
+        <p style="font-size:13px; color:#94a3b8; line-height:1.5; margin:0 0 16px 0;">3개의 릴이 일치하면 대박 당첨! 777 트리플 잭팟의 주인공이 되세요.</p>
+      </div>
+
+      <div>
+        <div style="margin-bottom:12px;">
+          <input type="number" id="slot-bet" value="1000" min="500" step="500" style="width:100%; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:10px 14px; color:#fff; font-family:'JetBrains Mono',monospace; font-weight:700;">
+        </div>
+        <button onclick="spinSlotGame()" style="width:100%; padding:12px; font-weight:900; background:linear-gradient(135deg,#f59e0b,#fbbf24); border:none; border-radius:12px; color:#000; cursor:pointer; font-size:15px; box-shadow:0 0 20px rgba(251,191,36,0.3);">레버 당기기</button>
+      </div>
+    </div>
+
+    <!-- 5. 즉석복권 (Scratch) -->
+    <div style="background:rgba(15,23,42,0.85); border:1px solid rgba(56,189,248,0.3); border-radius:20px; padding:24px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <span style="font-size:32px;">🎫</span>
+          <span style="font-size:12px; font-weight:800; padding:4px 10px; background:rgba(56,189,248,0.15); color:#38bdf8; border-radius:20px; border:1px solid rgba(56,189,248,0.3);">즉석 당첨</span>
+        </div>
+        <h3 style="font-size:19px; font-weight:800; color:#fff; margin:0 0 6px 0;">황금 즉석복권 (Scratch)</h3>
+        <p style="font-size:13px; color:#94a3b8; line-height:1.5; margin:0 0 16px 0;">3개의 심볼을 긁어 일치하면 즉시 최대 77배 당첨금 지급!</p>
+      </div>
+
+      <div>
+        <div style="margin-bottom:12px;">
+          <input type="number" id="lottery-bet" value="1000" min="500" step="500" style="width:100%; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:10px 14px; color:#fff; font-family:'JetBrains Mono',monospace; font-weight:700;">
+        </div>
+        <button onclick="scratchLotteryGame()" style="width:100%; padding:12px; font-weight:900; background:linear-gradient(135deg,#0284c7,#38bdf8); border:none; border-radius:12px; color:#fff; cursor:pointer; font-size:15px; box-shadow:0 0 20px rgba(56,189,248,0.3);">복권 긁기</button>
+      </div>
+    </div>
+
+    <!-- 6. 오리 레이스 경마장 -->
+    <div style="background:rgba(15,23,42,0.85); border:1px solid rgba(234,179,8,0.3); border-radius:20px; padding:24px; display:flex; flex-direction:column; justify-content:space-between; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <span style="font-size:32px;">🏇</span>
+          <span style="font-size:12px; font-weight:800; padding:4px 10px; background:rgba(234,179,8,0.15); color:#facc15; border-radius:20px; border:1px solid rgba(234,179,8,0.3);">오리 질주</span>
+        </div>
+        <h3 style="font-size:19px; font-weight:800; color:#fff; margin:0 0 6px 0;">오리 그랑프리 경마장</h3>
+        <p style="font-size:13px; color:#94a3b8; line-height:1.5; margin:0 0 16px 0;">바람의 오리, 황금 꽥꽥이 등 5마리의 오리 레이스에 베팅하세요!</p>
+      </div>
+
+      <div>
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <select id="duck-lane" style="flex:1; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:10px 12px; color:#fff; font-weight:700;">
+            <option value="1">1번: 바람의 오리 (2.5x)</option>
+            <option value="2">2번: 황금 꽥꽥이 (3.8x)</option>
+            <option value="3">3번: 폭풍 질주 (5.2x)</option>
+            <option value="4">4번: 벼락 부리 (7.0x)</option>
+            <option value="5">5번: 다크 덕 (12.0x)</option>
+          </select>
+          <input type="number" id="duck-bet" value="2000" min="500" step="500" style="width:110px; background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:10px; color:#fff; font-family:'JetBrains Mono',monospace; font-weight:700;">
+        </div>
+        <button onclick="startDuckRaceGame()" style="width:100%; padding:12px; font-weight:900; background:linear-gradient(135deg,#ca8a04,#facc15); border:none; border-radius:12px; color:#000; cursor:pointer; font-size:15px; box-shadow:0 0 20px rgba(234,179,8,0.3);">경마 출발!</button>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<script>
+  async function playPlinkoGame() {
+    const bet = Number(document.getElementById('plinko-bet').value) || 1000;
+    const risk = document.getElementById('plinko-risk').value || 'medium';
+    try {
+      const res = await fetch('/api/gamble/plinko', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: bet, risk })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`🔴 플링코 낙하 결과:\n배율: ${data.multiplier}x\n획득 당첨금: +${Number(data.wonAmount || data.prize || 0).toLocaleString()}원!`);
+        window.location.reload();
+      } else {
+        alert(data.error || '플링코 실행 실패');
+      }
+    } catch (e) { alert('네트워크 오류'); }
+  }
+
+  async function startMinesGame() {
+    const bet = Number(document.getElementById('mines-bet').value) || 2000;
+    const mines = Number(document.getElementById('mines-count').value) || 3;
+    try {
+      const res = await fetch('/api/gamble/mines/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bet, minesCount: mines })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`💣 마인즈 탐사 시작!\n지뢰 ${mines}개 세팅 완료. 안전 타일을 탐색하세요.`);
+        window.location.reload();
+      } else {
+        alert(data.error || '마인즈 시작 실패');
+      }
+    } catch (e) { alert('네트워크 오류'); }
+  }
+
+  async function startBlackjackGame() {
+    const bet = Number(document.getElementById('bj-bet').value) || 5000;
+    try {
+      const res = await fetch('/api/gamble/blackjack/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bet })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`🃏 블랙잭 대전 시작!\n내 카드: ${data.playerCards ? data.playerCards.map(c=>c.suit+c.rank).join(' ') : '🃏'}\n딜러 카드: ${data.dealerCard ? data.dealerCard.suit+data.dealerCard.rank : '🂠'}`);
+        window.location.reload();
+      } else {
+        alert(data.error || '블랙잭 시작 실패');
+      }
+    } catch (e) { alert('네트워크 오류'); }
+  }
+
+  async function spinSlotGame() {
+    const bet = Number(document.getElementById('slot-bet').value) || 1000;
+    try {
+      const res = await fetch('/api/gamble/slot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: bet })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`🎰 [ ${data.reels ? data.reels.join(' | ') : '🎰'} ]\n${data.won ? '🎉 축하합니다! 당첨금: +'+Number(data.prize).toLocaleString()+'원' : '낙첨되었습니다.'}`);
+        window.location.reload();
+      } else {
+        alert(data.error || '슬롯 실행 실패');
+      }
+    } catch (e) { alert('네트워크 오류'); }
+  }
+
+  async function scratchLotteryGame() {
+    const bet = Number(document.getElementById('lottery-bet').value) || 1000;
+    try {
+      const res = await fetch('/api/gamble/lottery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: bet })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`🎫 [ ${data.symbols ? data.symbols.join(' | ') : '🎫'} ]\n${data.won ? '🎉 축하합니다! 당첨금: +'+Number(data.prize).toLocaleString()+'원' : '낙첨되었습니다.'}`);
+        window.location.reload();
+      } else {
+        alert(data.error || '복권 실행 실패');
+      }
+    } catch (e) { alert('네트워크 오류'); }
+  }
+
+  async function startDuckRaceGame() {
+    const lane = Number(document.getElementById('duck-lane').value) || 1;
+    const bet = Number(document.getElementById('duck-bet').value) || 2000;
+    try {
+      const res = await fetch('/api/gamble/horse/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ horseIndex: lane, betAmount: bet })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`🏇 오리 레이스 결과!\n우승: ${data.winnerName || data.winnerLane+'번 오리'}\n${data.isWin ? '🎉 베팅 적중! 상금: +'+Number(data.payout).toLocaleString()+'원' : '아쉽게도 패배했습니다.'}`);
+        window.location.reload();
+      } else {
+        alert(data.error || '경마 레이스 시작 실패');
+      }
+    } catch (e) { alert('네트워크 오류'); }
+  }
+</script>
+
+<%- include('layout/footer', { activePage: 'casino' }) %>

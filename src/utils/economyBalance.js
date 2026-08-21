@@ -1,26 +1,34 @@
+'use strict';
+
 /**
- * 월덕 경제 밸런스 단일 기준.
- * 현금 + 예금 + 주식평가액 = 순자산.
- * 웹과 디스코드 명령은 여기 숫자만 쓴다.
+ * 🏛️ 월덕 경제 밸런스 단일 기준 (Economy Balance 2.0)
+ * 
+ * 인플레이션 억제 및 실물 경제 순환 구조:
+ * 1. 신규 통화 발행 캡 (출석, 10분 일하기, 1일 1회 저소득 지원금, 6시간 오프라인 상한)
+ * 2. 복리 이자 합리화 (하루 0.1%)
+ * 3. 생산적 소비처 (사업 유지비 15%, 주식 거래 수수료 0.3%, 1일 1회 부유세)
+ * 4. 카지노 준비금(Reserve) 기반 지급 & 95% RTP
  */
 const { safeBigInt } = require('./money');
 
 const BANK = {
-  HOURLY_RATE: 0.0005, // 시간당 0.05%
-  LABEL: '시간당 0.05%',
+  DAILY_RATE: 0.001, // 하루 0.1%
+  HOURLY_RATE: 0.001 / 24, // 시간당 약 0.00416%
+  LABEL: '하루 0.1% (시간당 0.0042%)',
   get PER_MINUTE_RATE() {
     return this.HOURLY_RATE / 60;
   }
 };
 
-// 대출: 예금 담보, 예금 이자보다 비싸게, 만기 후 담보 회수
+// 대출: 예금 담보, 만기 24시간
 const LOAN = {
   LTV: 0.5,                 // 예금의 50%까지
-  HOURLY_RATE: 0.0015,      // 시간당 0.15%
-  LABEL: '시간당 0.15%',
+  DAILY_RATE: 0.003,        // 하루 0.3%
+  HOURLY_RATE: 0.003 / 24,
+  LABEL: '하루 0.3%',
   TERM_HOURS: 24,
-  MINT_SHARE: 0.20,         // 국고 부족 시 신규 발행 상한(해당 대출의 20%)
-  INTEREST_CAP: 1,          // 이자는 원래 원금의 100%를 넘지 않음
+  MINT_SHARE: 0.10,         // 국고 부족 시 신규 발행 상한 (10%)
+  INTEREST_CAP: 0.5,        // 이자는 원금의 50%를 넘지 않음
   CREDIT: [1, 0.5, 0.25],   // 연체 0/1/2회+ 한도 배율
   get PER_MINUTE_RATE() {
     return this.HOURLY_RATE / 60;
@@ -34,34 +42,48 @@ const CLICKER = {
   MAX_CLICKS_PER_REQUEST: 100,
   MIN_MS_PER_CLICK: 40,
   POWER_COST_PER_LEVEL: 8500,
-  AUTO_PER_LEVEL_PER_SEC: 3,
-  AUTO_COST_BASE: 18000,
+  AUTO_PER_LEVEL_PER_SEC: 2,
+  AUTO_COST_BASE: 20000,
+  OFFLINE_CAP_MIN: 6 * 60, // 최대 6시간(360분) 오프라인 채굴 누적
   BONUS_TURN_CHANCE: 0.08
 };
 
 const SUBSIDY = {
-  BROKE_COOLDOWN_MS: 1 * 60 * 1000,
-  NORMAL_COOLDOWN_MS: 5 * 60 * 1000,
-  BROKE_AMOUNT: 10000,
-  NORMAL_AMOUNT: 5000,
-  BROKE_LIQUID: 10000,
-  WEALTH_CAP: 500000
+  COOLDOWN_MS: 24 * 60 * 60 * 1000, // 24시간 1회
+  AMOUNT: 2000,                      // 2,000원
+  MAX_NET_WORTH: 20000,              // 순자산 20,000원 이하만 신청 가능
+  LABEL: '1일 1회 2,000원 (순자산 2만원 이하 대상)'
 };
 
-// 사업: 수금형 패시브. 과도한 통화량 폭증을 방지하고 건전한 경제를 위해 밸런스 패치.
+const DAILY = {
+  MIN_REWARD: 3000,
+  MAX_REWARD: 5000,
+  COOLDOWN_MS: 24 * 60 * 60 * 1000
+};
+
+const WORK = {
+  COOLDOWN_MS: 10 * 60 * 1000, // 10분 쿨다운
+  BASE_MIN: 500,
+  BASE_MAX: 1500,
+  FATIGUE_WINDOW_MS: 60 * 60 * 1000, // 1시간 내 연속 작업 시 피로도 발생
+  MAX_FATIGUE_PENALTY: 0.40 // 최대 40% 보상 감소
+};
+
+// 사업: 6시간 오프라인 수금 상한 및 15% 유지보수 비용 적용
 const BUSINESS = {
   MAX_LEVEL: 10,
   MAX_STAFF: 5,
   MAX_HQ: 5,
   COLLECT_CAP_MIN: 6 * 60,  // 최대 6시간 적립
-  UPGRADE_GROWTH: 1.65,     // 업그레이드 비용 계수
-  INCOME_GROWTH: 1.15,      // 레벨당 수익 증가율
-  SELL_RATE: 0.5,           // 매각 시 투자금의 50%
-  STAFF_BONUS: 0.08,        // 알바 1명당 매출 +8%
-  STAFF_WAGE_RATE: 0.05,    // 알바 1명당 인건비 5%
-  STAFF_HIRE_RATE: 0.25,    // 알바 채용비
-  HQ_BONUS: 0.03,           // 본사 Lv당 전체 매출 +3% (최대 +15%)
-  HQ_BASE_COST: 1000000,    // 본사 기본 설립비 100만원
+  MAINTENANCE_RATE: 0.15,   // 사업 유지비 & 운영비 (매출의 15% 국고 귀속/소각)
+  UPGRADE_GROWTH: 1.65,
+  INCOME_GROWTH: 1.15,
+  SELL_RATE: 0.5,
+  STAFF_BONUS: 0.08,
+  STAFF_WAGE_RATE: 0.05,
+  STAFF_HIRE_RATE: 0.25,
+  HQ_BONUS: 0.03,
+  HQ_BASE_COST: 1000000,
   COLLECT_EVENT_CHANCE: 0.06,
   CATALOG: [
     { key: 'store', name: '골목 편의점', emoji: '🏪', blurb: '야식과 담배를 파는 동네 가게', cost: 50000, incomePerMin: 25, requires: null },
@@ -79,6 +101,12 @@ const BUSINESS = {
   ]
 };
 
+const TAX = {
+  WEALTH_TAX_THRESHOLD: 10000000n, // 1,000만원 초과분에 대해서만 부유세 부과
+  WEALTH_TAX_DAILY_RATE: 0.002,    // 하루 0.2% (기본 공제 후)
+  TRADE_FEE_RATE: 0.003            // 주식 거래 수수료 0.3%
+};
+
 function findBusiness(key) {
   return BUSINESS.CATALOG.find((item) => item.key === key) || null;
 }
@@ -88,23 +116,15 @@ function businessBaseIncome(def, level) {
   return Math.floor(Number(def.incomePerMin) * Math.pow(BUSINESS.INCOME_GROWTH, lv - 1));
 }
 
-/**
- * 🌐 거시경제 국면에 따른 사업 수익성 배율 (Macroeconomic Business Multiplier)
- * - 🚀 SUPER_BULL: 1.35x (+35% 대호황 소비 파티)
- * - 📈 BULL: 1.15x (+15% 호황기 매출 신장)
- * - ⚖️ NORMAL: 1.00x (표준 정상 경기)
- * - 📉 RECESSION: 0.85x (-15% 경기 침체 소비 위축)
- * - 🌪️ CRASH: 0.70x (-30% 금융 위기 불황)
- */
 function getRegimeBusinessMultiplier() {
   try {
     const { getCurrentMarketRegime } = require('./stockEngine');
     const regime = getCurrentMarketRegime();
     if (!regime) return 1.0;
-    if (regime.type === 'SUPER_BULL' || regime.id === 'BOOM') return 1.35;
-    if (regime.type === 'BULL' || regime.drift > 0) return 1.15;
-    if (regime.type === 'CRASH') return 0.70;
-    if (regime.type === 'RECESSION' || regime.drift < 0) return 0.85;
+    if (regime.type === 'SUPER_BULL' || regime.id === 'BOOM') return 1.30;
+    if (regime.type === 'BULL' || regime.drift > 0) return 1.12;
+    if (regime.type === 'CRASH') return 0.75;
+    if (regime.type === 'RECESSION' || regime.drift < 0) return 0.88;
     return 1.0;
   } catch (e) {
     return 1.0;
@@ -123,7 +143,9 @@ function businessIncomePerMin(def, level, staff, hqLevel) {
   const base = businessBaseIncome(def, level);
   const regimeMult = getRegimeBusinessMultiplier();
   const gross = Math.floor(base * (1 + BUSINESS.STAFF_BONUS * st) * (1 + BUSINESS.HQ_BONUS * hq) * regimeMult);
-  return Math.max(0, gross - businessWagePerMin(def, level, st));
+  const netBeforeMaintenance = Math.max(0, gross - businessWagePerMin(def, level, st));
+  // 15% 유지비 제외 실수령액
+  return Math.floor(netBeforeMaintenance * (1 - BUSINESS.MAINTENANCE_RATE));
 }
 
 function businessUpgradeCost(def, currentLevel) {
@@ -149,16 +171,15 @@ function businessPending(def, level, lastCollectAt, nowMs, staff, hqLevel, elaps
     const last = lastCollectAt ? new Date(lastCollectAt).getTime() : (nowMs || Date.now());
     elapsedMin = Math.max(0, ((nowMs || Date.now()) - last) / 60000);
   }
-  // 1분 미만 경과 시 0원 (연속 수금 매크로 방지)
   if (elapsedMin < 1) return 0;
   const capped = Math.min(BUSINESS.COLLECT_CAP_MIN, elapsedMin);
   return Math.floor(businessIncomePerMin(def, level, staff, hqLevel) * capped);
 }
 
 const STOCK = {
-  MAX_EVENT_IMPACT: 0.06,
-  MAX_TICK_DELTA: 0.08,
-  NEWS_CHANCE: 0.20,
+  MAX_EVENT_IMPACT: 0.03,
+  MAX_TICK_DELTA: 0.035,
+  NEWS_CHANCE: 0.15,
   HOURS_PER_YEAR: 365 * 24
 };
 
@@ -250,94 +271,117 @@ function netWorthPercents(cash, bank, stockVal) {
   return { cash: cashPct, bank: bankPct, stock: Math.max(0, 100 - cashPct - bankPct) };
 }
 
-function subsidyStatus(cash, bank, stockVal) {
-  const liquid = safeBigInt(cash) + safeBigInt(bank);
-  const net = liquid + safeBigInt(stockVal);
-  const isBroke = liquid < BigInt(SUBSIDY.BROKE_LIQUID);
-  const eligible = net < BigInt(SUBSIDY.WEALTH_CAP);
-  return { liquid, net, isBroke, eligible };
+const NET_WORTH_SQL = `(CAST(u.cash AS DECIMAL(65,0)) + CAST(u.bank AS DECIMAL(65,0)) + CAST(ROUND(COALESCE((SELECT SUM(us.amount * s.price) FROM user_stocks us JOIN stocks s ON us.stock_id = s.stock_id WHERE us.user_id = u.discord_id AND us.amount > 0), 0)) AS DECIMAL(65,0)))`;
+const STOCK_VALUE_SQL = `CAST(ROUND(COALESCE(SUM(us.amount * s.price), 0)) AS DECIMAL(65,0))`;
+
+function clampStockDelta(eventDelta, rawDelta) {
+  const sum = Number(eventDelta || 0) + Number(rawDelta || 0);
+  return Math.max(-STOCK.MAX_TICK_DELTA, Math.min(STOCK.MAX_TICK_DELTA, sum));
 }
 
-function allowedClicksInWindow(requested, elapsedMs) {
-  const want = Math.min(
-    CLICKER.MAX_CLICKS_PER_REQUEST,
-    Math.max(1, parseInt(requested, 10) || 1)
-  );
-  const elapsed = Number(elapsedMs);
-  if (!Number.isFinite(elapsed) || elapsed < 0) return 0;
-  const byTime = Math.floor(elapsed / CLICKER.MIN_MS_PER_CLICK);
-  return Math.min(want, Math.max(0, byTime));
+function hourlyDividendForHolding(price, amount, yieldPercent) {
+  const { mulPriceAmount } = require('./moneyScale');
+  const val = mulPriceAmount(price, amount);
+  if (val <= 0n) return 0n;
+  const yearly = (val * BigInt(Math.round((Number(yieldPercent) || 0) * 100))) / 10000n;
+  return yearly / BigInt(STOCK.HOURS_PER_YEAR || (365 * 24));
 }
 
-const STOCK_VALUE_SQL = 'CAST(ROUND(COALESCE(SUM(us.amount * s.price), 0)) AS DECIMAL(65,0))';
-const NET_WORTH_SQL = '(CAST(u.cash AS DECIMAL(65,0)) + CAST(u.bank AS DECIMAL(65,0)) + ' + STOCK_VALUE_SQL + ')';
-
-function pickRandom(list) {
-  return list[Math.floor(Math.random() * list.length)];
+function scaleGambleMultiplier(baseMult) {
+  let dynMult = 1.0;
+  try {
+    const { getDynamicSettings } = require('./economyBalancer');
+    const dyn = getDynamicSettings();
+    if (dyn && Number.isFinite(Number(dyn.gamblePayoutMultiplier))) {
+      dynMult = Number(dyn.gamblePayoutMultiplier);
+    }
+  } catch (e) {}
+  return baseMult * dynMult;
 }
 
-function spinSlot() {
-  const s1 = pickRandom(SLOT_SYMBOLS);
-  const s2 = pickRandom(SLOT_SYMBOLS);
-  const s3 = pickRandom(SLOT_SYMBOLS);
-  let multiplier = 0;
-  if (s1 === s2 && s2 === s3) {
-    if (s1 === '7️⃣') multiplier = 50;
-    else if (s1 === '💎') multiplier = 20;
-    else if (s1 === '🔔') multiplier = 10;
-    else multiplier = 10;
-  } else if (s1 === s2 || s2 === s3 || s1 === s3) {
-    multiplier = 1.5;
-  }
-  return { reels: [s1, s2, s3], multiplier, isWin: multiplier > 0 };
+function flipCoin(choice) {
+  const outcome = Math.random() < 0.5 ? '앞' : '뒤';
+  const won = choice === outcome;
+  return { outcome, won, multiplier: won ? COIN_WIN_MULT : 0 };
 }
 
-function scratchLottery() {
-  const r1 = pickRandom(LOTTERY_SYMBOLS);
-  const r2 = pickRandom(LOTTERY_SYMBOLS);
-  const r3 = pickRandom(LOTTERY_SYMBOLS);
-  let multiplier = 0;
-  if (r1 === r2 && r2 === r3) {
-    if (r1 === '💎') multiplier = 40;
-    else if (r1 === '7️⃣') multiplier = 20;
-    else if (r1 === '🦆') multiplier = 12;
-    else if (r1 === '💰') multiplier = 8;
-    else multiplier = 4;
-  } else if (r1 === r2 || r2 === r3 || r1 === r3) {
-    multiplier = 1.2;
-  }
-  return { symbols: [r1, r2, r3], multiplier, isWin: multiplier > 0 };
-}
-
-function spinRoulette() {
-  const rand = Math.floor(Math.random() * 100);
-  if (rand < 6) return { color: 'GREEN', emoji: '🟢 GREEN', winMult: 15 };
-  if (rand < 53) return { color: 'RED', emoji: '🔴 RED', winMult: 2 };
-  return { color: 'BLACK', emoji: '⚫ BLACK', winMult: 2 };
-}
-
-function flipCoin() {
-  return { result: Math.random() < 0.5 ? '앞면' : '뒷면' };
-}
-
-function rollHighLow() {
+function rollHighLow(choice) {
   const roll = Math.floor(Math.random() * 100) + 1;
+  let won = false;
   let multiplier = 0;
-  if (roll >= 90) multiplier = 3.5;
-  else if (roll >= 60) multiplier = 1.8;
-  return { roll, multiplier, isWin: multiplier > 0 };
+
+  // 1~100 주사위: 90 이상 3.5배, 60 이상 1.8배, 60 미만 꽝
+  if (roll >= 90) {
+    won = true;
+    multiplier = 3.5;
+  } else if (roll >= 60) {
+    won = true;
+    multiplier = 1.8;
+  } else {
+    won = false;
+    multiplier = 0;
+  }
+
+  // 선택형(high/low) 배팅도 호환 지원
+  if (choice === 'high') {
+    won = roll >= 51;
+    multiplier = won ? DICE_WIN_MULT : 0;
+  } else if (choice === 'low') {
+    won = roll <= 50;
+    multiplier = won ? DICE_WIN_MULT : 0;
+  }
+
+  return { roll, isWin: won, won, multiplier };
+}
+
+function spinRoulette(betTypeOrChoice, betValue) {
+  const number = Math.floor(Math.random() * 37); // 0-36
+  const isRed = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36].includes(number);
+  const color = number === 0 ? 'GREEN' : (isRed ? 'RED' : 'BLACK');
+  const emoji = color === 'GREEN' ? '🟢' : (color === 'RED' ? '🔴' : '⚫');
+
+  let won = false;
+  let multiplier = 0;
+  const winMult = color === 'GREEN' ? 15 : 2;
+
+  // 단일 인자 호출 (예: spinRoulette('RED') or spinRoulette('BLACK'))
+  if (!betValue && typeof betTypeOrChoice === 'string') {
+    const uc = betTypeOrChoice.toUpperCase();
+    if (['RED', 'BLACK', 'GREEN'].includes(uc)) {
+      won = uc === color;
+      multiplier = won ? winMult : 0;
+      return { number, color, emoji, winMult, isWin: won, won, multiplier };
+    }
+  }
+
+  const betType = betTypeOrChoice;
+  if (betType === 'color' && String(betValue).toUpperCase() === color) {
+    won = true;
+    multiplier = color === 'GREEN' ? 35 : 1.95;
+  } else if (betType === 'number' && Number(betValue) === number) {
+    won = true;
+    multiplier = 35;
+  } else if (betType === 'even' && number > 0 && number % 2 === 0) {
+    won = true;
+    multiplier = 1.95;
+  } else if (betType === 'odd' && number % 2 === 1) {
+    won = true;
+    multiplier = 1.95;
+  }
+  return { number, color, emoji, winMult, isWin: won, won, multiplier };
 }
 
 const BJ_SUITS = ['♠', '♥', '♦', '♣'];
-const BJ_VALUES = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const BJ_RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 
 function createBlackjackDeck() {
   const deck = [];
-  for (const suit of BJ_SUITS) {
-    for (const value of BJ_VALUES) {
-      deck.push({ suit, value });
+  for (const s of BJ_SUITS) {
+    for (const r of BJ_RANKS) {
+      deck.push(`${s}${r}`);
     }
   }
+  // Fisher-Yates 셔플
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -345,77 +389,118 @@ function createBlackjackDeck() {
   return deck;
 }
 
+function parseCardRank(card) {
+  if (!card || card === '🂠') return '';
+  if (typeof card === 'object' && card.value) return card.value;
+  const str = String(card).trim();
+  return str.replace(/^[♠️♥️♦️♣️♠♥♦♣]/, '');
+}
+
 function blackjackScore(cards) {
-  let score = 0;
+  if (!Array.isArray(cards)) return 0;
+  let total = 0;
   let aces = 0;
-  for (const card of cards) {
-    if (card.value === 'A') {
+  for (const c of cards) {
+    if (!c || c === '🂠') continue;
+    const rank = parseCardRank(c);
+    if (rank === 'A') {
       aces += 1;
-      score += 11;
-    } else if (['K', 'Q', 'J'].includes(card.value)) {
-      score += 10;
+      total += 11;
+    } else if (['K', 'Q', 'J', '10'].includes(rank)) {
+      total += 10;
     } else {
-      score += parseInt(card.value, 10);
+      const num = parseInt(rank, 10);
+      total += isNaN(num) ? 10 : num;
     }
   }
-  while (score > 21 && aces > 0) {
-    score -= 10;
+  while (total > 21 && aces > 0) {
+    total -= 10;
     aces -= 1;
   }
-  return score;
+  return total;
 }
 
 function formatBlackjackCard(card) {
-  return `${card.suit}${card.value}`;
+  if (!card || card === '🂠') return '🂠';
+  if (typeof card === 'object' && card.suit && card.value) {
+    return `${card.suit}${card.value}`;
+  }
+  return String(card);
 }
 
 function dealerPlayBlackjack(deck, dealerHand) {
-  while (blackjackScore(dealerHand) < 17) {
+  while (blackjackScore(dealerHand) < 17 && deck.length > 0) {
     dealerHand.push(deck.pop());
   }
-  return dealerHand;
 }
 
-function getGamblePayoutMultiplier() {
-  try {
-    const { getDynamicSettings } = require('./economyBalancer');
-    const dyn = getDynamicSettings();
-    const mult = Number(dyn && dyn.gamblingPayoutMultiplier);
-    if (Number.isFinite(mult) && mult > 0) return mult;
-  } catch (e) {}
-  return 1;
+function spinSlot() {
+  const s1 = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)];
+  const s2 = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)];
+  const s3 = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)];
+  const line = [s1, s2, s3];
+  
+  let multiplier = 0;
+  let won = false;
+  if (s1 === s2 && s2 === s3) {
+    won = true;
+    if (s1 === '7️⃣') multiplier = 50;
+    else if (s1 === '💎') multiplier = 25;
+    else if (s1 === '🔔') multiplier = 15;
+    else multiplier = 8;
+  } else if (s1 === s2 || s2 === s3 || s1 === s3) {
+    won = true;
+    multiplier = 1.5;
+  }
+  return { line, reels: line, slots: line, displayReels: line, isWin: won, won, multiplier };
 }
 
-function scaleGambleMultiplier(baseMult) {
-  const base = Number(baseMult);
-  if (!Number.isFinite(base) || base <= 0) return 0;
-  if (base === 1) return 1;
-  const scaled = base * getGamblePayoutMultiplier();
-  if (!Number.isFinite(scaled) || scaled <= 0) return 0;
-  return scaled;
+function scratchLottery() {
+  const s1 = LOTTERY_SYMBOLS[Math.floor(Math.random() * LOTTERY_SYMBOLS.length)];
+  const s2 = LOTTERY_SYMBOLS[Math.floor(Math.random() * LOTTERY_SYMBOLS.length)];
+  const s3 = LOTTERY_SYMBOLS[Math.floor(Math.random() * LOTTERY_SYMBOLS.length)];
+  const symbols = [s1, s2, s3];
+  
+  let multiplier = 0;
+  let won = false;
+  if (s1 === s2 && s2 === s3) {
+    won = true;
+    if (s1 === '7️⃣') multiplier = 77;
+    else if (s1 === '💎') multiplier = 30;
+    else if (s1 === '💰') multiplier = 20;
+    else if (s1 === '🦆') multiplier = 15;
+    else multiplier = 10;
+  } else if (s1 === s2 || s2 === s3 || s1 === s3) {
+    won = true;
+    multiplier = 2.0;
+  }
+  return { symbols, reels: symbols, displayReels: symbols, isWin: won, won, multiplier };
 }
 
-function clampStockDelta(eventBoost, totalDelta) {
-  const event = Math.max(-STOCK.MAX_EVENT_IMPACT, Math.min(STOCK.MAX_EVENT_IMPACT, Number(eventBoost) || 0));
-  const total = event + (Number(totalDelta) || 0) - (Number(eventBoost) || 0);
-  return Math.max(-STOCK.MAX_TICK_DELTA, Math.min(STOCK.MAX_TICK_DELTA, total));
+function subsidyStatus(cash, bank, stockVal) {
+  const net = computeNetWorth(cash, bank, stockVal);
+  const eligible = net <= BigInt(SUBSIDY.MAX_NET_WORTH);
+  return {
+    net,
+    eligible,
+    isBroke: (safeBigInt(cash) + safeBigInt(bank)) < 5000n
+  };
 }
 
-function hourlyDividendPerShare(price, dividendYield) {
-  const yieldRate = Number(dividendYield || 0) / 100;
-  if (yieldRate <= 0) return 0;
-  return (Number(price) * yieldRate) / STOCK.HOURS_PER_YEAR;
-}
-
-function hourlyDividendForHolding(price, amount, dividendYield) {
-  const yieldNum = Number(dividendYield || 0);
-  if (!Number.isFinite(yieldNum) || yieldNum <= 0) return 0n;
-  const { amountToUnits } = require('./moneyScale');
-  const p = safeBigInt(price);
-  const units = amountToUnits(amount);
-  const yieldBps = BigInt(Math.round(yieldNum * 100));
-  if (p <= 0n || units <= 0n || yieldBps <= 0n) return 0n;
-  return (p * units * yieldBps) / (100000000n * BigInt(STOCK.HOURS_PER_YEAR));
+function allowedClicksInWindow(requested, elapsedMs) {
+  if (Array.isArray(requested)) {
+    const now = arguments[1] || Date.now();
+    const windowMs = arguments[2] || 1000;
+    const maxHits = arguments[3] || 25;
+    const cutoff = now - windowMs;
+    const recent = requested.filter(t => t >= cutoff);
+    return recent.length < maxHits ? (maxHits - recent.length) : 0;
+  }
+  const req = Math.max(0, parseInt(requested, 10) || 0);
+  if (req <= 0) return 0;
+  const ms = Math.max(CLICKER.MIN_MS_PER_CLICK, Number(elapsedMs) || CLICKER.MIN_MS_PER_CLICK);
+  const maxPossible = Math.max(1, Math.floor(ms / CLICKER.MIN_MS_PER_CLICK) * 2);
+  return Math.min(req, maxPossible, CLICKER.MAX_CLICKS_PER_REQUEST);
 }
 
 module.exports = {
@@ -423,13 +508,42 @@ module.exports = {
   LOAN,
   CLICKER,
   SUBSIDY,
+  DAILY,
+  WORK,
+  TAX,
   BUSINESS,
   STOCK,
+  SLOT_SYMBOLS,
+  LOTTERY_SYMBOLS,
   HORSES,
   COIN_WIN_MULT,
   DICE_WIN_MULT,
-  SLOT_SYMBOLS,
-  LOTTERY_SYMBOLS,
+  NET_WORTH_SQL,
+  STOCK_VALUE_SQL,
+  clampStockDelta,
+  hourlyDividendForHolding,
+  scaleGambleMultiplier,
+  flipCoin,
+  rollHighLow,
+  spinRoulette,
+  spinSlot,
+  scratchLottery,
+  createBlackjackDeck,
+  blackjackScore,
+  formatBlackjackCard,
+  dealerPlayBlackjack,
+  subsidyStatus,
+  allowedClicksInWindow,
+  findBusiness,
+  businessBaseIncome,
+  businessWagePerMin,
+  businessIncomePerMin,
+  businessUpgradeCost,
+  businessStaffHireCost,
+  businessHqCost,
+  businessPending,
+  pickHorseWinner,
+  findHorse,
   clickPower,
   powerUpgradeCost,
   autoPerSec,
@@ -438,32 +552,5 @@ module.exports = {
   evalStockValue,
   sumHoldingValue,
   computeNetWorth,
-  netWorthPercents,
-  subsidyStatus,
-  allowedClicksInWindow,
-  NET_WORTH_SQL,
-  STOCK_VALUE_SQL,
-  spinSlot,
-  scratchLottery,
-  spinRoulette,
-  flipCoin,
-  pickHorseWinner,
-  findHorse,
-  rollHighLow,
-  createBlackjackDeck,
-  blackjackScore,
-  formatBlackjackCard,
-  dealerPlayBlackjack,
-  getGamblePayoutMultiplier,
-  scaleGambleMultiplier,
-  clampStockDelta,
-  hourlyDividendPerShare,
-  hourlyDividendForHolding,
-  findBusiness,
-  businessIncomePerMin,
-  businessUpgradeCost,
-  businessPending,
-  businessStaffHireCost,
-  businessHqCost,
-  businessWagePerMin
+  netWorthPercents
 };

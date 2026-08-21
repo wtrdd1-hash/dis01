@@ -13,6 +13,7 @@ module.exports = {
   name: Events.ClientReady,
   once: true,
   async execute(client, commandsMap) {
+    global.__discordClient = client;
     const guildCount = client.guilds.cache.size;
     const userCount = client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0);
 

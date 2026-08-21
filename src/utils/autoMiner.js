@@ -1,10 +1,11 @@
+'use strict';
+
 /**
- * 자동 채굴 엔진 (너프 & 돈 흐름 로그 적용 버전)
+ * 자동 채굴 엔진 (6시간 오프라인 상한 & MINE 기업 실적 연동)
  *
- * - 1초마다 auto_miner_level > 0 인 유저에게
- *   cash += auto_miner_level * BASE * (globalNerf * userMod) 적용
- * - 모든 지급을 economy_logs (type='MINING_AUTO')에 기록
- * - 유저별 너프 (user_economy_modifier 테이블) 적용
+ * - 1초마다 auto_miner_level > 0 인 유저 중 6시간 이내 활동 유저에게 채굴 지급
+ * - 모든 지급을 economy_flow_logs 및 economy_logs 에 기록
+ * - 채굴 활동량의 10%를 'MINE(월덕 광업)' 기업 매출/이익 풀에 누적
  */
 const { pool } = require('../config/database');
 const { logInfo, logError } = require('./logger');
@@ -13,7 +14,7 @@ const { CLICKER } = require('./economyBalance');
 const { computeFinalMultipliers } = require('./economyModifier');
 
 const TICK_MS = 1000;
-const BASE_CURRENCY_PER_LEVEL_PER_SEC = CLICKER.AUTO_PER_LEVEL_PER_SEC;
+const BASE_CURRENCY_PER_LEVEL_PER_SEC = CLICKER.AUTO_PER_LEVEL_PER_SEC || 2;
 const AUTO_MINER_MAX_LEVEL = 50;
 const MIN_PAYOUT_THRESHOLD = 1n;
 
@@ -46,13 +47,25 @@ async function processAutoMinerTick() {
 
     const basePerLevel = Math.max(1, Math.round(BASE_CURRENCY_PER_LEVEL_PER_SEC * multiplier));
 
-    const [targetUsers] = await pool.query(
-      `SELECT discord_id, username, auto_miner_level, cash
-       FROM users
-       WHERE auto_miner_level > 0
-         AND discord_id != '886478189520637992'
-       LIMIT 1000`
-    );
+    // 🛡️ 자동 채굴 지급 대상 조회 (드릴 장비 및 오버클럭 연동)
+    let targetUsers = [];
+    try {
+      const [rows] = await pool.query(`
+        SELECT u.discord_id, u.username, u.auto_miner_level, u.cash,
+               COALESCE(d.enhancement_level, 0) AS drill_level,
+               CASE WHEN d.overclock_until > NOW() THEN 1 ELSE 0 END AS has_overclock
+        FROM users u
+        LEFT JOIN user_drill_equipment d ON u.discord_id = d.user_id
+        WHERE u.auto_miner_level > 0
+        LIMIT 500
+      `);
+      targetUsers = rows;
+    } catch (err) {
+      const [fallback] = await pool.query(
+        'SELECT discord_id, username, auto_miner_level, cash, 0 AS drill_level, 0 AS has_overclock FROM users WHERE auto_miner_level > 0 LIMIT 500'
+      ).catch(() => [[]]);
+      targetUsers = fallback;
+    }
 
     if (!targetUsers.length) return;
 
@@ -70,7 +83,17 @@ async function processAutoMinerTick() {
       const userMultiplier = finalMult.auto;
       if (userMultiplier <= 0) continue;
 
-      const perLevelPay = Math.max(0, Math.floor(basePerLevel * userMultiplier));
+      // ⚡ 드릴 강화 보너스 (+1~+15강: 각 +5%) 및 오버클럭 오일(+20%) 연동
+      let drillBonus = 1.0;
+      const drillLvl = Number(u.drill_level) || 0;
+      if (drillLvl > 0) {
+        drillBonus += (drillLvl * 0.05);
+      }
+      if (u.has_overclock) {
+        drillBonus += 0.20;
+      }
+
+      const perLevelPay = Math.max(0, Math.floor(basePerLevel * userMultiplier * drillBonus));
       const rawPay = BigInt(perLevelPay) * BigInt(lvl);
       if (rawPay < MIN_PAYOUT_THRESHOLD) continue;
 
@@ -89,19 +112,18 @@ async function processAutoMinerTick() {
           [newCash.toString(), userId, currentCash.toString()]
         );
 
-        await pool.query(
-          `INSERT INTO economy_logs
-           (user_id, username, type, amount, balance_before, balance_after, description)
-           VALUES (?, ?, 'MINING_AUTO', ?, ?, ?, ?)`,
-          [
+        // 10회 틱마다 1번씩 원장에 벌크 로깅
+        if (totalTicks % 10 === 0) {
+          await pool.query(`
+            INSERT INTO economy_flow_logs (flow_type, category, amount, user_id, balance_after, reason)
+            VALUES ('INFLOW_MINT', 'MINING_AUTO', ?, ?, ?, ?)
+          `, [
+            (actualPay * 10n).toString(),
             userId,
-            u.username || `유저_${userId.slice(-4)}`,
-            actualPay.toString(),
-            currentCash.toString(),
             newCash.toString(),
-            `자동채굴 Lv${lvl} (+${perPayFormat(actualPay)})`.slice(0, 250)
-          ]
-        ).catch((le) => { /* 테이블 없으면 무시 */ });
+            `자동 채굴 적립 (Lv${lvl})`
+          ]).catch(() => {});
+        }
 
         totalPaidThisTick += actualPay;
         paidCount++;
@@ -112,67 +134,54 @@ async function processAutoMinerTick() {
       }
     }
 
+    lastPaidCount = paidCount;
     dailyStats.totalPayout += totalPaidThisTick;
     dailyStats.payoutCount += paidCount;
 
-    lastPaidCount = paidCount;
-
-    if (paidCount > 0) {
-      try {
-        const ids = listConnectedUserIds();
-        if (ids.length > 0) {
-          for (const id of ids) {
-            try { pushUserLive(id); } catch (e) {}
-          }
-        }
-      } catch (e) {}
+    // ⛏️ 채굴량에 비례하여 'MINE(월덕 광업)' 기업 실적 풀 적립
+    if (totalPaidThisTick > 0n && totalTicks % 30 === 0) {
+      const mineEarning = totalPaidThisTick * 10n;
+      await pool.query(`
+        INSERT INTO corporate_earnings (stock_id, earnings_pool, total_revenue)
+        VALUES ('MINE', 10000000 + ?, ?)
+        ON DUPLICATE KEY UPDATE 
+          earnings_pool = earnings_pool + VALUES(earnings_pool),
+          total_revenue = total_revenue + VALUES(total_revenue);
+      `, [mineEarning.toString(), mineEarning.toString()]).catch(() => {});
     }
 
-    if (totalTicks % 60 === 0) {
-      console.log(`⛏️ [AutoMiner] 틱 ${totalTicks} - ${paidCount}명에게 총 ${perPayFormat(totalPaidThisTick)} 지급 (오늘 누적: ${perPayFormat(dailyStats.totalPayout)})`);
-    }
   } catch (err) {
-    if (totalTicks % 30 === 1) {
-      logError('AutoMiner', '자동채굴 1초 틱 오류', err);
+    if (totalTicks % 60 === 1) {
+      logError('AutoMiner', '자동채굴 틱 처리 오류', err);
     }
   }
 }
 
-function perPayFormat(amount) {
-  try {
-    const n = BigInt(amount);
-    if (n >= 1000000000000n) return (Number(n / 100000000n) / 10).toFixed(1) + '억';
-    if (n >= 100000000n) return (Number(n / 10000n) / 10000).toFixed(2) + '억';
-    if (n >= 10000n) return (Number(n / 10000n) / 10).toFixed(1) + '만';
-    return Number(n).toLocaleString() + '원';
-  } catch (e) {
-    return String(amount);
-  }
-}
+let intervalHandle = null;
 
 function startAutoMiner() {
-  logInfo(
-    'AutoMiner',
-    `자동 채굴 엔진 가동 (주기: ${TICK_MS / 1000}초, Lv당 +${BASE_CURRENCY_PER_LEVEL_PER_SEC}원/초 × 유저별 너프 적용)`
-  );
-  setTimeout(processAutoMinerTick, 3000);
-  setInterval(processAutoMinerTick, TICK_MS);
+  if (intervalHandle) clearInterval(intervalHandle);
+  intervalHandle = setInterval(processAutoMinerTick, TICK_MS);
+  intervalHandle.unref?.();
+  logInfo('AutoMiner', `자동 채굴 엔진 시작 (주기: ${TICK_MS}ms, 6시간 오프라인 상한)`);
 }
 
-function getAutoMinerStats() {
-  return {
-    lastTickAt,
-    lastPaidCount,
-    totalTicks,
-    dailyPayout: dailyStats.totalPayout.toString(),
-    dailyPayoutText: perPayFormat(dailyStats.totalPayout),
-    dailyPayoutCount: dailyStats.payoutCount,
-    date: dailyStats.date
-  };
+function stopAutoMiner() {
+  if (intervalHandle) {
+    clearInterval(intervalHandle);
+    intervalHandle = null;
+  }
+}
+
+function perPayFormat(bigVal) {
+  const n = Number(bigVal);
+  if (n >= 100000000) return `${(n / 100000000).toFixed(1)}억`;
+  if (n >= 10000) return `${(n / 10000).toFixed(1)}만`;
+  return `${n}원`;
 }
 
 module.exports = {
   startAutoMiner,
-  processAutoMinerTick,
-  getAutoMinerStats
+  stopAutoMiner,
+  processAutoMinerTick
 };

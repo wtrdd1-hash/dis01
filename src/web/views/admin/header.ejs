@@ -9,10 +9,11 @@
   })(window,document,'script','dataLayer','GTM-58KTJGG4');</script>
   <!-- End Google Tag Manager -->
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title><%= pageTitle || '월덕 관리자 관제' %></title>
   <%- typeof appearanceBootScript === 'function' ? appearanceBootScript() : '' %>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="/static/css/app.css">
   <link rel="stylesheet" href="/static/css/dashboard-ux.css">
   <%- typeof appearanceHeadLinks === 'function' ? appearanceHeadLinks() : '' %>
@@ -42,8 +43,14 @@
       overflow-x: hidden;
     }
     
-    /* 레이아웃 & 컨테이너 유동형 자동 조절 */
-    .app-shell { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
+    /* 관리자 전용 레이아웃 */
+    .app-shell.admin-shell {
+      display: flex;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      position: relative;
+    }
     .chat-main.admin-main {
       flex: 1;
       display: flex;
@@ -57,33 +64,89 @@
       flex: 1;
       overflow-y: auto;
       overflow-x: hidden;
-      padding: clamp(12px, 1.5vw, 24px);
+      padding: clamp(12px, 1.8vw, 24px);
+      width: 100%;
+      box-sizing: border-box;
     }
+    /* 관리용 사이드바는 내용(특히 Discord 원본 아바타) 크기에 늘어나지 않게 고정한다. */
+    .admin-shell .channel-sidebar {
+      flex: 0 0 260px;
+      width: 260px;
+      min-width: 260px;
+    }
+    .admin-shell .channel-sidebar .user-panel {
+      flex: 0 0 auto;
+      min-height: 64px;
+      padding: 10px 12px;
+      cursor: default;
+    }
+    .admin-shell .user-avatar-wrap {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
+    }
+    .admin-shell .user-avatar {
+      display: block;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #1f2937;
+    }
+    .admin-shell .user-status-dot {
+      position: absolute;
+      right: -1px;
+      bottom: -1px;
+      width: 11px;
+      height: 11px;
+      border: 2px solid #111827;
+      border-radius: 50%;
+    }
+    .admin-shell .user-status-dot.online { background: #34d399; }
+    .admin-shell .user-meta { min-width: 0; }
+    .admin-shell .user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 800; }
+    .admin-shell .user-tag { color: var(--text-muted); font-size: 11px; }
     .admin-container {
       width: 100%;
-      max-width: 1800px;
+      max-width: 100%;
+      box-sizing: border-box;
       margin: 0 auto;
+    }
+    .admin-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.6);
+      margin: 14px 0;
+    }
+    .admin-table-wrap table {
+      width: 100%;
+      margin-top: 0;
     }
 
     /* 카드 & 컨테이너 */
     .card {
       background-color: var(--card);
       border-radius: 14px;
-      padding: clamp(14px, 1.5vw, 24px);
-      margin-bottom: clamp(14px, 1.5vw, 24px);
+      padding: clamp(16px, 1.8vw, 24px);
+      margin-bottom: 20px;
       border: 1px solid var(--border);
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
       transition: border-color 0.2s ease;
       width: 100%;
+      box-sizing: border-box;
     }
     .card:hover { border-color: rgba(255, 255, 255, 0.12); }
     .card h2 { margin-bottom: 12px; font-size: clamp(1.1rem, 1rem + 0.3vw, 1.35rem); font-weight: 800; color: #f8fafc; letter-spacing: -0.01em; }
     .card h3 { font-size: clamp(0.95rem, 0.9rem + 0.2vw, 1.1rem); font-weight: 700; color: #e2e8f0; }
 
     /* 테이블 유동형 디자인 */
-    table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; font-size: clamp(0.8rem, 0.76rem + 0.15vw, 0.88rem); }
-    th, td { padding: clamp(8px, 0.8vw, 14px) clamp(10px, 1vw, 15px); text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
-    th { color: #94a3b8; font-weight: 700; background-color: rgba(255, 255, 255, 0.02); font-size: clamp(0.72rem, 0.7rem + 0.1vw, 0.8rem); letter-spacing: 0.02em; white-space: nowrap; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: clamp(0.82rem, 0.78rem + 0.15vw, 0.9rem); }
+    th, td { padding: clamp(10px, 0.9vw, 14px) clamp(12px, 1vw, 16px); text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    th { color: #94a3b8; font-weight: 700; background-color: rgba(255, 255, 255, 0.02); font-size: clamp(0.75rem, 0.72rem + 0.1vw, 0.82rem); letter-spacing: 0.02em; white-space: nowrap; }
     tbody tr { transition: background-color 0.12s ease; }
     tbody tr:hover { background-color: rgba(255, 255, 255, 0.035); }
     tbody tr:last-child td { border-bottom: none; }
@@ -126,20 +189,54 @@
     .admin-toast.is-err { background: rgba(127, 29, 29, 0.95); color: #fecaca; border: 1px solid #ef4444; }
     
     /* 사이드바 메뉴 활성화 */
-    .channel-item { transition: all 0.15s ease; border-radius: 6px; margin: 1px 0; }
+    .channel-item { transition: all 0.15s ease; border-radius: 6px; margin: 1px 0; display: flex; align-items: center; text-decoration: none; padding: 8px 12px; color: var(--text-muted); }
     .channel-item:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
     .channel-item.active { background: rgba(99, 102, 241, 0.2) !important; color: #818cf8 !important; font-weight: 800; border-left: 3px solid #6366f1; }
 
-    /* 반응형 화면 미디어 쿼리 */
+    /* 모바일 백드롭 & 반응형 */
+    .mobile-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 90;
+      backdrop-filter: blur(4px);
+    }
+    .mobile-backdrop.open { display: block; }
+    .drawer-toggle {
+      display: none;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border);
+      color: #fff;
+      font-size: 16px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-right: 12px;
+    }
+
     @media (max-width: 1024px) {
-      .channel-sidebar { position: fixed; left: -260px; z-index: 100; transition: left 0.25s ease; height: 100vh; }
-      .channel-sidebar.open { left: 72px; }
+      .channel-sidebar {
+        position: fixed !important;
+        left: -280px !important;
+        top: 0;
+        bottom: 0;
+        z-index: 100 !important;
+        transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        height: 100vh !important;
+        width: 260px !important;
+        background: #111827 !important;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.6);
+      }
+      .channel-sidebar.open { left: 72px !important; }
       .drawer-toggle { display: inline-flex !important; }
     }
     @media (max-width: 768px) {
-      .admin-content { padding: 12px; }
-      .server-rail { width: 56px; }
-      .channel-sidebar.open { left: 56px; }
+      .server-rail { width: 56px !important; min-width: 56px !important; }
+      .channel-sidebar.open { left: 56px !important; width: calc(100vw - 56px) !important; max-width: 280px !important; }
+      .admin-content { padding: 12px !important; }
+      .topbar-actions { gap: 6px !important; }
+      #admin-live-badge span:last-child { display: none; }
     }
   </style>
 
@@ -152,6 +249,20 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function toggleAdminDrawers(type) {
+      const sidebar = document.getElementById('channel-sidebar');
+      const backdrop = document.getElementById('mobile-backdrop');
+      if (sidebar) sidebar.classList.toggle('open');
+      if (backdrop) backdrop.classList.toggle('open');
+    }
+
+    function closeAdminDrawers() {
+      const sidebar = document.getElementById('channel-sidebar');
+      const backdrop = document.getElementById('mobile-backdrop');
+      if (sidebar) sidebar.classList.remove('open');
+      if (backdrop) backdrop.classList.remove('open');
     }
 
     async function adminFetch(url, opts) {
@@ -195,19 +306,28 @@
   <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-58KTJGG4"
   height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <!-- End Google Tag Manager (noscript) -->
+  
   <div class="mobile-backdrop" id="mobile-backdrop" onclick="closeAdminDrawers()"></div>
+  
   <div class="app-shell admin-shell">
+    
+    <!-- 좌측 아이콘 레일 -->
     <nav class="server-rail" aria-label="관리">
       <a href="/" class="server-home" title="월덕 홈">월</a>
       <div class="server-sep"></div>
+      <a href="/shop" class="server-btn" title="🛍️ 명품 상점" style="text-decoration:none; display:flex; align-items:center; justify-content:center; color:#FDE68A;">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 6h-2c0-2.76-2.24-5-5-5S7 3.24 7 6H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-7-3c1.66 0 3 1.34 3 3H9c0-1.66 1.34-3 3-3zm7 17H5V8h14v12zm-7-8c-1.66 0-3-1.34-3-3H7c0 2.76 2.24 5 5 5s5-2.24 5-5h-2c0 1.66-1.34 3-3 3z"/></svg>
+      </a>
       <a href="/admin/users" class="server-btn active" title="관리">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 4v6c0 5-3.4 9.4-8 10-4.6-.6-8-5-8-10V6l8-4z"/></svg>
       </a>
     </nav>
+
+    <!-- 좌측 채널 사이드바 -->
     <aside class="channel-sidebar" id="channel-sidebar">
       <div class="guild-header">
         <span>👑 관리자 관제 센터</span>
-        <button type="button" onclick="closeAdminDrawers()" aria-label="닫기">×</button>
+        <button type="button" onclick="closeAdminDrawers()" aria-label="닫기" style="background:none; border:none; color:#fff; font-size:18px; cursor:pointer;">×</button>
       </div>
       <div class="channel-scroll">
         <div class="channel-cat">🚨 특수 관제</div>
@@ -215,12 +335,20 @@
         
         <div class="channel-cat">📊 자산 & 시장 관제</div>
         <a class="channel-item <%= activeMenu === 'users' ? 'active' : '' %>" href="/admin/users"><span class="channel-hash">#</span>유저-자산</a>
+        <a class="channel-item <%= activeMenu === 'spending' ? 'active' : '' %>" href="/admin/spending" style="color:#a855f7; font-weight:800; background:rgba(168,85,247,0.1); border:1px solid rgba(168,85,247,0.25);">
+          <span class="channel-hash">🛍️</span>소비·외형·제작·하우스
+          <span style="margin-left:auto; padding:1px 5px; border-radius:4px; background:#a855f7; color:#fff; font-size:9px; font-weight:900;">NEW</span>
+        </a>
         <a class="channel-item <%= activeMenu === 'economy' ? 'active' : '' %>" href="/admin/economy"><span class="channel-hash">#</span>자금-흐름</a>
         <a class="channel-item <%= activeMenu === 'stocks' ? 'active' : '' %>" href="/admin/stocks"><span class="channel-hash">#</span>주주-명부</a>
         <a class="channel-item <%= activeMenu === 'tax' ? 'active' : '' %>" href="/admin/tax"><span class="channel-hash">#</span>세금-국고</a>
         <a class="channel-item <%= activeMenu === 'loans' ? 'active' : '' %>" href="/admin/loans"><span class="channel-hash">#</span>대출</a>
         
         <div class="channel-cat">⚙️ 시스템 & 운영</div>
+        <a class="channel-item" href="/admin/announcements" style="color:#fcd34d; font-weight:800; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.25);">
+          <span class="channel-hash">📢</span>공지-팝업
+          <span style="margin-left:auto; padding:1px 5px; border-radius:4px; background:#f59e0b; color:#111827; font-size:9px; font-weight:900;">등록</span>
+        </a>
         <a class="channel-item <%= activeMenu === 'console' ? 'active' : '' %>" href="/admin/console"><span class="channel-hash">#</span>명령-조작</a>
         <a class="channel-item <%= activeMenu === 'security' ? 'active' : '' %>" href="/admin/security"><span class="channel-hash">#</span>보안-차단</a>
         <a class="channel-item <%= activeMenu === 'inquiries' ? 'active' : '' %>" href="/admin/inquiries"><span class="channel-hash">#</span>1:1문의</a>
@@ -240,6 +368,7 @@
       </div>
     </aside>
 
+    <!-- 우측 메인 컨텐츠 영역 -->
     <div class="chat-main admin-main">
       <header class="channel-topbar">
         <button type="button" class="drawer-toggle" onclick="toggleAdminDrawers('channels')" aria-label="메뉴 열기">☰</button>
@@ -247,15 +376,15 @@
           <span class="hash">#</span>
           <h1><%= pageHeader || '관리자 관제' %></h1>
         </div>
-        <div class="topbar-actions" style="display:flex; align-items:center; gap:10px;">
+        <div class="topbar-actions" style="display:flex; align-items:center; gap:10px; margin-left:auto;">
           <div id="admin-live-badge" style="display:flex; align-items:center; gap:6px; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.35); padding:4px 10px; border-radius:20px; font-size:0.75rem; color:#34d399; font-weight:700;">
             <span style="width:7px; height:7px; background:#10b981; border-radius:50%; display:inline-block; box-shadow:0 0 8px #10b981;"></span>
             <span>실시간 자동 동기화 ON</span>
           </div>
-          <a href="/" class="btn-logout" style="text-decoration:none;">← 사이트 홈</a>
-          <a href="/auth/logout" class="btn-logout">로그아웃</a>
+          <a href="/" class="btn-logout" style="text-decoration:none; padding:6px 12px; background:rgba(255,255,255,0.06); border:1px solid var(--border); border-radius:8px; color:#fff; font-size:12px; font-weight:700;">← 사이트 홈</a>
+          <a href="/auth/logout" class="btn-logout" style="text-decoration:none; padding:6px 12px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); border-radius:8px; color:#f87171; font-size:12px; font-weight:700;">로그아웃</a>
         </div>
       </header>
 
-      <main class="admin-content" style="padding: 24px; overflow-y: auto;">
+      <main class="admin-content">
         <div id="admin-action-result" style="display:none; padding:12px 16px; border-radius:8px; margin-bottom:16px; font-weight:600;"></div>

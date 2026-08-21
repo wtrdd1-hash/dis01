@@ -134,6 +134,13 @@ async function getUserLiveSnapshot(userId) {
     loanViewCache.set(id, { data: loan, ts: now });
   }
 
+  let loadout = {};
+  try {
+    const CosmeticLoadoutService = require('../core/economy/CosmeticLoadoutService');
+    const lRes = await CosmeticLoadoutService.getUserLoadout(id);
+    loadout = lRes.loadout || {};
+  } catch (e) {}
+
   const data = {
     cash: cash.toString(),
     bank: bank.toString(),
@@ -146,6 +153,7 @@ async function getUserLiveSnapshot(userId) {
     holdings,
     tax,
     loan,
+    loadout,
     timestamp: now
   };
 
@@ -168,18 +176,8 @@ function emitSnapshot(userId, snapshot) {
 async function pushUserLiveNow(userId, opts = {}) {
   try {
     const id = String(userId);
-    if (opts.force !== true) {
-      const cached = snapshotCache.get(id);
-      if (cached && (Date.now() - cached.ts) < SNAPSHOT_TTL_MS) {
-        const ageMs = Date.now() - cached.ts;
-        if (ageMs >= 80) {
-          emitSnapshot(id, cached.data);
-          return cached.data;
-        }
-      }
-    } else {
-      snapshotCache.delete(id);
-    }
+    // 풀백(pullback/stale overwrite) 현상 원천 방지: 푸시 호출 시 항상 최신 DB 스냅샷을 계산
+    snapshotCache.delete(id);
     const snapshot = await getUserLiveSnapshot(id);
     if (snapshot) emitSnapshot(id, snapshot);
     return snapshot;
@@ -191,13 +189,14 @@ async function pushUserLiveNow(userId, opts = {}) {
 function pushUserLive(userId) {
   if (!userId) return Promise.resolve(null);
   const key = String(userId);
+  snapshotCache.delete(key);
   const existing = pending.get(key);
   if (existing) return existing;
 
   const job = new Promise((resolve) => {
     setTimeout(async () => {
       pending.delete(key);
-      const snap = await pushUserLiveNow(key);
+      const snap = await pushUserLiveNow(key, { force: true });
       resolve(snap);
     }, DEBOUNCE_MS);
   });
@@ -289,7 +288,7 @@ function startLiveSyncGc() {
     if (global.gc && Math.random() < 0.1) {
       try { global.gc(); } catch (e) {}
     }
-  }, gcIntervalMs);
+  }, gcIntervalMs).unref?.();
   console.log(`[LiveSync] 메모리 캐시 GC 시작 (주기 ${gcIntervalMs / 1000}초)`);
 }
 
@@ -308,6 +307,7 @@ module.exports = {
   getSocketSessionUser,
   getUserLiveSnapshot,
   pushUserLive,
+  pushLiveSnapshotToUser: pushUserLive,
   pushUserLiveNow,
   broadcastUserRefresh,
   invalidateUser,

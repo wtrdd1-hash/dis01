@@ -1,0 +1,114 @@
+  <!-- 📱 모바일 전용 반응형 하단 네비게이션 바 -->
+  <nav class="mobile-bottom-nav">
+    <a href="/stocks" class="mob-nav-btn <%= (typeof activePage !== 'undefined' && activePage === 'stocks') ? 'active' : '' %>">
+      <span class="mob-icon">📈</span>
+      <span class="mob-label">주식</span>
+    </a>
+    <a href="/shop" class="mob-nav-btn <%= (typeof activePage !== 'undefined' && activePage === 'shop') ? 'active' : '' %>">
+      <span class="mob-icon">🛍️</span>
+      <span class="mob-label">상점</span>
+    </a>
+    <a href="/casino" class="mob-nav-btn <%= (typeof activePage !== 'undefined' && activePage === 'casino') ? 'active' : '' %>">
+      <span class="mob-icon">🎰</span>
+      <span class="mob-label">게임</span>
+    </a>
+    <a href="/mining" class="mob-nav-btn <%= (typeof activePage !== 'undefined' && activePage === 'mining') ? 'active' : '' %>">
+      <span class="mob-icon">⛏️</span>
+      <span class="mob-label">채굴</span>
+    </a>
+    <a href="/ranking" class="mob-nav-btn <%= (typeof activePage !== 'undefined' && activePage === 'ranking') ? 'active' : '' %>">
+      <span class="mob-icon">🏆</span>
+      <span class="mob-label">랭킹</span>
+    </a>
+    <a href="/plaza" class="mob-nav-btn <%= (typeof activePage !== 'undefined' && activePage === 'plaza') ? 'active' : '' %>" style="color:#fbbf24;">
+      <span class="mob-icon">👑</span>
+      <span class="mob-label">VIP광장</span>
+    </a>
+  </nav>
+
+  <!-- 📢 실시간 소켓 토스트 알림 컨테이너 -->
+  <div id="socket-toast-container" style="position:fixed; bottom:80px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px; pointer-events:none;"></div>
+
+  <footer style="margin-top:auto; padding:24px 16px; text-align:center; color:#64748b; font-size:12px; border-top:1px solid rgba(255,255,255,0.05); display:flex; flex-direction:column; align-items:center; gap:6px;">
+    <div style="display:flex; align-items:center; gap:6px; font-size:11px; color:#34d399;">
+      <span style="width:8px; height:8px; border-radius:50%; background:#34d399; display:inline-block; box-shadow:0 0 8px #34d399;"></span>
+      <span>Socket.IO 실시간 가상 경제 네트워크 연결됨</span>
+    </div>
+    <p>© 2026 월덕 (WTRD) · 실시간 디스코드 가상 경제 플랫폼</p>
+  </footer>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    window.__currentUser = {
+      id: '<%= (typeof user !== "undefined" && user && user.id) ? user.id : "guest" %>',
+      username: '<%= (typeof user !== "undefined" && user && user.username) ? user.username : "여행자" %>',
+      avatar: '<%= (typeof user !== "undefined" && user && user.avatar) ? user.avatar : "https://cdn.discordapp.com/embed/avatars/0.png" %>'
+    };
+
+    // ⚡ Socket.IO 실시간 연동 클라이언트
+    (function initSocketIO() {
+      if (typeof io === 'undefined') return;
+      const socket = io({ transports: ['websocket', 'polling'] });
+      window.__globalSocket = socket;
+
+      socket.on('connect', () => {
+        console.log('⚡ [Socket.IO] Connected to Wolduck Realtime Network (ID: ' + socket.id + ')');
+      });
+
+      // 1. 실시간 주식 시세 업데이트
+      socket.on('market:update', (data) => {
+        if (data && data.stocks && Array.isArray(data.stocks)) {
+          data.stocks.forEach(stock => {
+            const priceEl = document.querySelector(`[data-stock-price="${stock.stock_id}"]`);
+            if (priceEl) {
+              const oldPrice = parseInt(priceEl.innerText.replace(/[^0-9]/g, '')) || 0;
+              const newPrice = Number(stock.price);
+              priceEl.innerText = newPrice.toLocaleString() + '원';
+              priceEl.style.color = newPrice >= oldPrice ? '#34d399' : '#f87171';
+              setTimeout(() => { priceEl.style.color = '#38bdf8'; }, 2000);
+            }
+          });
+        }
+      });
+
+      // 2. 실시간 잔액 동기화
+      socket.on('user:balance_update', (data) => {
+        if (data && data.userId === window.__currentUser.id) {
+          const cashEl = document.getElementById('user-cash-display');
+          const bankEl = document.getElementById('user-bank-display');
+          if (cashEl && data.cash !== undefined) cashEl.innerText = Number(data.cash).toLocaleString() + '원';
+          if (bankEl && data.bank !== undefined) bankEl.innerText = Number(data.bank).toLocaleString() + '원';
+        }
+      });
+
+      // 3. 글로벌 잭팟 및 공지 토스트 알림
+      socket.on('broadcast:jackpot', (data) => {
+        showSocketToast('🎰 ' + (data.message || `${data.username}님이 ${Number(data.prize).toLocaleString()}원 잭팟에 당첨되었습니다!`));
+      });
+
+      function showSocketToast(msg) {
+        const container = document.getElementById('socket-toast-container');
+        if (!container) return;
+        const toast = document.createElement('div');
+        toast.style.background = 'rgba(15, 23, 42, 0.95)';
+        toast.style.border = '1px solid rgba(251, 191, 36, 0.4)';
+        toast.style.boxShadow = '0 10px 30px rgba(0,0,0,0.8), 0 0 15px rgba(251,191,36,0.2)';
+        toast.style.borderRadius = '14px';
+        toast.style.padding = '12px 18px';
+        toast.style.color = '#fff';
+        toast.style.fontSize = '13px';
+        toast.style.fontWeight = '700';
+        toast.style.pointerEvents = 'auto';
+        toast.style.transition = 'all 0.3s ease';
+        toast.innerText = msg;
+        container.appendChild(toast);
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transform = 'translateY(10px)';
+          setTimeout(() => toast.remove(), 300);
+        }, 4000);
+      }
+    })();
+  </script>
+</body>
+</html>

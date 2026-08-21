@@ -3,6 +3,11 @@
  * 관리자 페이지 라우터 (HTML 렌더링 전용)
  *
  * server.js 안에 인라인으로 박혀 있던 9개 관리자 페이지 핸들러를 분리.
+'use strict';
+/**
+ * 관리자 페이지 라우터 (HTML 렌더링 전용)
+ *
+ * server.js 안에 인라인으로 박혀 있던 9개 관리자 페이지 핸들러를 분리.
  * - /admin/users       : 유저 자산/차단 관리
  * - /admin/economy     : 실시간 자금 흐름
  * - /admin/audit       : 특정 유저 정밀 관제
@@ -32,6 +37,7 @@ function createAdminPageRoutes(deps) {
     mulPriceAmount,
     NET_WORTH_SQL,
     getBannedIpsList,
+    getWhitelistedIpsList,
     lookupIp,
     getFlagEmoji
   } = deps;
@@ -43,6 +49,18 @@ function createAdminPageRoutes(deps) {
     app.get('/admin', (req, res) => res.redirect('/admin/users'));
     // /admin/admins 진입 시 /admin/users 의 관리자 계정 섹션으로 안내
     app.get('/admin/admins', requireAdminWeb, (req, res) => res.redirect('/admin/users#admin-users'));
+    // 공지 등록 화면을 관리자 메뉴에서 바로 열 수 있는 고정 진입점
+    app.get('/admin/announcements', requireAdminWeb, (req, res) => res.redirect('/admin/console#announcement-manager'));
+
+    // 🛍️ 가상경제 소비 및 외형/제작/덕하우스 관리자 대시보드
+    app.get('/admin/spending', requireAdminWeb, (req, res) => {
+      res.render('admin/spending', {
+        adminUser: req.session?.user || req.session?.localUser || {},
+        pageTitle: '가상경제 소비 & 외형 & 덕하우스 전권 관리',
+        pageHeader: '가상경제 소비 & 외형 & 덕하우스 관리',
+        activeMenu: 'spending'
+      });
+    });
 
     // ───────────────────────────────────────────
     // 1. 유저 자산 페이지 (/admin/users)
@@ -83,7 +101,7 @@ function createAdminPageRoutes(deps) {
         const taxKing = await getTaxKing();
         const taxKingId = taxKing ? String(taxKing.userId) : null;
 
-        const renderUserRows = (usersList) => {
+                const renderUserRows = (usersList) => {
           let html = '';
           const now = Date.now();
           for (const u of usersList) {
@@ -122,10 +140,10 @@ function createAdminPageRoutes(deps) {
                   </div>
                   <code style="font-size:0.72rem; color:#64748b;">${escapeHtml(u.discord_id)}</code>
                 </td>
-                <td style="text-align:right; color:#34d399; font-weight:800; font-size:0.92rem;">${formatMoney(cash)}</td>
-                <td style="text-align:right; color:#60a5fa; font-weight:700;">${formatMoney(bank)}</td>
-                <td style="text-align:right; color:#fbbf24; font-weight:700;">${formatMoney(stockVal)}</td>
-                <td style="text-align:right; font-weight:800; color:#f59e0b; font-size:0.95rem;">${formatMoney(net)}</td>
+                <td style="text-align:right; color:#34d399; font-weight:800; font-size:0.92rem; white-space:nowrap;" title="${formatMoney(cash)}">${formatMoneyCompact(cash)}</td>
+                <td style="text-align:right; color:#60a5fa; font-weight:700; white-space:nowrap;" title="${formatMoney(bank)}">${formatMoneyCompact(bank)}</td>
+                <td style="text-align:right; color:#fbbf24; font-weight:700; white-space:nowrap;" title="${formatMoney(stockVal)}">${formatMoneyCompact(stockVal)}</td>
+                <td style="text-align:right; font-weight:800; color:#f59e0b; font-size:0.95rem; white-space:nowrap;" title="${formatMoney(net)}">${formatMoneyCompact(net)}</td>
                 <td style="text-align:center; white-space:nowrap;">
                   <button type="button" onclick="openQuickMoneyModal('${escapeJsStr(u.discord_id)}', '${escapeJsStr(u.username)}')" style="background:#059669; border:1px solid #10b981; color:#fff; padding:4px 8px; border-radius:6px; font-size:0.75rem; cursor:pointer; font-weight:700; margin-right:4px;">💵 자금</button>
                   <button type="button" onclick="openUserEditModal('${escapeJsStr(u.discord_id)}', '${escapeJsStr(u.username)}')" style="background:#4f46e5; border:1px solid #818cf8; color:#fff; padding:4px 8px; border-radius:6px; font-size:0.75rem; cursor:pointer; font-weight:700; margin-right:4px;">✏️ 수정</button>
@@ -151,7 +169,7 @@ function createAdminPageRoutes(deps) {
       }
     });
 
-    // ───────────────────────────────────────────
+       // ───────────────────────────────────────────
     // 1-2. 실시간 자금 흐름 페이지 (/admin/economy)
     // ───────────────────────────────────────────
     app.get('/admin/economy', requireAdminWeb, async (req, res) => {
@@ -237,24 +255,26 @@ function createAdminPageRoutes(deps) {
             const after = safeBigInt(e.balance_after);
             economyRowsHtml += `
               <tr data-type="${escapeHtml(e.type || '')}">
-                <td style="color:#64748b; font-weight:700; font-size:0.8rem;">#${e.id}</td>
+                <td style="color:#64748b; font-weight:700; font-size:0.8rem; white-space:nowrap;">#${e.id}</td>
                 <td style="font-size:0.8rem; color:#94a3b8; white-space:nowrap;">${formatKstDateTime(e.created_at)}</td>
-                <td>
+                <td style="white-space:nowrap;">
                   <div style="font-weight:700; color:#f1f5f9;">@${escapeHtml(e.username || '유저')}</div>
                   <code style="font-size:0.7rem; color:#64748b;">${escapeHtml(e.user_id)}</code>
                 </td>
-                <td>${getTypeBadge(e.type)}</td>
-                <td style="text-align:right;">
-                  <div style="font-weight:800; font-size:0.95rem; color:${isPlus ? '#34d399' : '#f87171'};">${isPlus ? '+' : '-'}${formatMoney(amt)}</div>
+                <td style="white-space:nowrap;">${getTypeBadge(e.type)}</td>
+                <td style="text-align:right; white-space:nowrap;">
+                  <div style="font-weight:800; font-size:0.92rem; color:${isPlus ? '#34d399' : '#f87171'};" title="${formatMoney(amt)}">
+                    ${isPlus ? '+' : '-'}${formatMoneyCompact(amt)}
+                  </div>
                 </td>
                 <td style="text-align:right; white-space:nowrap;">
-                  <div style="font-size:0.78rem; color:#94a3b8;">${formatMoney(before)}</div>
-                  <div style="font-size:0.75rem; color:#64748b;">↓</div>
-                  <div style="font-weight:700; font-size:0.84rem; color:#e2e8f0;">${formatMoney(after)}</div>
+                  <div style="font-size:0.78rem; color:#94a3b8;" title="${formatMoney(before)}">${formatMoneyCompact(before)}</div>
+                  <div style="font-size:0.72rem; color:#64748b;">↓</div>
+                  <div style="font-weight:700; font-size:0.84rem; color:#e2e8f0;" title="${formatMoney(after)}">${formatMoneyCompact(after)}</div>
                 </td>
-                <td style="color:#cbd5e1; font-size:0.82rem; max-width:360px; line-height:1.4;">${escapeHtml(e.description || '-')}</td>
+                <td style="color:#cbd5e1; font-size:0.82rem; word-break:break-word; min-width:180px; max-width:380px; line-height:1.4;">${escapeHtml(e.description || '-')}</td>
                 <td style="text-align:center; white-space:nowrap;">
-                  <button type="button" onclick="openQuickMoneyModal('${escapeJsStr(e.user_id)}', '${escapeJsStr(e.username || '유저')}')" style="background:#059669; border:1px solid #10b981; color:#fff; padding:4px 8px; border-radius:6px; font-size:0.75rem; cursor:pointer; font-weight:700; transition:all 0.15s;">💵 자금</button>
+                  <button type="button" onclick="openQuickMoneyModal('${escapeJsStr(e.user_id)}', '${escapeJsStr(e.username || '유저')}')" style="background:#059669; border:1px solid #10b981; color:#fff; padding:5px 10px; border-radius:6px; font-size:0.75rem; cursor:pointer; font-weight:700; transition:all 0.15s;">💵 자금</button>
                 </td>
               </tr>`;
           }
@@ -273,7 +293,7 @@ function createAdminPageRoutes(deps) {
       }
     });
 
-    // ───────────────────────────────────────────
+ // ───────────────────────────────────────────
     // 2. dlhaslflkgh 정밀 관제 페이지 (/admin/audit)
     // ───────────────────────────────────────────
     app.get('/admin/audit', requireAdminWeb, async (req, res) => {
@@ -607,7 +627,7 @@ function createAdminPageRoutes(deps) {
     // ───────────────────────────────────────────
     app.get('/admin/security', requireAdminWeb, async (req, res) => {
       try {
-        const bannedList = deps.getBannedIpsList();
+        const bannedList = deps.getBannedIpsList ? deps.getBannedIpsList() : [];
         let bannedRowsHtml = '';
         if (!bannedList.length) {
           bannedRowsHtml = '<tr><td colspan="6" style="text-align:center; color:#9ca3af;">차단된 IP가 없습니다.</td></tr>';
@@ -622,6 +642,25 @@ function createAdminPageRoutes(deps) {
                 <td>${escapeHtml(String(ban.remainingMinutes))}분</td>
                 <td>${escapeHtml(ban.bannedAt || '-')}</td>
                 <td><button type="button" onclick="unbanFromLog('${escapeJsStr(ban.ip)}')" class="btn-rollback">해제</button></td>
+              </tr>`;
+          }
+        }
+
+        const whitelist = deps.getWhitelistedIpsList ? await deps.getWhitelistedIpsList() : [];
+        let whitelistRowsHtml = '';
+        if (!whitelist.length) {
+          whitelistRowsHtml = '<tr><td colspan="5" style="text-align:center; color:#9ca3af;">등록된 화이트리스트 IP가 없습니다.</td></tr>';
+        } else {
+          for (const item of whitelist) {
+            const geo = item.ip ? deps.lookupIp(item.ip) : { flag: '🌐', countryName: '' };
+            const isProtected = item.ip === '127.0.0.1' || item.ip === '::1' || item.ip === 'localhost';
+            whitelistRowsHtml += `
+              <tr>
+                <td class="cell-mono"><code style="color:#34d399; font-weight:700;">${escapeHtml(item.ip)}</code></td>
+                <td>${geo.flag} ${escapeHtml(geo.countryName || '-')}</td>
+                <td>${escapeHtml(item.description || '-')}</td>
+                <td style="font-size:0.78rem; color:#94a3b8;">${item.created_at ? formatKstDateTime(item.created_at) : '-'}</td>
+                <td>${isProtected ? '<span style="color:#9ca3af; font-size:0.75rem;">보호됨</span>' : `<button type="button" onclick="removeWhitelist('${escapeJsStr(item.ip)}')" class="btn-rollback" style="background:#475569; color:#f1f5f9;">삭제</button>`}</td>
               </tr>`;
           }
         }
@@ -651,6 +690,8 @@ function createAdminPageRoutes(deps) {
           adminUser: req.adminUser,
           bannedList,
           bannedRowsHtml,
+          whitelistList: whitelist,
+          whitelistRowsHtml,
           secEventRowsHtml
         });
       } catch (e) {
@@ -674,29 +715,39 @@ function createAdminPageRoutes(deps) {
           for (const inq of inquiryLogs) {
             const isAnswered = inq.status === 'ANSWERED';
             const statusHtml = isAnswered
-              ? `<span style="background:rgba(16,185,129,0.15); color:#34d399; padding:3px 8px; border-radius:6px; font-weight:700; font-size:0.75rem;">답변완료</span>`
-              : `<span style="background:rgba(239,68,68,0.15); color:#fca5a5; padding:3px 8px; border-radius:6px; font-weight:700; font-size:0.75rem;">답변대기</span>`;
+              ? `<span style="display:inline-block; background:rgba(16,185,129,0.15); color:#34d399; border:1px solid rgba(16,185,129,0.3); padding:4px 10px; border-radius:8px; font-weight:800; font-size:0.75rem;">답변완료</span>`
+              : `<span style="display:inline-block; background:rgba(239,68,68,0.15); color:#fca5a5; border:1px solid rgba(239,68,68,0.3); padding:4px 10px; border-radius:8px; font-weight:800; font-size:0.75rem;">답변대기</span>`;
 
             const replyFormOrAnswer = isAnswered
-              ? `<div style="background:rgba(16,185,129,0.08); border-left:3px solid #10b981; padding:8px 12px; border-radius:6px; font-size:0.82rem; color:#e2e8f0; white-space:pre-wrap;">${escapeHtml(inq.answer || '')}</div>`
+              ? `<div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); border-left:4px solid #10b981; padding:10px 14px; border-radius:8px; font-size:0.84rem; color:#f1f5f9; line-height:1.6; white-space:pre-wrap; word-break:break-word;">${escapeHtml(inq.answer || '')}</div>
+                 <div style="font-size:0.72rem; color:#64748b; margin-top:5px;">답변자: ${escapeHtml(inq.answered_by || '관리자')} · ${formatKstDateTime(inq.answered_at)}</div>`
               : `
-                <div style="display:flex; flex-direction:column; gap:6px;">
-                  <textarea id="inquiry-ans-${inq.id}" placeholder="답변을 입력하세요 (제출 시 유저에게 Discord DM 자동 전송)" style="width:100%; min-height:50px; background:#111827; border:1px solid var(--border); color:#fff; padding:6px 10px; border-radius:8px; font-size:0.8rem; font-family:inherit;"></textarea>
-                  <button type="button" onclick="submitInquiryAnswer(${inq.id})" style="background:linear-gradient(135deg, #6366f1, #8b5cf6); border:none; color:#fff; font-weight:700; font-size:0.8rem; padding:6px 12px; border-radius:6px; cursor:pointer; align-self:flex-start;">💬 답변 전송 & DM 발송</button>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <textarea id="inquiry-ans-${inq.id}" placeholder="답변을 입력하세요 (작성 완료 시 유저에게 Discord DM 자동 전송)" style="width:100%; min-height:75px; background:#030712; border:1px solid rgba(255,255,255,0.18); color:#f8fafc; padding:8px 12px; border-radius:8px; font-size:0.82rem; font-family:inherit; line-height:1.5; resize:vertical;"></textarea>
+                  <button type="button" onclick="submitInquiryAnswer(${inq.id})" style="background:linear-gradient(135deg, #4f46e5, #7c3aed); border:none; color:#fff; font-weight:800; font-size:0.8rem; padding:8px 16px; border-radius:8px; cursor:pointer; align-self:flex-start; display:inline-flex; align-items:center; gap:6px; box-shadow:0 2px 8px rgba(79,70,229,0.3);">
+                    <span>💬 답변 전송 & DM 발송</span>
+                  </button>
                 </div>`;
 
             inquiryRowsHtml += `
               <tr>
-                <td>#${inq.id}</td>
-                <td style="font-size:0.8rem;">${formatKstDateTime(inq.created_at)}</td>
-                <td><b>@${escapeHtml(inq.username)}</b><br><code style="font-size:0.7rem;">${escapeHtml(inq.user_id)}</code></td>
-                <td>${escapeHtml(inq.category || '일반문의')}</td>
+                <td style="font-weight:700; color:#818cf8; text-align:center;">#${inq.id}</td>
+                <td style="font-size:0.78rem; color:#94a3b8; white-space:nowrap;">${formatKstDateTime(inq.created_at)}</td>
                 <td>
-                  <b>${escapeHtml(inq.title)}</b><br>
-                  <span style="font-size:0.8rem; color:#9ca3af; white-space:pre-wrap;">${escapeHtml(inq.content)}</span>
+                  <div style="font-weight:700; color:#f8fafc;">@${escapeHtml(inq.username)}</div>
+                  <div style="font-size:0.7rem; color:#64748b; font-family:monospace; margin-top:2px;">${escapeHtml(inq.user_id)}</div>
                 </td>
-                <td>${statusHtml}</td>
-                <td style="min-width:260px;">${replyFormOrAnswer}</td>
+                <td>
+                  <span style="display:inline-block; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); padding:3px 8px; border-radius:6px; font-size:0.76rem; color:#cbd5e1; white-space:nowrap;">
+                    ${escapeHtml(inq.category || '일반문의')}
+                  </span>
+                </td>
+                <td style="word-break:break-word; max-width:320px;">
+                  <div style="font-weight:800; color:#e2e8f0; font-size:0.88rem; margin-bottom:4px;">${escapeHtml(inq.title)}</div>
+                  <div style="font-size:0.8rem; color:#94a3b8; line-height:1.5; white-space:pre-wrap; background:rgba(0,0,0,0.25); padding:8px 10px; border-radius:6px; border:1px solid rgba(255,255,255,0.04);">${escapeHtml(inq.content)}</div>
+                </td>
+                <td style="text-align:center;">${statusHtml}</td>
+                <td style="min-width:300px; max-width:380px;">${replyFormOrAnswer}</td>
               </tr>`;
           }
         }

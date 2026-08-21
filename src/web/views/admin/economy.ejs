@@ -90,8 +90,9 @@
   .pagination-btn.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 </style>
 
-<!-- 🌟 자금 흐름 관제 메인 카드 -->
-<div class="card" style="border: 1px solid rgba(52, 211, 153, 0.35); background: #0b1120;">
+<div class="admin-container">
+  <!-- 🌟 자금 흐름 관제 메인 카드 -->
+  <div class="card" style="border: 1px solid rgba(52, 211, 153, 0.35); background: #0b1120; width: 100%;">
   
   <!-- 상단 헤더 & 컨트롤 -->
   <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:16px;">
@@ -272,15 +273,15 @@
   </form>
 
   <!-- 📋 자금 흐름 테이블 -->
-  <div style="overflow-x:auto;">
-    <table class="eco-table">
+  <div class="admin-table-wrap">
+    <table class="eco-table" style="min-width:950px; width:100%;">
       <thead>
         <tr>
-          <th style="width:70px;">번호</th>
-          <th style="width:140px;">시간 (KST)</th>
-          <th style="width:180px;">유저 계정</th>
-          <th style="width:160px;">변동 유형</th>
-          <th style="text-align:right; width:160px;">변동 금액</th>
+          <th style="width:60px;">번호</th>
+          <th style="width:130px;">시간 (KST)</th>
+          <th style="width:160px;">유저 계정</th>
+          <th style="width:130px;">변동 유형</th>
+          <th style="text-align:right; width:130px;">변동 금액</th>
           <th style="text-align:right; width:160px;">잔액 변화 (전 → 후)</th>
           <th>상세 사유 / 비고</th>
           <th style="text-align:center; width:80px;">작업</th>
@@ -320,6 +321,7 @@
       <button type="button" onclick="jumpToPage()" style="background:#374151; border:1px solid var(--border); color:#fff; padding:6px 10px; border-radius:6px; font-weight:700; cursor:pointer;">이동</button>
     </div>
   </div>
+</div>
 </div>
 
 <script>

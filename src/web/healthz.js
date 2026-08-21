@@ -30,6 +30,10 @@ function isBotReady() {
   }
 }
 
+function isBotRequiredForReadiness() {
+  return String(process.env.PROCESS_TYPE || 'all').trim().toLowerCase() !== 'web';
+}
+
 /**
  * 라이브니스 전용. DB/봇이 꺼져 있어도 HTTP 200을 내려
  * Docker healthcheck가 재시작 폭풍을 만들지 않게 한다.
@@ -55,13 +59,15 @@ function registerHealthz(app, pool) {
   app.get('/readyz', async (req, res) => {
     const db = await pingDb(pool, 2000);
     const bot = isBotReady();
-    const ready = db && bot;
+    const botRequired = isBotRequiredForReadiness();
+    const ready = db && (!botRequired || bot);
     res.setHeader('Cache-Control', 'no-store');
     res.status(ready ? 200 : 503).json({
       ok: ready,
       web: true,
       db,
       bot,
+      botRequired,
       uptime: Math.round(process.uptime()),
       startedAt: new Date(startedAt).toISOString(),
       version: getAppVersion(),
@@ -70,4 +76,4 @@ function registerHealthz(app, pool) {
   });
 }
 
-module.exports = { registerHealthz, pingDb, isBotReady };
+module.exports = { registerHealthz, pingDb, isBotReady, isBotRequiredForReadiness };

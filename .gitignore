@@ -16,7 +16,19 @@ wtrdd_vps_key/
 id_*
 *.pem
 *.key
+handoff/
 logs/
+*.tar.gz
+*.zip
+
+# Database backups (contain sensitive user data) — ABSOLUTELY NEVER COMMIT
+backups/
+*.sql
+*.sql.gz
+*.dump
+*.sqlite
+*.sqlite3
+*.bak/*.sql
 *.tar.gz
 *.zip
 
@@ -36,6 +48,12 @@ backups/
 
 # Local backups folder
 .bak/
+
+# Temp & docs
+~$*
+~*
+*.tmp
+*.docx
 
 # Scratch & temporary files
 scratch/

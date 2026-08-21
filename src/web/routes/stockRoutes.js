@@ -183,7 +183,26 @@ function createStockRoutes(getSessionUser) {
       const countDecStr = unitsToAmountStr(tradeUnits);
       const totalTradePrice = mulPriceAmount(stockPrice, countDecStr);
 
-      const taxQuote = quoteTradeTax(session.id, totalTradePrice);
+      let taxQuote = quoteTradeTax(session.id, totalTradePrice);
+
+      // 🎫 수수료 24시간 면제권(card_zero_tax) 보유 확인
+      try {
+        const [invRows] = await pool.query(
+          'SELECT id FROM user_inventory WHERE user_id = ? AND item_key = "card_zero_tax" AND is_active = 1 AND quantity > 0 LIMIT 1',
+          [session.id]
+        );
+        if (invRows.length > 0) {
+          taxQuote = {
+            rate: 0,
+            tax: 0n,
+            exempt: true,
+            isTaxKing: taxQuote.isTaxKing,
+            taxKingDiscountText: '🎫 수수료 24시간 면제권 적용 (수수료 0%)',
+            netBuy: totalTradePrice,
+            netSell: totalTradePrice
+          };
+        }
+      } catch (e) {}
 
       if (action === 'buy') {
         if (userCash < taxQuote.netBuy) {

@@ -1,0 +1,64 @@
+<%- include('layout/header', { pageTitle: '채굴 & 대장간', activePage: 'mining' }) %>
+
+<main style="flex:1; padding:20px; width:100%; max-width:1240px; margin:0 auto;">
+  
+  <div style="margin-bottom:20px;">
+    <h1 style="font-size:22px; font-weight:900; color:#f8fafc; margin:0; display:flex; align-items:center; gap:8px;">
+      <span>⛏️</span> 채굴 광산 & 대장간 (+1~+15강)
+    </h1>
+    <p style="font-size:13px; color:#94a3b8; margin:4px 0 0 0;">
+      스위트스팟 드릴 클릭 채굴 및 자동 채굴기 업그레이드, 대장간에서 드릴을 강화하세요.
+    </p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:20px;">
+    
+    <!-- 채굴기 클릭 영역 -->
+    <div style="background:rgba(15,23,42,0.85); border:1px solid rgba(56,189,248,0.3); border-radius:16px; padding:24px; text-align:center;">
+      <div style="font-size:48px; margin-bottom:12px; cursor:pointer;" onclick="mineClick()">⛏️</div>
+      <h3 style="font-size:18px; font-weight:800; color:#fff; margin:0 0 8px 0;">광석 채굴하기</h3>
+      <p style="font-size:13px; color:#94a3b8; margin:0 0 16px 0;">광석을 채굴하여 즉시 현금 보상을 획득하세요.</p>
+      <button onclick="mineClick()" style="width:100%; padding:14px; font-weight:900; background:linear-gradient(135deg,#0284c7,#38bdf8); border:none; border-radius:12px; color:#fff; cursor:pointer; font-size:16px;">채굴 클릭!</button>
+    </div>
+
+    <!-- 대장간 강화 영역 -->
+    <div style="background:rgba(15,23,42,0.85); border:1px solid rgba(251,191,36,0.3); border-radius:16px; padding:24px;">
+      <div style="font-size:36px; margin-bottom:8px;">🔨</div>
+      <h3 style="font-size:18px; font-weight:800; color:#fff; margin:0 0 8px 0;">드릴 대장간</h3>
+      <p style="font-size:13px; color:#94a3b8; margin:0 0 16px 0;">드릴을 강화하면 클릭당 채굴 보상이 비약적으로 상승합니다 (+15강까지 지원).</p>
+      <button onclick="upgradeDrill()" style="width:100%; padding:14px; font-weight:900; background:linear-gradient(135deg,#f59e0b,#fbbf24); border:none; border-radius:12px; color:#000; cursor:pointer; font-size:16px;">드릴 강화 시도</button>
+    </div>
+
+  </div>
+
+</main>
+
+<script>
+  async function mineClick() {
+    try {
+      const res = await fetch('/api/clicker/click', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        alert(`채굴 성공! +${data.earned || data.reward || 0}원 획득!`);
+        window.location.reload();
+      } else {
+        alert(data.error || '채굴 쿨다운 중');
+      }
+    } catch(e) { alert('네트워크 오류'); }
+  }
+
+  async function upgradeDrill() {
+    try {
+      const res = await fetch('/api/clicker/upgrade', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        alert(`드릴 강화 성공! 현재 레벨: Lv.${data.newLevel}`);
+        window.location.reload();
+      } else {
+        alert(data.error || '강화 실패');
+      }
+    } catch(e) { alert('네트워크 오류'); }
+  }
+</script>
+
+<%- include('layout/footer', { activePage: 'mining' }) %>

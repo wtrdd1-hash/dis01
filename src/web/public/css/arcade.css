@@ -211,22 +211,14 @@
 .arc-skin-plinko .arc-go { background: #fbbf24; color: #111; }
 .arc-plinko {
   position: relative;
-  height: 160px;
+  height: 220px;
   border-radius: 14px;
-  background: rgba(0,0,0,0.28);
+  background: radial-gradient(circle at 50% 25%, #1e1b4b 0%, #090d16 100%);
+  border: 1px solid rgba(251, 113, 133, 0.3);
   overflow: hidden;
   margin: 10px 0;
-}
-.arc-plinko-ball {
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #fde68a;
-  left: 50%;
-  top: 8px;
-  transform: translateX(-50%);
-  box-shadow: 0 0 10px #fbbf24;
+  padding: 10px 8px 6px;
+  box-sizing: border-box;
 }
 .arc-skin-toto {
   background: linear-gradient(180deg, #14532d, #1e3a8a);

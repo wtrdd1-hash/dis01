@@ -1,0 +1,43 @@
+<%- include('layout/header', { pageTitle: '자산 순위 & 랭킹', activePage: 'ranking' }) %>
+
+<main style="flex:1; padding:20px; width:100%; max-width:1240px; margin:0 auto;">
+  
+  <div style="margin-bottom:20px;">
+    <h1 style="font-size:22px; font-weight:900; color:#f8fafc; margin:0; display:flex; align-items:center; gap:8px;">
+      <span>🏆</span> 실시간 자산 순위 (Leaderboard)
+    </h1>
+    <p style="font-size:13px; color:#94a3b8; margin:4px 0 0 0;">
+      월덕 경제 시스템 전체 상위 자산가들의 순위와 보유 명예 칭호입니다.
+    </p>
+  </div>
+
+  <div style="background:rgba(15,23,42,0.85); border:1px solid rgba(99,102,241,0.25); border-radius:16px; overflow:hidden;">
+    <table style="width:100%; border-collapse:collapse; text-align:left;">
+      <thead>
+        <tr style="background:rgba(30,41,59,0.8); border-bottom:1px solid rgba(255,255,255,0.08);">
+          <th style="padding:14px 18px; font-size:13px; color:#94a3b8; width:70px; text-align:center;">순위</th>
+          <th style="padding:14px 18px; font-size:13px; color:#94a3b8;">유저명</th>
+          <th style="padding:14px 18px; font-size:13px; color:#94a3b8; text-align:right;">순자산 (Net Worth)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (typeof leaderboard !== 'undefined' ? leaderboard : []).forEach((row, idx) => { %>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+            <td style="padding:14px 18px; text-align:center; font-weight:900; font-size:14px; color:<%= idx === 0 ? '#fbbf24' : (idx === 1 ? '#94a3b8' : (idx === 2 ? '#b45309' : '#64748b')) %>;">
+              <%= idx + 1 %>
+            </td>
+            <td style="padding:14px 18px; font-weight:700; font-size:14px; color:#fff;">
+              <%= row.username %>
+            </td>
+            <td style="padding:14px 18px; text-align:right; font-family:'JetBrains Mono',monospace; font-weight:800; font-size:14px; color:#38bdf8;">
+              <%= Number(row.net_worth || row.cash || 0).toLocaleString() %>원
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+
+</main>
+
+<%- include('layout/footer', { activePage: 'ranking' }) %>

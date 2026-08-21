@@ -17,6 +17,7 @@ const {
 const { safeBigInt, withUserLock, applyCashDelta, applyBankTransfer, isAllInAmount, tryClaimCooldown } = require('../../utils/money');
 const { sendPublicError } = require('../httpSafe');
 const { pushUserLive } = require('../../utils/liveSync');
+const { applyGenreReward, rewardPercentForGenre } = require('../../utils/mineGenres');
 const {
   SAME_PIXEL_MAX,
   normalizeHits,
@@ -122,18 +123,43 @@ function createEconomyRoutes(getSessionUser) {
           return res.json(emptyClickResult(userData, guarded.dropped));
         }
 
+        // 보상 장르는 클라이언트 값이 아니라 서버에 저장된 현재 선택값으로 확정한다.
+        // 잠긴 고배율 장르를 요청 본문만 바꿔 사용하는 것을 막는다.
+        const mine = require('../../utils/mineService');
+        const genreId = await mine.getSelectedGenre(session.id);
+        const genreRewardPercent = rewardPercentForGenre(genreId);
+
+        // ⚡ 드릴 강화 & 오버클럭 버프 연동
+        let drillBonusMult = 1.0;
+        try {
+          const { getDrillEquipment } = require('../../utils/enhancementEngine');
+          const drill = await getDrillEquipment(session.id);
+          if (drill && drill.bonusPercent > 0) {
+            drillBonusMult += drill.bonusPercent / 100;
+          }
+        } catch (e) {}
+
         const rolled = rollClickBatch(clickerLevel, paidClicks);
         const clicks = rolled.clicks;
-        const earnedCash = rolled.earned;
+        const drillAdjusted = BigInt(Math.max(1, Math.floor(rolled.earned * drillBonusMult)));
+        const earnedCash = applyGenreReward(drillAdjusted, genreId);
         const critCount = rolled.crits;
 
         await pool.query(
-          'UPDATE users SET cash = cash + ?, total_clicks = total_clicks + ? WHERE discord_id = ?',
-          [earnedCash, clicks, session.id]
+          'UPDATE users SET cash = cash + ? WHERE discord_id = ?',
+          [earnedCash.toString(), session.id]
         );
 
+        // total_clicks 기록
+        try {
+          await pool.query(
+            'UPDATE users SET total_clicks = total_clicks + ? WHERE discord_id = ?',
+            [clicks, session.id]
+          );
+        } catch (e) {}
+
         const [rows] = await pool.query(
-          'SELECT cash, total_clicks FROM users WHERE discord_id = ? LIMIT 1',
+          'SELECT cash, COALESCE(total_clicks, 0) AS total_clicks FROM users WHERE discord_id = ? LIMIT 1',
           [session.id]
         );
 
@@ -141,12 +167,10 @@ function createEconomyRoutes(getSessionUser) {
           return res.status(404).json({ success: false, error: '유저 정보를 찾을 수 없습니다.' });
         }
 
-        let genreId = 'classic';
         try {
-          const mine = require('../../utils/mineService');
-          genreId = await mine.recordClicks(
+          await mine.recordClicks(
             session.id,
-            req.body?.genre,
+            genreId,
             clicks,
             req.body?.combo,
             req.body?.depth
@@ -157,7 +181,7 @@ function createEconomyRoutes(getSessionUser) {
             avatar: session.avatar,
             genreId,
             critCount,
-            earned: earnedCash
+            earned: Number(earnedCash)
           });
         } catch (e) {}
 
@@ -169,15 +193,17 @@ function createEconomyRoutes(getSessionUser) {
           dropped: guarded.dropped,
           blocked: null,
           earned: String(earnedCash),
-          earnedCash,
+          earnedCash: Number(earnedCash),
           critCount,
           genre: genreId,
+          rewardMultiplier: genreRewardPercent / 100,
           newCash: String(rows[0].cash),
-          totalClicks: String(rows[0].total_clicks),
+          totalClicks: String(rows[0].total_clicks || 0),
           samePixelMax: SAME_PIXEL_MAX
         });
       });
     } catch (err) {
+      console.error('❌ [/api/clicker/click] 클릭 채굴 처리 오류:', err);
       return res.status(500).json({ success: false, error: '클릭 처리 중 오류가 발생했습니다.' });
     }
   });
@@ -311,44 +337,35 @@ function createEconomyRoutes(getSessionUser) {
           WHERE us.user_id = ? AND us.amount > 0
         `, [session.id]);
         const stockVal = safeBigInt(stockSum[0]?.v);
-        const status = subsidyStatus(userCash, userBank, stockVal);
-        if (!status.eligible) {
+        const netWorth = userCash + userBank + stockVal;
+        if (netWorth > BigInt(SUBSIDY.MAX_NET_WORTH)) {
           return res.status(400).json({
             success: false,
-            error: `순자산 ${formatMoney(SUBSIDY.WEALTH_CAP)} 이상이면 지원금을 받을 수 없습니다. (현재 ${formatMoney(status.net)})`
+            error: `기초 생활 지원금은 순자산 ${formatMoney(SUBSIDY.MAX_NET_WORTH)} 이하인 유저만 신청 가능합니다. (현재 순자산: ${formatMoney(netWorth)})`
           });
         }
-        const isBroke = status.isBroke;
 
         const lastSubsidy = userData.last_subsidy ? new Date(userData.last_subsidy) : null;
-        const cooldownMs = isBroke ? SUBSIDY.BROKE_COOLDOWN_MS : (config.subsidyCooldownMinutes || 10) * 60 * 1000;
+        const cooldownMs = SUBSIDY.COOLDOWN_MS;
         if (lastSubsidy) {
           const diffMs = now - lastSubsidy;
           if (diffMs < cooldownMs) {
-            const remainSecTotal = Math.ceil((cooldownMs - diffMs) / 1000);
-            const remainMin = Math.floor(remainSecTotal / 60);
-            const remainSec = remainSecTotal % 60;
+            const remainHours = Math.ceil((cooldownMs - diffMs) / (1000 * 60 * 60));
             return res.status(400).json({
               success: false,
-              error: `지원금 신청 쿨타임 대기 중입니다! (다음 신청까지 약 ${remainMin}분 ${remainSec}초 남음)`
+              error: `지원금은 하루 1회만 신청하실 수 있습니다! (다음 신청까지 약 ${remainHours}시간 남음)`
             });
           }
         }
 
-        const baseAmount = isBroke ? SUBSIDY.BROKE_AMOUNT : (config.subsidyAmount || SUBSIDY.NORMAL_AMOUNT);
-        let mult = 1.0;
-        try {
-          const dyn = getDynamicSettings();
-          if (dyn && dyn.subsidyMultiplier) mult = dyn.subsidyMultiplier;
-        } catch (e) {}
-        const subsidyAmount = safeBigInt(Math.max(500, Math.round(baseAmount * mult)));
+        const subsidyAmount = safeBigInt(SUBSIDY.AMOUNT);
         const claimed = await tryClaimCooldown(session.id, 'last_subsidy', cooldownMs);
         if (!claimed) {
-          return res.status(400).json({ success: false, error: '지원금 신청 쿨타임 대기 중입니다!' });
+          return res.status(400).json({ success: false, error: '지원금은 하루 1회만 신청하실 수 있습니다!' });
         }
 
         const { grantTreasurySubsidy } = require('../../utils/taxEngine');
-        const subResult = await grantTreasurySubsidy(session.id, session.username, subsidyAmount, isBroke ? '무일푼 긴급 구제 지원금' : '정부 긴급 기본소득 구제 지원금');
+        const subResult = await grantTreasurySubsidy(session.id, session.username, subsidyAmount, '🏛️ [기초 생활 지원금] 정부 긴급 지원금 수령');
         const newCash = subResult.newCash;
         const newTreasury = subResult.newTreasury;
 

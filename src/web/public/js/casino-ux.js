@@ -437,6 +437,48 @@
       if (data.newCash && window.updateUserCashDisplay) window.updateUserCashDisplay(data.newCash);
       setText('mines-result', data.message);
     } catch (e) {}
+  const PLINKO_CONFIG = {
+    rows: 12,
+    mult: {
+      low: [5.6, 2.1, 1.1, 1, 0.5, 0.3, 0.5, 0.3, 0.5, 1, 1.1, 2.1, 5.6],
+      med: [13, 3, 1.3, 0.7, 0.4, 0.2, 0.2, 0.2, 0.4, 0.7, 1.3, 3, 13],
+      high: [29, 4, 1.5, 0.3, 0.2, 0.2, 0.2, 0.2, 0.2, 0.3, 1.5, 4, 29]
+    }
+  };
+
+  function initPlinkoBoard(boardId = 'plinko-board', riskSelectId = 'plinko-risk') {
+    const board = document.getElementById(boardId);
+    if (!board) return;
+
+    const riskEl = document.getElementById(riskSelectId);
+    const risk = riskEl ? riskEl.value : 'med';
+    const multipliers = PLINKO_CONFIG.mult[risk] || PLINKO_CONFIG.mult.med;
+
+    let html = '<div class="plinko-pegs-container">';
+    const totalRows = PLINKO_CONFIG.rows;
+    for (let r = 0; r < totalRows; r++) {
+      const pinCount = r + 3;
+      const topPct = ((r + 1) / (totalRows + 1)) * 82;
+      html += `<div class="plinko-peg-row" style="top:${topPct}%;">`;
+      for (let p = 0; p < pinCount; p++) {
+        html += `<div class="plinko-peg" id="${boardId}-peg-${r}-${p}"></div>`;
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // 하단 배율 버킷
+    html += '<div class="plinko-buckets">';
+    multipliers.forEach((m, idx) => {
+      let riskClass = 'zero-risk';
+      if (m >= 10) riskClass = 'high-risk';
+      else if (m >= 2) riskClass = 'med-risk';
+      else if (m >= 1) riskClass = 'low-risk';
+      html += `<div class="plinko-bucket ${riskClass}" id="${boardId}-bucket-${idx}">${m}x</div>`;
+    });
+    html += '</div>';
+
+    board.innerHTML = html;
   }
 
   async function playPlinko() {
@@ -455,8 +497,8 @@
       });
       const data = await res.json();
       if (!data.success) return toast('error', data.error);
-      animatePlinko(data);
-      const wait = Math.max(420, ((data.path || []).length * 70) + 140);
+      animatePlinko(data, 'plinko-board');
+      const wait = Math.max(420, ((data.path || []).length * 65) + 200);
       setTimeout(function () {
         onGameResult(data);
         if (data.newCash && window.updateUserCashDisplay) window.updateUserCashDisplay(data.newCash);
@@ -465,32 +507,65 @@
     } catch (e) {}
   }
 
-  function animatePlinko(data) {
-    const board = document.getElementById('plinko-board');
+  function animatePlinko(data, boardId = 'plinko-board') {
+    const board = document.getElementById(boardId);
     if (!board) return;
-    let ball = document.getElementById('plinko-ball');
+
+    board.querySelectorAll('.plinko-bucket').forEach(b => b.classList.remove('win-hit'));
+    board.querySelectorAll('.plinko-peg').forEach(p => p.classList.remove('hit'));
+
+    let ball = document.getElementById(boardId + '-ball');
     if (!ball) {
       ball = document.createElement('div');
-      ball.id = 'plinko-ball';
+      ball.id = boardId + '-ball';
       ball.className = 'plinko-ball';
       board.appendChild(ball);
     }
+
     const path = data.path || [];
-    let x = 50;
-    let y = 6;
-    let i = 0;
-    const step = function () {
-      if (i >= path.length) return;
-      x += path[i] ? 4.2 : -4.2;
-      y += 11;
-      ball.style.left = x + '%';
-      ball.style.top = y + 'px';
-      i += 1;
-      setTimeout(step, 70);
-    };
-    ball.style.left = '50%';
+    const totalRows = path.length || PLINKO_CONFIG.rows;
+    let r = 0;
+    let pinIndex = 1;
+
+    ball.style.display = 'block';
     ball.style.top = '8px';
-    step();
+    ball.style.left = '50%';
+
+    const step = function () {
+      if (r >= totalRows) {
+        const bucketIdx = data.bucket !== undefined ? data.bucket : Math.min(12, pinIndex);
+        const bucketEl = document.getElementById(`${boardId}-bucket-${bucketIdx}`);
+        if (bucketEl) {
+          bucketEl.classList.add('win-hit');
+          setTimeout(() => bucketEl.classList.remove('win-hit'), 2200);
+        }
+        setTimeout(() => {
+          ball.style.display = 'none';
+        }, 500);
+        return;
+      }
+
+      const goRight = path[r] === 1;
+      if (goRight) pinIndex += 1;
+      
+      const pinCount = r + 3;
+      const topPct = ((r + 1) / (totalRows + 1)) * 82;
+      const leftOffset = (pinIndex / (pinCount - 1)) * 74 + 13;
+
+      ball.style.top = `${topPct}%`;
+      ball.style.left = `${leftOffset}%`;
+
+      const pegEl = document.getElementById(`${boardId}-peg-${r}-${pinIndex}`);
+      if (pegEl) {
+        pegEl.classList.add('hit');
+        setTimeout(() => pegEl.classList.remove('hit'), 250);
+      }
+
+      r += 1;
+      setTimeout(step, 60);
+    };
+
+    setTimeout(step, 30);
   }
 
   async function adminJackpot() {
@@ -549,6 +624,9 @@
     if (mc) mc.onclick = cashoutMines;
     const pb = document.getElementById('btn-plinko');
     if (pb) pb.onclick = playPlinko;
+    const pr = document.getElementById('plinko-risk');
+    if (pr) pr.onchange = function () { initPlinkoBoard('plinko-board', 'plinko-risk'); };
+    initPlinkoBoard('plinko-board', 'plinko-risk');
     const aj = document.getElementById('btn-admin-jackpot');
     if (aj) aj.onclick = adminJackpot;
     const ahOn = document.getElementById('btn-admin-happy-on');

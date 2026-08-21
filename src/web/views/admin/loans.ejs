@@ -15,8 +15,9 @@
   .loan-stat-val { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; }
 </style>
 
+<div class="admin-container">
 <!-- 🌟 대출 및 채권 관제 메인 카드 -->
-<div class="card" style="border: 1px solid rgba(129, 140, 248, 0.35); background: #0b1120;">
+<div class="card" style="border: 1px solid rgba(129, 140, 248, 0.35); background: #0b1120; width: 100%;">
   
   <!-- 상단 헤더 -->
   <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:16px;">
@@ -35,7 +36,7 @@
   </div>
 
   <!-- 📊 3대 핵심 대출 지표 타일 -->
-  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:24px;">
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:20px;">
     <div class="loan-stat-card" style="border-left: 4px solid #38bdf8;">
       <div class="loan-stat-label">📄 진행 중인 대출</div>
       <div class="loan-stat-val" style="color:#38bdf8;"><%= loanOverview.openCount || 0 %>건</div>
@@ -51,8 +52,8 @@
   </div>
 
   <!-- 대출 장부 테이블 -->
-  <div style="overflow-x:auto;">
-    <table>
+  <div class="admin-table-wrap">
+    <table style="min-width:900px; width:100%;">
       <thead>
         <tr>
           <th style="width:80px;">대출 ID</th>
@@ -71,6 +72,7 @@
       </tbody>
     </table>
   </div>
+</div>
 </div>
 
 <%- include('footer') %>

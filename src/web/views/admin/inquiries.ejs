@@ -1,7 +1,8 @@
 <%- include('header', { activeMenu: 'inquiries', pageTitle: '1:1 고객센터 문의 - 관리자', pageHeader: '1:1문의' }) %>
 
+<div class="admin-container">
 <!-- 🌟 1:1 고객센터 문의 메인 카드 -->
-<div class="card" style="border: 1px solid rgba(99, 102, 241, 0.35); background: #0b1120;">
+<div class="card" style="border: 1px solid rgba(99, 102, 241, 0.35); background: #0b1120; padding: 24px; width: 100%;">
   
   <!-- 상단 헤더 -->
   <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:16px;">
@@ -9,7 +10,7 @@
       <h2 style="color: #c7d2fe; margin:0; font-size:1.35rem; display:flex; align-items:center; gap:8px;">
         <span>📩 1:1 고객센터 문의 접수 & 실시간 유저 답변</span>
         <% if (pendingInquiryCount > 0) { %>
-        <span style="background:rgba(239,68,68,0.2); color:#f87171; border:1px solid rgba(239,68,68,0.4); font-size:0.75rem; padding:2px 8px; border-radius:12px; font-weight:800;">답변 대기 <%= pendingInquiryCount %>건</span>
+        <span style="background:rgba(239,68,68,0.2); color:#f87171; border:1px solid rgba(239,68,68,0.4); font-size:0.75rem; padding:3px 10px; border-radius:12px; font-weight:800;">답변 대기 <%= pendingInquiryCount %>건</span>
         <% } %>
       </h2>
       <p style="font-size: 0.83rem; color: #94a3b8; margin-top:4px;">
@@ -17,22 +18,22 @@
       </p>
     </div>
 
-    <button type="button" onclick="location.reload()" style="background:#4f46e5; border:none; color:#fff; padding:8px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer; display:flex; align-items:center; gap:6px;">
-      <span>↻ 문의 갱신</span>
+    <button type="button" onclick="location.reload()" style="background:#4f46e5; border:none; color:#fff; padding:8px 16px; border-radius:8px; font-weight:700; font-size:0.85rem; cursor:pointer; display:flex; align-items:center; gap:6px;">
+      <span>↻ 새로고침</span>
     </button>
   </div>
 
-  <div style="overflow-x:auto;">
-    <table>
+  <div class="admin-table-wrap">
+    <table style="width: 100%; min-width: 1000px; table-layout: fixed; border-collapse: collapse;">
       <thead>
-        <tr>
-          <th style="width:60px;">번호</th>
-          <th style="width:140px;">접수 시각 (KST)</th>
-          <th style="width:180px;">작성 유저</th>
-          <th style="width:120px;">분류</th>
-          <th>문의 제목 및 상세 내용</th>
-          <th style="width:100px;">처리 상태</th>
-          <th style="width:320px;">답변 작성 / 완료 답변</th>
+        <tr style="background: rgba(255, 255, 255, 0.03); border-bottom: 2px solid rgba(255, 255, 255, 0.1);">
+          <th style="width:65px; text-align:center; padding:12px 10px;">번호</th>
+          <th style="width:145px; padding:12px 10px;">접수 시각 (KST)</th>
+          <th style="width:170px; padding:12px 10px;">작성 유저</th>
+          <th style="width:110px; padding:12px 10px;">분류</th>
+          <th style="width:330px; padding:12px 10px;">문의 제목 및 상세 내용</th>
+          <th style="width:100px; text-align:center; padding:12px 10px;">처리 상태</th>
+          <th style="padding:12px 10px;">답변 작성 / 완료 답변</th>
         </tr>
       </thead>
       <tbody>
@@ -55,15 +56,16 @@
         body: { answer }
       });
       if (res.success) {
-        adminNotice(true, '답변이 성공적으로 등록되었으며 유저에게 Discord DM이 전송되었습니다.');
+        adminNotice(true, '답변이 성공적으로 등록되었습니다.');
         location.reload();
       } else {
         adminNotice(false, res.error || '답변 등록 실패');
       }
     } catch (e) {
-      adminNotice(false, '통신 오류');
+      adminNotice(false, '서버 통신 오류');
     }
   }
 </script>
+</div>
 
 <%- include('footer') %>

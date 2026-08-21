@@ -1,7 +1,8 @@
 <%- include('header', { activeMenu: 'users', pageTitle: '실시간 유저 자산 순위 & 포트폴리오 - 관리자', pageHeader: '유저-자산' }) %>
 
+<div class="admin-container">
 <!-- 🌟 유저 자산 관리 메인 카드 -->
-<div class="card dx-card--padded" style="border: 1px solid rgba(99, 102, 241, 0.35); background: #0b1120;">
+<div class="card dx-card--padded" style="border: 1px solid rgba(99, 102, 241, 0.35); background: #0b1120; width: 100%;">
 
   <!-- 상단 헤더 & 검색 컨트롤 -->
   <div class="dx-page-header">
@@ -63,15 +64,15 @@
       <span id="user-filter-count" style="font-size:0.8rem; color:#94a3b8;"></span>
     </div>
 
-    <div style="overflow-x:auto;">
-      <table>
+    <div class="admin-table-wrap">
+      <table style="min-width:880px; width:100%;">
         <thead>
           <tr>
-            <th style="width:200px;">유저 계정</th>
-            <th style="text-align:right; width:160px;">💵 보유 현금</th>
-            <th style="text-align:right; width:160px;">🏦 은행 예금 (0.05%/h)</th>
-            <th style="text-align:right; width:160px;">📊 보유 주식 평가액</th>
-            <th style="text-align:right; width:180px;">💎 총 순자산</th>
+            <th style="width:180px;">유저 계정</th>
+            <th style="text-align:right; width:150px;">💵 보유 현금</th>
+            <th style="text-align:right; width:150px;">🏦 은행 예금 (0.05%/h)</th>
+            <th style="text-align:right; width:150px;">📊 보유 주식 평가액</th>
+            <th style="text-align:right; width:170px;">💎 총 순자산</th>
             <th style="text-align:center; width:160px;">빠른 관리 작업</th>
           </tr>
         </thead>
@@ -88,15 +89,15 @@
     <h3 style="color:#c084fc; margin-bottom:12px; display:flex; align-items:center; gap:6px;">
       <span>👑 봇 관리자 계정 (운영진)</span>
     </h3>
-    <div style="overflow-x:auto;">
-      <table>
+    <div class="admin-table-wrap">
+      <table style="min-width:880px; width:100%;">
         <thead>
           <tr>
-            <th style="width:200px;">관리자 계정</th>
-            <th style="text-align:right; width:160px;">💵 보유 현금</th>
-            <th style="text-align:right; width:160px;">🏦 은행 예금</th>
-            <th style="text-align:right; width:160px;">📊 보유 주식 평가액</th>
-            <th style="text-align:right; width:180px;">💎 총 순자산</th>
+            <th style="width:180px;">관리자 계정</th>
+            <th style="text-align:right; width:150px;">💵 보유 현금</th>
+            <th style="text-align:right; width:150px;">🏦 은행 예금</th>
+            <th style="text-align:right; width:150px;">📊 보유 주식 평가액</th>
+            <th style="text-align:right; width:170px;">💎 총 순자산</th>
             <th style="text-align:center; width:160px;">빠른 관리 작업</th>
           </tr>
         </thead>
@@ -450,5 +451,6 @@
     }
   }
 </script>
+</div>
 
 <%- include('footer') %>

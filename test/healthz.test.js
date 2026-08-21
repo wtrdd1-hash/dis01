@@ -39,3 +39,22 @@ test('readyz는 의존성이 준비되지 않으면 503을 반환한다', async 
   assert.equal(res.body.db, false);
   assert.equal(res.body.bot, false);
 });
+
+test('웹 전용 프로세스의 readyz는 DB만 준비되면 200을 반환한다', async () => {
+  const previousProcessType = process.env.PROCESS_TYPE;
+  process.env.PROCESS_TYPE = 'web';
+  global.__discordClient = null;
+  try {
+    const routes = captureRoutes({ query: async () => [[{ ok: 1 }]] });
+    const res = createResponse();
+    await routes.get('/readyz')({}, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.ok, true);
+    assert.equal(res.body.db, true);
+    assert.equal(res.body.bot, false);
+    assert.equal(res.body.botRequired, false);
+  } finally {
+    if (previousProcessType === undefined) delete process.env.PROCESS_TYPE;
+    else process.env.PROCESS_TYPE = previousProcessType;
+  }
+});

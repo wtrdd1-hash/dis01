@@ -439,11 +439,12 @@ async function sendAdminReport(client, report, actions) {
     : '⏸ 조치 없음 (경제 정상)';
 
   const now = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+  const envBadge = typeof config.getServerEnvBadge === 'function' ? config.getServerEnvBadge() : '🚀 [본 서버]';
 
   const embed = {
     color: score >= 80 ? 0x00cc66 : score >= 60 ? 0xffcc00 : score >= 40 ? 0xff6600 : 0xff0000,
-    title: `${statusEmoji} 자동 경제 조절 리포트`,
-    description: `**${now}** 기준 경제 현황 분석 결과입니다.`,
+    title: `${statusEmoji} ${envBadge} 자동 경제 조절 리포트`,
+    description: `**${now}** 기준 **${envBadge}** 경제 현황 분석 결과입니다.`,
     fields: [
       {
         name: '📊 경제 건강 점수',

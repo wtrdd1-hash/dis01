@@ -7,9 +7,10 @@ const GENRES = [
     name: '보석 연타',
     emoji: '💎',
     unlockCost: 0,
+    rewardPercent: 100,
     tag: '기본',
     desc: '보석을 연타해서 현금을 법니다.',
-    hint: '큰 보석을 누르세요. 10% 확률 3배 크리티컬!',
+    hint: '큰 보석을 누르세요. 8% 확률 2배 크리티컬!',
     flavor: '광맥에서 원석을 캐냈다'
   },
   {
@@ -17,6 +18,7 @@ const GENRES = [
     name: '갱도 탐험',
     emoji: '⛏️',
     unlockCost: 5000,
+    rewardPercent: 110,
     tag: '탐험',
     desc: '층을 내려가며 바위를 깹니다.',
     hint: '바위를 눌러 갱도를 파고 드세요.',
@@ -27,6 +29,7 @@ const GENRES = [
     name: '두더지 광맥',
     emoji: '🐹',
     unlockCost: 6000,
+    rewardPercent: 115,
     tag: '아케이드',
     desc: '구멍에서 튀어나오는 광석만 때립니다.',
     hint: '올라온 두더지·보석만 누르세요. 빈 구멍은 안 됩니다.',
@@ -37,6 +40,7 @@ const GENRES = [
     name: '낙하 원석',
     emoji: '🪨',
     unlockCost: 8000,
+    rewardPercent: 120,
     tag: '아케이드',
     desc: '떨어지는 광석을 받아 채굴합니다.',
     hint: '떨어지는 원석을 터치하세요.',
@@ -47,6 +51,7 @@ const GENRES = [
     name: '원석 짝맞추기',
     emoji: '🃏',
     unlockCost: 10000,
+    rewardPercent: 130,
     tag: '퍼즐',
     desc: '같은 원석 두 장을 맞춰 채굴합니다.',
     hint: '카드 두 장을 뒤집으세요. 짝이 맞을 때만 채굴됩니다.',
@@ -57,9 +62,10 @@ const GENRES = [
     name: '드릴 타이밍',
     emoji: '🔩',
     unlockCost: 12000,
+    rewardPercent: 135,
     tag: '리듬',
     desc: '게이지 스위트스팟에 맞춰 굴착합니다.',
-    hint: '바늘이 초록 구간에 올 때 누르세요. 보상 수치는 같습니다.',
+    hint: '바늘이 초록 구간에 올 때 누르세요. 성공 시 기본 광산보다 35% 더 받습니다.',
     flavor: '드릴이 암반을 관통했다'
   },
   {
@@ -67,6 +73,7 @@ const GENRES = [
     name: '광차 적재',
     emoji: '🛒',
     unlockCost: 16000,
+    rewardPercent: 145,
     tag: '타이밍',
     desc: '지나가는 광차가 초록 구간에 올 때 싣습니다.',
     hint: '광차가 초록 구간에 들어왔을 때만 누르세요.',
@@ -77,6 +84,7 @@ const GENRES = [
     name: '해저 채굴',
     emoji: '🌊',
     unlockCost: 18000,
+    rewardPercent: 150,
     tag: '테마',
     desc: '해저 광맥과 기포를 탭합니다.',
     hint: '떠오르는 해저 광물을 누르세요.',
@@ -87,6 +95,7 @@ const GENRES = [
     name: '빙하 깨기',
     emoji: '🧊',
     unlockCost: 24000,
+    rewardPercent: 165,
     tag: '연타',
     desc: '얼음 층을 깨고 속에 든 원석을 꺼냅니다.',
     hint: '얼음을 연타하세요. 깨지면 원석이 나옵니다.',
@@ -97,6 +106,7 @@ const GENRES = [
     name: '우주 소행성',
     emoji: '🪐',
     unlockCost: 25000,
+    rewardPercent: 170,
     tag: '액션',
     desc: '떠다니는 운석을 탭해서 채굴합니다.',
     hint: '움직이는 소행성을 터치하세요.',
@@ -107,6 +117,7 @@ const GENRES = [
     name: '원유 시추',
     emoji: '🛢️',
     unlockCost: 35000,
+    rewardPercent: 185,
     tag: '시추',
     desc: '유정을 두드려 원유를 뽑습니다.',
     hint: '시추탑을 연타하세요. 유정이 차오릅니다.',
@@ -117,6 +128,7 @@ const GENRES = [
     name: '용암 건지기',
     emoji: '🌋',
     unlockCost: 38000,
+    rewardPercent: 195,
     tag: '액션',
     desc: '식기 전에 용암 위 광석을 건집니다.',
     hint: '잠깐 떠오르는 광석을 빨리 누르세요. 식으면 사라집니다.',
@@ -127,6 +139,7 @@ const GENRES = [
     name: '광맥 따라가기',
     emoji: '🧭',
     unlockCost: 48000,
+    rewardPercent: 215,
     tag: '리듬',
     desc: '빛나는 칸만 따라가며 광맥을 이습니다.',
     hint: '노란 칸만 누르세요. 다른 칸은 인정되지 않습니다.',
@@ -137,6 +150,7 @@ const GENRES = [
     name: '해시 채굴',
     emoji: '🖥️',
     unlockCost: 50000,
+    rewardPercent: 225,
     tag: '가상',
     desc: '블록을 탭해 해시레이트를 올립니다. 가상 연출이며 실제 암호화폐가 아닙니다.',
     hint: '빛나는 블록을 누르세요. 실제 코인이 아닙니다.',
@@ -180,6 +194,22 @@ function normalizeGenre(id) {
   return found ? found.id : DEFAULT_GENRE;
 }
 
+function rewardPercentForGenre(id) {
+  const genre = getGenre(id);
+  return Math.max(100, Math.floor(Number(genre.rewardPercent) || 100));
+}
+
+function applyGenreReward(amount, genreId) {
+  const percent = rewardPercentForGenre(genreId);
+  if (typeof amount === 'bigint') {
+    if (amount <= 0n) return 0n;
+    return (amount * BigInt(percent)) / 100n;
+  }
+  const base = Math.max(0, Math.floor(Number(amount) || 0));
+  if (base <= 0) return 0;
+  return Math.max(1, Math.floor((base * percent) / 100));
+}
+
 function currentWeather() {
   const idx = Math.floor(Date.now() / 480000) % WEATHERS.length;
   return { ...WEATHERS[idx] };
@@ -200,6 +230,8 @@ function publicGenreList() {
     name: g.name,
     emoji: g.emoji,
     unlockCost: g.unlockCost,
+    rewardMultiplier: g.rewardPercent / 100,
+    rewardBonusPercent: g.rewardPercent - 100,
     tag: g.tag,
     desc: g.desc,
     hint: g.hint
@@ -218,6 +250,8 @@ module.exports = {
   listGenres,
   getGenre,
   normalizeGenre,
+  rewardPercentForGenre,
+  applyGenreReward,
   currentWeather,
   badgeForClicks,
   depthForClicks,

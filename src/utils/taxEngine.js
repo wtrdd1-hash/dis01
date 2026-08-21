@@ -156,8 +156,10 @@ function isTaxKingCached(userId) {
 }
 
 // 1분 주기로 세금왕 캐시 갱신
-setInterval(refreshTaxKingCache, 60000);
-setTimeout(refreshTaxKingCache, 2000);
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(refreshTaxKingCache, 60000).unref?.();
+  setTimeout(refreshTaxKingCache, 2000).unref?.();
+}
 
 /**
  * 📈 거래 금액 규모에 따른 누진 거래세율 산출 (거래 금액이 클수록 거래세 대폭 인상)

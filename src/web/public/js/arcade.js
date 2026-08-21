@@ -537,42 +537,115 @@
       paintMines(data.revealed, null, null);
       setText('arc-mines-res', '현재 ' + data.multiplier + '배');
     }
+  var ARC_PLINKO_MULT = {
+    low: [5.6, 2.1, 1.1, 1, 0.5, 0.3, 0.5, 0.3, 0.5, 1, 1.1, 2.1, 5.6],
+    med: [13, 3, 1.3, 0.7, 0.4, 0.2, 0.2, 0.2, 0.4, 0.7, 1.3, 3, 13],
+    high: [29, 4, 1.5, 0.3, 0.2, 0.2, 0.2, 0.2, 0.2, 0.3, 1.5, 4, 29]
+  };
+
+  function renderArcadePlinkoBoard() {
+    var board = document.getElementById('arc-plinko');
+    if (!board) return;
+    var riskEl = document.getElementById('arc-plinko-risk');
+    var risk = riskEl ? riskEl.value : 'med';
+    var multipliers = ARC_PLINKO_MULT[risk] || ARC_PLINKO_MULT.med;
+
+    var html = '<div class="plinko-pegs-container">';
+    for (var r = 0; r < 12; r++) {
+      var pinCount = r + 3;
+      var topPct = ((r + 1) / 13) * 82;
+      html += '<div class="plinko-peg-row" style="top:' + topPct + '%;">';
+      for (var p = 0; p < pinCount; p++) {
+        html += '<div class="plinko-peg" id="arc-plinko-peg-' + r + '-' + p + '"></div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+
+    html += '<div class="plinko-buckets">';
+    multipliers.forEach(function(m, idx) {
+      var riskClass = 'zero-risk';
+      if (m >= 10) riskClass = 'high-risk';
+      else if (m >= 2) riskClass = 'med-risk';
+      else if (m >= 1) riskClass = 'low-risk';
+      html += '<div class="plinko-bucket ' + riskClass + '" id="arc-plinko-bucket-' + idx + '">' + m + 'x</div>';
+    });
+    html += '</div>';
+
+    board.innerHTML = html;
   }
 
   function bindPlinko() {
     var go = document.getElementById('arc-plinko-go');
+    var risk = document.getElementById('arc-plinko-risk');
+    if (risk) risk.onchange = renderArcadePlinkoBoard;
+    renderArcadePlinkoBoard();
+
     if (!go) return;
     go.onclick = async function () {
-      var risk = document.getElementById('arc-plinko-risk');
       if (window.CasinoAudio) window.CasinoAudio.play('plinko', '플링코');
       var data = await post('/api/casino/plinko', { bet: betOf('arc-plinko-bet'), risk: risk ? risk.value : 'med' });
       if (!data.success) return toast('error', data.error);
-      animatePlinko(data);
+      animateArcadePlinko(data);
       cash(data.newCash);
       setText('arc-plinko-res', data.message || '');
       resultHook(data, '플링코');
     };
   }
 
-  function animatePlinko(data) {
+  function animateArcadePlinko(data) {
+    var board = document.getElementById('arc-plinko');
+    if (!board) return;
+
+    board.querySelectorAll('.plinko-bucket').forEach(function(b) { b.classList.remove('win-hit'); });
+    board.querySelectorAll('.plinko-peg').forEach(function(p) { p.classList.remove('hit'); });
+
     var ball = document.getElementById('arc-plinko-ball');
-    if (!ball) return;
+    if (!ball) {
+      ball = document.createElement('div');
+      ball.id = 'arc-plinko-ball';
+      ball.className = 'plinko-ball';
+      board.appendChild(ball);
+    }
     var path = data.path || [];
-    var x = 50;
-    var y = 6;
-    var i = 0;
-    ball.style.left = '50%';
+    var totalRows = path.length || 12;
+    var r = 0;
+    var pinIndex = 1;
+
+    ball.style.display = 'block';
     ball.style.top = '8px';
+    ball.style.left = '50%';
+
     var step = function () {
-      if (i >= path.length) return;
-      x += path[i] ? 4.2 : -4.2;
-      y += 14;
-      ball.style.left = x + '%';
-      ball.style.top = y + 'px';
-      i += 1;
-      setTimeout(step, 70);
+      if (r >= totalRows) {
+        var bucketIdx = data.bucket !== undefined ? data.bucket : Math.min(12, pinIndex);
+        var bucketEl = document.getElementById('arc-plinko-bucket-' + bucketIdx);
+        if (bucketEl) {
+          bucketEl.classList.add('win-hit');
+          setTimeout(function() { bucketEl.classList.remove('win-hit'); }, 2200);
+        }
+        setTimeout(function() { ball.style.display = 'none'; }, 500);
+        return;
+      }
+
+      var goRight = path[r] === 1;
+      if (goRight) pinIndex += 1;
+      var topPct = ((r + 1) / 13) * 82;
+      var leftOffset = (pinIndex / (r + 2)) * 74 + 13;
+
+      ball.style.top = topPct + '%';
+      ball.style.left = leftOffset + '%';
+
+      var pegEl = document.getElementById('arc-plinko-peg-' + r + '-' + pinIndex);
+      if (pegEl) {
+        pegEl.classList.add('hit');
+        setTimeout(function() { pegEl.classList.remove('hit'); }, 250);
+      }
+
+      r += 1;
+      setTimeout(step, 60);
     };
-    step();
+    setTimeout(step, 30);
   }
 
   async function bindToto() {

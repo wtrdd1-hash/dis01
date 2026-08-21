@@ -1,7 +1,8 @@
 <%- include('header', { activeMenu: 'security', pageTitle: '보안 및 IP 차단 - 관리자', pageHeader: '보안-차단' }) %>
 
+<div class="admin-container">
 <!-- 🌟 보안 및 방화벽 메인 카드 -->
-<div class="card" style="border: 1px solid rgba(239, 68, 68, 0.35); background: #0b1120;">
+<div class="card" style="border: 1px solid rgba(239, 68, 68, 0.35); background: #0b1120; width: 100%;">
   
   <!-- 상단 헤더 & 수동 차단 폼 -->
   <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px; margin-bottom:20px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:16px;">
@@ -27,7 +28,7 @@
     <h3 style="color:#fca5a5; margin-bottom:12px; font-size:1.05rem; display:flex; align-items:center; gap:6px;">
       <span>🚫 현재 차단 격리 중인 IP 목록</span>
     </h3>
-    <div style="overflow-x:auto;">
+    <div class="admin-table-wrap">
       <table>
         <thead>
           <tr>
@@ -41,6 +42,45 @@
         </thead>
         <tbody>
           <%- bannedRowsHtml %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 🛡️ IP 화이트리스트 관리 카드 -->
+  <div style="margin-bottom: 30px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
+      <div>
+        <h3 style="color:#6ee7b7; margin:0; font-size:1.05rem; display:flex; align-items:center; gap:6px;">
+          <span>🛡️ 안심 접속 IP 화이트리스트 (<%= (whitelistList || []).length %>개 등록)</span>
+        </h3>
+        <p style="font-size:0.8rem; color:#9ca3af; margin-top:3px;">
+          화이트리스트에 등록된 IP는 Rate Limit 및 방화벽 차단에서 영구 면제되며, 절대 차단되지 않습니다.
+        </p>
+      </div>
+
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <input type="text" id="whitelist-add-ip" placeholder="등록할 IP (예: 211.43.20.189)" style="background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:8px 12px; border-radius:6px; font-size:0.85rem; width:170px;">
+        <input type="text" id="whitelist-add-desc" placeholder="설명 (예: 관리자 자택, 메인 서버)" style="background:#030712; border:1px solid rgba(255,255,255,0.15); color:#fff; padding:8px 12px; border-radius:6px; font-size:0.85rem; width:180px;">
+        <button type="button" onclick="execAddWhitelist()" style="background:#059669; border:none; color:#fff; padding:8px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer; display:flex; align-items:center; gap:6px;">
+          <span>+ 화이트리스트 등록</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:180px;">IP 주소</th>
+            <th style="width:140px;">국가 / 위치</th>
+            <th>설명 / 메모</th>
+            <th style="width:170px;">등록 시각 (KST)</th>
+            <th style="text-align:center; width:90px;">작업</th>
+          </tr>
+        </thead>
+        <tbody>
+          <%- whitelistRowsHtml %>
         </tbody>
       </table>
     </div>
@@ -87,6 +127,20 @@
     }
   }
 
+  async function banFromLog(ip) {
+    if (!confirm('IP ' + ip + ' 주소를 수동 차단하시겠습니까?')) return;
+    const res = await adminFetch('/api/admin/security/ban', {
+      method: 'POST',
+      body: { ip, reason: '보안 이벤트 로그에서 관리자 수동 차단', durationMinutes: 1440, confirm: true }
+    });
+    if (res.success) {
+      adminNotice(true, 'IP ' + ip + ' 차단 완료');
+      setTimeout(function() { location.reload(); }, 1000);
+    } else {
+      adminNotice(false, res.error || '차단 실패');
+    }
+  }
+
   async function execManualBan() {
     const ipInput = document.getElementById('manual-ban-ip');
     const ip = (ipInput ? ipInput.value : '').trim();
@@ -109,6 +163,50 @@
       adminNotice(false, '차단 처리 오류');
     }
   }
+
+  async function execAddWhitelist() {
+    const ipInput = document.getElementById('whitelist-add-ip');
+    const descInput = document.getElementById('whitelist-add-desc');
+    const ip = (ipInput ? ipInput.value : '').trim();
+    const description = (descInput ? descInput.value : '').trim();
+
+    if (!ip) return alert('등록할 IP 주소를 입력하세요.');
+
+    try {
+      const res = await adminFetch('/api/admin/security/whitelist/add', {
+        method: 'POST',
+        body: { ip, description }
+      });
+      if (res.success) {
+        adminNotice(true, res.message || '화이트리스트에 성공적으로 등록되었습니다.');
+        setTimeout(function() { location.reload(); }, 800);
+      } else {
+        adminNotice(false, res.error || '등록 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '화이트리스트 등록 오류');
+    }
+  }
+
+  async function removeWhitelist(ip) {
+    if (!confirm('IP ' + ip + ' 주소를 화이트리스트에서 삭제하시겠습니까?')) return;
+
+    try {
+      const res = await adminFetch('/api/admin/security/whitelist/remove', {
+        method: 'POST',
+        body: { ip }
+      });
+      if (res.success) {
+        adminNotice(true, res.message || '화이트리스트에서 삭제되었습니다.');
+        setTimeout(function() { location.reload(); }, 800);
+      } else {
+        adminNotice(false, res.error || '삭제 실패');
+      }
+    } catch (e) {
+      adminNotice(false, '화이트리스트 삭제 오류');
+    }
+  }
 </script>
+</div>
 
 <%- include('footer') %>

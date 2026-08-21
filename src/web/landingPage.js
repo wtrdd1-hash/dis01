@@ -2,7 +2,7 @@
  * 랜딩 페이지 뷰 (비로그인 사용자 대상)
  * 2026 모던 다크 테마 디자인 시스템 적용
  */
-const { cssTag } = require('./assetUrl');
+const { cssTag, jsTag } = require('./assetUrl');
 
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
@@ -594,6 +594,8 @@ function renderLandingPage(options) {
     ${renderLoginModal(discordLoginUrl)}
   </div>
   ${renderInlineScript(stocks, regime)}
+  <script src="/socket.io/socket.io.js"></script>
+  ${jsTag('js/announcementPopup.js')}
 </body>
 </html>`;
 }

@@ -1,0 +1,106 @@
+<%- include('layout/header', { pageTitle: '보석 맞추기 퍼즐 아케이드', activePage: 'casino' }) %>
+
+<main style="flex:1; padding:24px 16px; width:100%; max-width:960px; margin:0 auto; display:flex; flex-direction:column; align-items:center;">
+  
+  <div style="width:100%; display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+    <div>
+      <h1 style="font-size:24px; font-weight:900; color:#f8fafc; margin:0; display:flex; align-items:center; gap:10px;">
+        <span>💎</span> 월덕 보석 맞추기 (Gem Match-3 Arcade)
+      </h1>
+      <p style="font-size:14px; color:#94a3b8; margin:4px 0 0 0;">
+        같은 색상의 보석을 3개 이상 맞춰 콤보를 터뜨리고 골드 보상을 획득하세요!
+      </p>
+    </div>
+    
+    <div style="background:rgba(30,41,59,0.8); border:1px solid rgba(255,255,255,0.1); padding:8px 16px; border-radius:12px; font-size:14px; font-family:'JetBrains Mono',monospace;">
+      <span style="color:#94a3b8;">스코어:</span>
+      <strong id="arcade-score" style="color:#38bdf8; font-size:18px;">0</strong>
+    </div>
+  </div>
+
+  <!-- 퍼즐 캔버스 컨테이너 -->
+  <div style="position:relative; width:100%; max-width:480px; aspect-ratio:1/1; background:#0f172a; border:2px solid rgba(99,102,241,0.4); border-radius:24px; box-shadow:0 0 40px rgba(0,0,0,0.8); overflow:hidden; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+    <div id="gem-grid" style="display:grid; grid-template-columns:repeat(6, 1fr); gap:6px; padding:12px; width:100%; height:100%;">
+      <!-- 6x6 그리드 동적 생성 -->
+    </div>
+  </div>
+
+  <div style="margin-top:20px; display:flex; gap:12px;">
+    <button onclick="claimArcadeReward()" style="padding:14px 28px; font-weight:900; background:linear-gradient(135deg,#06b6d4,#3b82f6); border:none; border-radius:14px; color:#fff; cursor:pointer; font-size:16px; box-shadow:0 0 20px rgba(6,182,212,0.4);">
+      🎁 점수 정산 및 골드 수령
+    </button>
+  </div>
+
+</main>
+
+<script>
+  const GEMS = ['💎', ' ruby 🔴', ' emerald 🟢', ' sapphire 🔵', ' gold 🟡', ' amethyst 🟣'];
+  const ICONS = ['💎', '🔴', '🟢', '🔵', '🟡', '🟣'];
+  let currentScore = 0;
+  let selectedTile = null;
+
+  function initGrid() {
+    const grid = document.getElementById('gem-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    for (let i = 0; i < 36; i++) {
+      const tile = document.createElement('div');
+      const gemIdx = Math.floor(Math.random() * ICONS.length);
+      tile.dataset.gem = gemIdx;
+      tile.dataset.index = i;
+      tile.style.background = 'rgba(30,41,59,0.85)';
+      tile.style.border = '1px solid rgba(255,255,255,0.1)';
+      tile.style.borderRadius = '12px';
+      tile.style.display = 'flex';
+      tile.style.alignItems = 'center';
+      tile.style.justifyContent = 'center';
+      tile.style.fontSize = '28px';
+      tile.style.cursor = 'pointer';
+      tile.style.transition = 'all 0.2s ease';
+      tile.innerText = ICONS[gemIdx];
+
+      tile.onclick = () => onTileClick(tile);
+      grid.appendChild(tile);
+    }
+  }
+
+  function onTileClick(tile) {
+    if (!selectedTile) {
+      selectedTile = tile;
+      tile.style.borderColor = '#38bdf8';
+      tile.style.transform = 'scale(1.1)';
+    } else {
+      const idx1 = Number(selectedTile.dataset.index);
+      const idx2 = Number(tile.dataset.index);
+      
+      // Swap gems
+      const tempGem = selectedTile.dataset.gem;
+      selectedTile.dataset.gem = tile.dataset.gem;
+      selectedTile.innerText = ICONS[tile.dataset.gem];
+
+      tile.dataset.gem = tempGem;
+      tile.innerText = ICONS[tempGem];
+
+      selectedTile.style.borderColor = 'rgba(255,255,255,0.1)';
+      selectedTile.style.transform = 'scale(1)';
+      selectedTile = null;
+
+      currentScore += 150;
+      document.getElementById('arcade-score').innerText = currentScore.toLocaleString();
+    }
+  }
+
+  async function claimArcadeReward() {
+    if (currentScore <= 0) {
+      alert('퍼즐을 맞춰 점수를 먼저 획득하세요!');
+      return;
+    }
+    const earned = currentScore * 10;
+    alert(`🎉 퍼즐 클리어! 스코어: ${currentScore}\n보상: +${earned.toLocaleString()}원 획득!`);
+    window.location.href = '/stocks';
+  }
+
+  window.addEventListener('DOMContentLoaded', initGrid);
+</script>
+
+<%- include('layout/footer', { activePage: 'casino' }) %>

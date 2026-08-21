@@ -16,9 +16,12 @@
   var cartX = 8;
   var cartDir = 1;
   var iceHp = 6;
+  var iceResetting = false;
   var matchOpen = [];
   var matchBusy = false;
   var veinLit = 0;
+  var hashSwitchAt = 0;
+  var selectionPending = false;
 
   function $(id) { return document.getElementById(id); }
   function stage() { return $('mine-stage'); }
@@ -34,7 +37,28 @@
 
   function currentGenreMeta() {
     var list = (state && state.genres) || [];
-    return list.find(function (g) { return g.id === genre; }) || { id: 'classic', name: '보석 연타', desc: '', hint: '', unlocked: true, depth: 0, badge: { name: '견습', emoji: '🌱' }, unlockCost: 0 };
+    return list.find(function (g) { return g.id === genre; }) || { id: 'classic', name: '보석 연타', desc: '', hint: '', unlocked: true, depth: 0, badge: { name: '견습', emoji: '🌱' }, unlockCost: 0, rewardMultiplier: 1 };
+  }
+
+  function currentRewardMultiplier() {
+    var mult = Number(currentGenreMeta().rewardMultiplier || 1);
+    return Number.isFinite(mult) && mult >= 1 ? mult : 1;
+  }
+
+  function refreshPowerDisplay() {
+    var el = $('clicker-power-val');
+    if (!el) return;
+    var rawBase = el.getAttribute('data-base-power');
+    var base = parseInt(rawBase || '', 10);
+    if (!Number.isFinite(base) || base <= 0) {
+      base = parseInt((el.textContent || '').replace(/[^0-9]/g, ''), 10) || 1;
+      el.setAttribute('data-base-power', String(base));
+    }
+    var mult = currentRewardMultiplier();
+    var adjusted = Math.max(1, Math.floor(base * mult));
+    el.setAttribute('data-genre-multiplier', String(mult));
+    el.textContent = '+' + adjusted.toLocaleString('ko-KR') + '원';
+    setText('mine-reward-mult', 'x' + mult.toFixed(2));
   }
 
   function burst(e, crit) {
@@ -74,6 +98,10 @@
 
   function mineClick(e, extra) {
     extra = extra || {};
+    if (selectionPending) {
+      setText('click-feedback-msg', '장르 보상을 서버에 적용하는 중입니다. 잠시만 기다려 주세요.');
+      return;
+    }
     var meta = currentGenreMeta();
     if (meta && meta.unlocked === false) {
       renderUnlock(meta);
@@ -81,22 +109,52 @@
     }
     if (typeof handleClickMining === 'function') handleClickMining(e || fakeEvent());
     if (extra.perfect && $('click-feedback-msg')) {
-      $('click-feedback-msg').textContent = extra.perfectText || 'PERFECT! 연출만 다르고 수익 공식은 같습니다.';
+      $('click-feedback-msg').textContent = extra.perfectText || 'PERFECT! 현재 장르 보너스가 적용됩니다.';
     }
   }
 
   window.MineHub = {
     genre: function () { return genre; },
+    rewardMultiplier: currentRewardMultiplier,
+    refreshPower: refreshPowerDisplay,
     combo: function () { return combo; },
     depth: function () {
       var g = currentGenreMeta();
       return (g.depth || 0) + Math.floor(combo / 8);
     },
-    onEarned: function (e, isCrit) {
+    onEarned: function (e, isCrit, gain) {
       tickCombo();
       burst(e, isCrit);
+      if (gain && typeof window.applyUserLiveSnapshot === 'function') {
+        try {
+          var cashEl = $('my-cash');
+          var raw = cashEl ? (cashEl.getAttribute('data-raw') || '0') : '0';
+          var nextBig = BigInt(raw) + BigInt(gain);
+          window.applyUserLiveSnapshot({ cash: nextBig.toString() });
+        } catch (_) {}
+      }
     }
   };
+
+  // ⚡ 자동 채굴기 실시간 1초 틱 (초당 +X원 자동 지갑 반응)
+  if (!window.__mineAutoTickerStarted) {
+    window.__mineAutoTickerStarted = true;
+    setInterval(function () {
+      if (document.hidden) return;
+      try {
+        var autoEl = $('clicker-auto-val');
+        if (!autoEl) return;
+        var autoIncomeStr = (autoEl.textContent || autoEl.innerText || '').replace(/[^0-9]/g, '');
+        var autoIncome = parseInt(autoIncomeStr, 10) || 0;
+        if (autoIncome > 0 && typeof window.applyUserLiveSnapshot === 'function') {
+          var cashEl = $('my-cash');
+          var raw = cashEl ? (cashEl.getAttribute('data-raw') || '0') : '0';
+          var nextBig = BigInt(raw) + BigInt(autoIncome);
+          window.applyUserLiveSnapshot({ cash: nextBig.toString() });
+        }
+      } catch (_) {}
+    }, 1000);
+  }
 
   function stopLoop() {
     running = false;
@@ -255,18 +313,37 @@
       '<button type="button" class="big-click-gem" id="gem-clicker" style="margin-top:28px">굴착</button>';
     $('gem-clicker').onclick = function (ev) {
       var perfect = needle >= 38 && needle <= 62;
-      mineClick(ev, { perfect: perfect, perfectText: 'PERFECT 드릴! 연출만 다르고 수익 공식은 같습니다.' });
+      if (!perfect) {
+        flashMiss();
+        return;
+      }
+      mineClick(ev, { perfect: true, perfectText: 'PERFECT 드릴! 장르 보너스 x' + currentRewardMultiplier().toFixed(2) + ' 적용!' });
     };
   }
 
-  function stepCrypto() {
-    var hot = $('mine-hot-block');
-    if (hot && Math.random() < 0.02) {
-      var blocks = stage().querySelectorAll('.mine-block');
-      blocks.forEach(function (b) { b.classList.remove('hot'); b.id = ''; });
-      var next = blocks[Math.floor(Math.random() * blocks.length)];
-      if (next) { next.classList.add('hot'); next.id = 'mine-hot-block'; }
+  function activateCryptoBlock(next) {
+    var st = stage();
+    if (!st) return;
+    var blocks = st.querySelectorAll('.mine-block');
+    blocks.forEach(function (b) {
+      b.classList.remove('hot');
+      b.removeAttribute('id');
+      b.setAttribute('aria-pressed', 'false');
+      b.setAttribute('aria-label', '대기 중인 해시 블록');
+    });
+    if (!next && blocks.length) next = blocks[Math.floor(Math.random() * blocks.length)];
+    if (next) {
+      next.classList.add('hot');
+      next.id = 'mine-hot-block';
+      next.setAttribute('aria-pressed', 'true');
+      next.setAttribute('aria-label', '빛나는 채굴 대상 해시 블록');
     }
+  }
+
+  function stepCrypto(ts) {
+    if (ts < hashSwitchAt) return;
+    activateCryptoBlock();
+    hashSwitchAt = ts + 1200;
   }
 
   function renderCrypto() {
@@ -276,16 +353,25 @@
       var b = document.createElement('button');
       b.type = 'button';
       b.className = 'mine-entity mine-block' + (i === 0 ? ' hot' : '');
+      b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+      b.setAttribute('aria-label', i === 0 ? '빛나는 채굴 대상 해시 블록' : '대기 중인 해시 블록');
       if (i === 0) b.id = 'mine-hot-block';
       b.textContent = Math.random().toString(16).slice(2, 8);
       b.style.left = (6 + (i % 4) * 24) + '%';
       b.style.top = (18 + Math.floor(i / 4) * 40) + '%';
       b.onclick = function (ev) {
+        if (!this.classList.contains('hot')) {
+          flashMiss();
+          return;
+        }
         this.textContent = Math.random().toString(16).slice(2, 8);
         mineClick(ev);
+        activateCryptoBlock();
+        hashSwitchAt = performance.now() + 1200;
       };
       st.appendChild(b);
     }
+    hashSwitchAt = performance.now() + 1200;
   }
 
   function renderOil() {
@@ -420,7 +506,7 @@
       '<div class="mine-cart-track"><span class="mine-cart-sweet"></span><button type="button" class="mine-cart" id="mine-cart">🛒</button></div>' +
       '<button type="button" class="mine-cart-hit" id="mine-cart-hit">적재</button>';
     $('mine-cart-hit').onclick = function (ev) {
-      if (cartX >= 38 && cartX <= 62) mineClick(ev, { perfect: true, perfectText: '적재 성공! 수익 공식은 같습니다.' });
+      if (cartX >= 38 && cartX <= 62) mineClick(ev, { perfect: true, perfectText: '적재 성공! 장르 보너스 x' + currentRewardMultiplier().toFixed(2) + ' 적용!' });
       else flashMiss();
     };
   }
@@ -435,11 +521,13 @@
 
   function renderIce() {
     iceHp = 6;
+    iceResetting = false;
     var st = stage();
     st.innerHTML = '<div class="mine-combo-pop" id="mine-combo-pop"></div>' +
       '<button type="button" class="mine-ice" id="mine-ice">🧊</button>' +
       '<div class="mine-ice-hp" id="mine-ice-hp">내구 6</div>';
     $('mine-ice').onclick = function (ev) {
+      if (iceResetting) return;
       iceHp -= 1;
       this.style.setProperty('--crack', String(1 - iceHp / 6));
       this.textContent = iceHp <= 0 ? '💎' : '🧊';
@@ -447,13 +535,19 @@
       if (hp) hp.textContent = iceHp <= 0 ? '원석!' : ('내구 ' + iceHp);
       mineClick(ev);
       if (iceHp <= 0) {
+        iceResetting = true;
         var node = this;
+        node.classList.add('revealed');
+        node.disabled = true;
         setTimeout(function () {
           iceHp = 6;
+          iceResetting = false;
           node.textContent = '🧊';
+          node.classList.remove('revealed');
+          node.disabled = false;
           node.style.setProperty('--crack', '0');
           if (hp) hp.textContent = '내구 6';
-        }, 220);
+        }, 700);
       }
     };
   }
@@ -599,6 +693,7 @@
     setText('mine-depth', (meta.depth || 0) + 'm');
     setText('mine-badge', (meta.badge && (meta.badge.emoji + ' ' + meta.badge.name)) || '견습');
     setText('mine-genre-desc', meta.desc || '');
+    refreshPowerDisplay();
     var fb = $('click-feedback-msg');
     if (fb) fb.textContent = meta.hint || '';
     if (state && state.weather) {
@@ -668,15 +763,25 @@
     renderHud();
     renderGenre();
     if (!meta.unlocked) return;
+    selectionPending = true;
+    var st = stage();
+    if (st) st.classList.add('is-switching');
     try {
-      await fetch('/api/mine/select', {
+      var res = await fetch('/api/mine/select', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ genre: id })
       });
-    } catch (e) {}
-    loadState();
+      var data = await res.json();
+      if (data.success) applyState(data);
+      else await loadState();
+    } catch (e) {
+      await loadState();
+    } finally {
+      selectionPending = false;
+      if (st) st.classList.remove('is-switching');
+    }
   }
 
   async function unlock(id) {

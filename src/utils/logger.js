@@ -358,12 +358,57 @@ function logWarn(tag, message) {
   appendJsonLog(ALL_JSONL_FILE, { type: 'WARN', timestamp, tag, message });
 }
 
+const lastDmSentMap = new Map();
+
+async function sendAdminErrorDM(tag, message, error = null) {
+  try {
+    const client = global.__discordClient;
+    if (!client || !client.users) return;
+
+    const config = require('../config/config');
+    const adminIds = config.adminIds || [];
+    if (!adminIds.length) return;
+
+    // 동일 에러 30초 내 중복 발송 방지 (스팸 억제)
+    const errKey = `${tag}:${message}`;
+    const now = Date.now();
+    const lastSent = lastDmSentMap.get(errKey) || 0;
+    if (now - lastSent < 30 * 1000) return;
+    lastDmSentMap.set(errKey, now);
+
+    const errDetails = error ? (error.stack || error.message || String(error)) : '없음';
+
+    const envBadge = typeof config.getServerEnvBadge === 'function' ? config.getServerEnvBadge() : '🚀 [본 서버]';
+
+    const embed = {
+      color: 0xEF4444,
+      title: `🚨 ${envBadge} [시스템 / 경제 오류 알림] ${tag}`,
+      description: `**${message}**`,
+      fields: [
+        { name: '🌐 발송 서버', value: `**${envBadge}**`, inline: true },
+        { name: '📍 발생 시각', value: getFormattedTimestamp(), inline: true },
+        { name: '🛠️ 상세 스택 / 에러', value: `\`\`\`js\n${String(errDetails).slice(0, 1000)}\n\`\`\``, inline: false }
+      ],
+      footer: { text: `월덕 자동 관제 • ${envBadge}` },
+      timestamp: new Date().toISOString()
+    };
+
+    for (const adminId of adminIds) {
+      try {
+        const user = await client.users.fetch(adminId);
+        if (user) await user.send({ embeds: [embed] });
+      } catch (e) {}
+    }
+  } catch (e) {}
+}
+
 function logError(tag, message, error = null) {
   const timestamp = getFormattedTimestamp();
   const errDetails = error ? (error.stack || error.message || error) : '';
   const line = `[${timestamp}] ❌ [${tag}] ${message}${errDetails ? ` | ${errDetails}` : ''}`;
   console.error(line);
   appendJsonLog(ALL_JSONL_FILE, { type: 'ERROR', timestamp, tag, message, error: errDetails });
+  sendAdminErrorDM(tag, message, error).catch(() => {});
 }
 
 // 30일(1개월) 초과된 오래된 JSONL 파일 로그 라인 자동 정돈
@@ -401,7 +446,7 @@ function pruneOldJsonlFiles() {
 
 // 봇 시작 시 및 24시간마다 30일 초과 파일 로그 자동 정돈
 pruneOldJsonlFiles();
-setInterval(pruneOldJsonlFiles, 24 * 60 * 60 * 1000);
+setInterval(pruneOldJsonlFiles, 24 * 60 * 60 * 1000).unref?.();
 
 module.exports = {
   getFormattedTimestamp,

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+  <title>월덕 (WTRD) - 차세대 디스코드 가상 경제 & 메타버스 플랫폼</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦆</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Pretendard:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/wtrd-design.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  
+  <style>
+    :root {
+      --bg-dark: #07090e;
+      --bg-card: rgba(15, 23, 42, 0.85);
+      --border-glow: rgba(99, 102, 241, 0.35);
+      --primary: #6366F1;
+      --accent-gold: #F59E0B;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.18) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.12) 0px, transparent 50%),
+        radial-gradient(at 50% 50%, rgba(56, 189, 248, 0.08) 0px, transparent 50%);
+      color: #f8fafc;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* 🌐 랜딩 전용 탑 네비게이션 */
+    .landing-header {
+      position: sticky;
+      top: 0;
+      z-index: 500;
+      background: rgba(7, 9, 14, 0.9);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 0 24px;
+      height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .landing-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: #fff;
+      font-size: 20px;
+      font-weight: 900;
+      font-family: 'Outfit', sans-serif;
+    }
+    .btn-discord-hero {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: #5865F2;
+      color: #fff;
+      text-decoration: none;
+      padding: 14px 28px;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 800;
+      box-shadow: 0 0 30px rgba(88, 101, 242, 0.5);
+      transition: all 0.25s ease;
+    }
+    .btn-discord-hero:hover {
+      background: #4752C4;
+      transform: translateY(-2px);
+      box-shadow: 0 0 40px rgba(88, 101, 242, 0.7);
+    }
+
+    /* 🚀 히어로 섹션 */
+    .hero-section {
+      text-align: center;
+      padding: 80px 20px 60px 20px;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      border-radius: 30px;
+      color: #818cf8;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 24px;
+    }
+    .hero-title {
+      font-size: 48px;
+      font-weight: 900;
+      line-height: 1.25;
+      margin-bottom: 20px;
+      letter-spacing: -0.02em;
+    }
+    .hero-title span.grad {
+      background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #f472b6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-desc {
+      font-size: 18px;
+      color: #94a3b8;
+      line-height: 1.6;
+      margin-bottom: 36px;
+    }
+
+    /* 💎 주요 기능 쇼케이스 그리드 */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      max-width: 1200px;
+      margin: 20px auto 80px auto;
+      padding: 0 20px;
+    }
+    .feature-card {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 28px;
+      backdrop-filter: blur(12px);
+      transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .feature-card:hover {
+      border-color: rgba(99, 102, 241, 0.4);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+    }
+    .feature-icon {
+      font-size: 40px;
+      margin-bottom: 16px;
+    }
+    .feature-title {
+      font-size: 19px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    .feature-text {
+      font-size: 14px;
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 768px) {
+      .hero-title { font-size: 32px; }
+      .hero-desc { font-size: 15px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 헤더 -->
+  <header class="landing-header">
+    <a href="/" class="landing-brand">
+      <span style="font-size:28px;">🦆</span>
+      <span>월덕 WTRD</span>
+    </a>
+
+    <div style="display:flex; align-items:center; gap:12px;">
+      <a href="/auth/discord" class="btn-discord-hero" style="padding:10px 18px; font-size:14px;">
+        <span>👾</span>
+        <span>디스코드 로그인</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- 히어로 섹션 -->
+  <section class="hero-section">
+    <div class="hero-badge">
+      <span>✨</span>
+      <span>차세대 가상 경제 & 메타버스 플랫폼</span>
+    </div>
+    
+    <h1 class="hero-title">
+      디스코드와 웹이 하나로,<br>
+      <span class="grad">가장 완벽한 가상 경제 생태계</span>
+    </h1>
+
+    <p class="hero-desc">
+      실시간 3분 틱 주식 거래소부터 핫게임 엔터테인먼트, 명품 외형 커스터마이징,<br>
+      그리고 상위 자산가를 위한 프라이빗 2D VIP 메타버스 라운지까지 모두 경험하세요.
+    </p>
+
+    <div style="display:flex; justify-content:center; gap:16px; flex-wrap:wrap;">
+      <a href="/auth/discord" class="btn-discord-hero">
+        <span style="font-size:20px;">👾</span>
+        <span>Discord 계정으로 1초 만에 시작하기</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- 6대 주요 시스템 쇼케이스 -->
+  <section class="features-grid">
+    
+    <div class="feature-card">
+      <div>
+        <div class="feature-icon">📈</div>
+        <h3 class="feature-title">실시간 주식 시장 (Stock Exchange)</h3>
+        <p class="feature-text">18개 상장 기업의 동적 3분 틱 호가창과 차트. 시장 국면(호황/불황)과 뉴스 피드에 따라 변동하는 시세로 투자 수익을 창출하세요.</p>
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div>
+        <div class="feature-icon">🛍️</div>
+        <h3 class="feature-title">명품 상점 & 외형 드레스룸</h3>
+        <p class="feature-text">화폐를 소각하여 희귀 외형을 획득하세요. 닉네임 네온 컬러, 아우라 테두리, 명예 배지 및 칭호로 나만의 개성을 완성할 수 있습니다.</p>
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div>
+        <div class="feature-icon">🎰</div>
+        <h3 class="feature-title">카지노 & 엔터테인먼트</h3>
+        <p class="feature-text">플링코(Plinko 12경로), 마인즈(Mines), 블랙잭(Blackjack 실시간 딜러전), 3-reel 슬롯머신, 즉석복권 등 검증된 공정 확률 게임.</p>
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div>
+        <div class="feature-icon">⛏️</div>
+        <h3 class="feature-title">광산 채굴 & 대장간 강화</h3>
+        <p class="feature-text">스위트스팟 드릴 클릭 채굴과 방치형 자동 채굴기. 대장간에서 드릴을 +15강까지 강화하여 클릭당 채굴량을 극대화하세요.</p>
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div>
+        <div class="feature-icon">👑</div>
+        <h3 class="feature-title">VIP 메타버스 라운지 (부자 놀거리)</h3>
+        <p class="feature-text">외형을 해금한 자산가들만의 프라이빗 2D 공간. 가상 맵을 누비며 머리 위 실시간 말풍선 채팅과 돈뿌리기 이모트로 사교를 즐기세요.</p>
+      </div>
+    </div>
+
+    <div class="feature-card">
+      <div>
+        <div class="feature-icon">🤖</div>
+        <h3 class="feature-title">디스코드 봇 실시간 연동</h3>
+        <p class="feature-text">디스코드 서버 내 명령어(`/돈`, `/주식`, `/상점`, `/도박`)와 웹사이트 데이터베이스가 100% 동일한 경제 원장으로 실시간 동기화됩니다.</p>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- 푸터 -->
+  <footer style="margin-top:auto; padding:32px 20px; text-align:center; color:#64748b; font-size:13px; border-top:1px solid rgba(255,255,255,0.05);">
+    <p style="margin-bottom:8px;">© 2026 월덕 (WTRD) · 디스코드 가상 경제 플랫폼</p>
+    <div style="display:flex; justify-content:center; gap:16px; font-size:12px;">
+      <a href="/privacy" style="color:#64748b; text-decoration:none;">개인정보처리방침</a>
+      <a href="/terms" style="color:#64748b; text-decoration:none;">이용약관</a>
+      <a href="/inquiry" style="color:#64748b; text-decoration:none;">고객문의</a>
+    </div>
+  </footer>
+
+</body>
+</html>

@@ -618,12 +618,90 @@ function pruneSecurityMaps() {
   pruneStatEntries(securityStats.attacksByPath);
 }
 
-setInterval(pruneSecurityMaps, 5 * 60 * 1000).unref();
+// ── 🛡️ 화이트리스트 DB 연동 관리 함수 ───────────────────────
+async function loadWhitelistFromDb() {
+  try {
+    if (!pool) return;
+    const [rows] = await pool.query('SELECT ip FROM admin_ip_whitelist');
+    for (const row of rows) {
+      if (row.ip) WHITELIST_IPS.add(cleanIp(row.ip));
+    }
+  } catch (e) {
+    // DB 테이블이 아직 없거나 연결 전일 경우 무시
+  }
+}
+setTimeout(loadWhitelistFromDb, 2000);
+
+async function getWhitelistedIpsList() {
+  try {
+    if (!pool) return Array.from(WHITELIST_IPS).map(ip => ({ ip, description: '기본 화이트리스트', created_at: new Date() }));
+    const [rows] = await pool.query('SELECT * FROM admin_ip_whitelist ORDER BY id DESC');
+    const dbIps = new Set(rows.map(r => r.ip));
+    // 기본 화이트리스트 중 DB에 없는 항목도 표시
+    for (const ip of WHITELIST_IPS) {
+      if (!dbIps.has(ip) && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
+        rows.push({ id: null, ip, description: '환경변수 / 시스템 기본 IP', created_by: 'SYSTEM', created_at: new Date() });
+      }
+    }
+    return rows;
+  } catch (e) {
+    return Array.from(WHITELIST_IPS).map(ip => ({ id: null, ip, description: '메모리 화이트리스트', created_by: 'SYSTEM', created_at: new Date() }));
+  }
+}
+
+async function addIpToWhitelist(ip, description = '', adminId = 'ADMIN') {
+  if (!ip) return { success: false, error: '유효한 IP 주소를 입력하세요.' };
+  const normalized = cleanIp(String(ip).trim());
+  if (!isValidIp(normalized)) {
+    return { success: false, error: `올바른 IPv4/IPv6 형식이 아닙니다: ${ip}` };
+  }
+
+  WHITELIST_IPS.add(normalized);
+  unbanIp(normalized);
+
+  try {
+    if (pool) {
+      await pool.query(
+        `INSERT INTO admin_ip_whitelist (ip, description, created_by)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE description = VALUES(description)`,
+        [normalized, description ? String(description).trim() : '관리자 등록 화이트리스트', adminId]
+      );
+    }
+    return { success: true, message: `✅ IP '${normalized}'가 화이트리스트에 성공적으로 등록되었습니다.`, ip: normalized };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function removeIpFromWhitelist(ip) {
+  if (!ip) return { success: false, error: 'IP를 입력하세요.' };
+  const normalized = cleanIp(String(ip).trim());
+  
+  if (normalized === '127.0.0.1' || normalized === '::1' || normalized === 'localhost') {
+    return { success: false, error: '로컬 루프백 IP는 화이트리스트에서 삭제할 수 없습니다.' };
+  }
+
+  WHITELIST_IPS.delete(normalized);
+
+  try {
+    if (pool) {
+      await pool.query('DELETE FROM admin_ip_whitelist WHERE ip = ?', [normalized]);
+    }
+    return { success: true, message: `🗑️ IP '${normalized}'가 화이트리스트에서 제거되었습니다.` };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
 
 module.exports = {
   createSecurityMiddleware,
   getSecurityStats,
   getBannedIpsList,
+  getWhitelistedIpsList,
+  addIpToWhitelist,
+  removeIpFromWhitelist,
+  loadWhitelistFromDb,
   banIp,
   unbanIp,
   isIpBanned,
@@ -631,3 +709,4 @@ module.exports = {
   getCountryFromIp,
   WHITELIST_IPS,
 };
+

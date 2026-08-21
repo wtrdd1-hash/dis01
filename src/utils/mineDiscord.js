@@ -4,7 +4,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } = require('discord.js');
 const { formatMoney, formatNumber } = require('./formatters');
 const { clickPower, powerUpgradeCost, autoPerSec } = require('./economyBalance');
-const { getGenre } = require('./mineGenres');
+const { getGenre, applyGenreReward, rewardPercentForGenre } = require('./mineGenres');
 const mine = require('./mineService');
 const config = require('../config/config');
 
@@ -14,12 +14,14 @@ function buildMineEmbed(userData, state) {
   const clickerLevel = userData.clicker_level || 1;
   const autoLevel = userData.auto_miner_level || 0;
   const current = state.current || getGenre(state.selected);
+  const rewardPercent = rewardPercentForGenre(current.id);
+  const currentPower = applyGenreReward(clickPower(clickerLevel), current.id);
   const weather = state.weather || { emoji: '☀️', label: '맑음' };
   const badge = current.badge || { emoji: '🌱', name: '견습' };
   const lines = (state.genres || []).map((g) => {
     const lock = g.unlocked ? '✅' : `🔒 ${formatMoney(g.unlockCost)}`;
     const mark = g.id === state.selected ? '▸ ' : '　';
-    return `${mark}${g.emoji} ${g.name} · ${lock} · ${formatNumber(g.clicks || 0)}회`;
+    return `${mark}${g.emoji} ${g.name} · ${lock} · x${Number(g.rewardMultiplier || 1).toFixed(2)} · ${formatNumber(g.clicks || 0)}회`;
   });
 
   return new EmbedBuilder()
@@ -31,11 +33,11 @@ function buildMineEmbed(userData, state) {
     )
     .addFields(
       { name: '💵 현금', value: formatMoney(userData.cash), inline: true },
-      { name: '🔨 채굴 파워', value: `Lv.${clickerLevel} (클릭당 +${formatMoney(clickPower(clickerLevel))})`, inline: true },
+      { name: '🔨 채굴 파워', value: `Lv.${clickerLevel} (클릭당 +${formatMoney(currentPower)}, 장르 x${(rewardPercent / 100).toFixed(2)})`, inline: true },
       { name: '🤖 자동 채굴', value: `Lv.${autoLevel} (초당 +${formatMoney(autoPerSec(autoLevel))})`, inline: true },
       { name: '광산 목록', value: lines.join('\n').slice(0, 1024) || '-' }
     )
-    .setFooter({ text: '해금은 한 번이면 유지됩니다. 클릭 수익 공식은 모든 장르가 같습니다.' });
+    .setFooter({ text: '해금 비용과 난이도가 높은 장르일수록 인정된 클릭의 현금 보상이 커집니다.' });
 }
 
 function buildMineComponents(userId, state, upgradeCost) {
@@ -129,12 +131,13 @@ async function handleMineButton(interaction) {
       const genre = getGenre(genreId);
       const clickerLevel = fresh.clicker_level || 1;
       const rolled = rollClickBatch(clickerLevel, 1);
+      const earned = applyGenreReward(rolled.earned, genreId);
       const bonusTurn = Math.random() < (CLICKER.BONUS_TURN_CHANCE || 0.10);
       let newTurns = fresh.gamble_turns ?? 50;
       if (bonusTurn && newTurns < 50) newTurns += 1;
       await pool.query(
         'UPDATE users SET cash = cash + ?, gamble_turns = ?, total_clicks = total_clicks + 1 WHERE discord_id = ?',
-        [rolled.earned, newTurns, ownerId]
+        [earned, newTurns, ownerId]
       );
       await mine.recordClicks(ownerId, genreId, 1, rolled.crits ? 2 : 1, 0);
       try { pushUserLive(ownerId); } catch (e) {}
@@ -145,12 +148,12 @@ async function handleMineButton(interaction) {
           avatar: fresh.avatar || '',
           genreId,
           critCount: rolled.crits,
-          earned: rolled.earned
+          earned
         });
       } catch (e) {}
       let msg = rolled.crits
-        ? `${genre.emoji} **${CLICKER.CRIT_MULT}배 크리티컬!** ${genre.flavor} +${formatMoney(rolled.earned)}`
-        : `${genre.emoji} ${genre.flavor} +${formatMoney(rolled.earned)}`;
+        ? `${genre.emoji} **${CLICKER.CRIT_MULT}배 크리티컬!** ${genre.flavor} +${formatMoney(earned)} (장르 x${(rewardPercentForGenre(genreId) / 100).toFixed(2)})`
+        : `${genre.emoji} ${genre.flavor} +${formatMoney(earned)} (장르 x${(rewardPercentForGenre(genreId) / 100).toFixed(2)})`;
       if (bonusTurn) msg += ' (보너스!)';
       return interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
     });

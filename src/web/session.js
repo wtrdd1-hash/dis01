@@ -6,29 +6,39 @@ const crypto = require('crypto');
 const config = require('../config/config');
 const { isDiscordSnowflake, sanitizeUsername, safeAvatarUrl } = require('./httpSafe');
 
-const SESSION_COOKIE = 'discord_user';
-const OAUTH_STATE_COOKIE = 'oauth_state';
-const GUEST_COOKIE = 'guest_play';
-const LOCAL_COOKIE = 'web_user';
+const IS_TEST_ENV = process.env.APP_ENV === 'test' || process.env.NODE_ENV === 'test';
+const COOKIE_SUFFIX = IS_TEST_ENV ? '_test' : '';
+const SESSION_COOKIE = `discord_user${COOKIE_SUFFIX}`;
+const OAUTH_STATE_COOKIE = `oauth_state${COOKIE_SUFFIX}`;
+const GUEST_COOKIE = `guest_play${COOKIE_SUFFIX}`;
+const LOCAL_COOKIE = `web_user${COOKIE_SUFFIX}`;
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
 
 const ALLOWED_ORIGINS = [
   'https://easy-scraping.com',
   'https://www.easy-scraping.com',
+  'https://test.easy-scraping.com',
+  'https://dev.easy-scraping.com',
   'https://nowplayz.com',
   'https://www.nowplayz.com',
   'http://localhost:8080',
-  'http://127.0.0.1:8080'
+  'http://127.0.0.1:8080',
+  'http://localhost:8085',
+  'http://127.0.0.1:8085'
 ];
 
 const ALLOWED_HOSTS = new Set([
   'easy-scraping.com',
   'www.easy-scraping.com',
+  'test.easy-scraping.com',
+  'dev.easy-scraping.com',
   'nowplayz.com',
   'www.nowplayz.com',
   'localhost:8080',
-  '127.0.0.1:8080'
+  '127.0.0.1:8080',
+  'localhost:8085',
+  '127.0.0.1:8085'
 ]);
 
 let resolvedCookieSecret = null;
@@ -75,26 +85,20 @@ function resolvePublicBaseUrl(req) {
 function cookieBaseOptions(req) {
   const host = requestHost(req);
   const local = isLocalHost(host);
-  const opts = {
+  return {
     httpOnly: true,
     secure: !local,
     sameSite: 'lax',
     path: '/',
     signed: true
   };
-  if (!local) {
-    if (host.includes('nowplayz.com')) {
-      opts.domain = '.nowplayz.com';
-    } else {
-      opts.domain = '.easy-scraping.com';
-    }
-  }
-  return opts;
 }
 
-function hostOnlyCookieOptions(req) {
+function legacyDomainCookieOptions(req) {
   const opts = cookieBaseOptions(req);
-  delete opts.domain;
+  const host = requestHost(req);
+  if (isLocalHost(host)) return null;
+  opts.domain = host.includes('nowplayz.com') ? '.nowplayz.com' : '.easy-scraping.com';
   return opts;
 }
 
@@ -237,6 +241,8 @@ function attachGuestForPlay(req, res, next) {
 function setSessionCookie(res, user, req) {
   const normalized = normalizeSessionUser(user);
   if (!normalized) return;
+  const legacyOptions = !IS_TEST_ENV && legacyDomainCookieOptions(req);
+  if (legacyOptions) res.clearCookie(SESSION_COOKIE, legacyOptions);
   res.cookie(SESSION_COOKIE, JSON.stringify(normalized), {
     ...cookieBaseOptions(req),
     maxAge: SESSION_MAX_AGE_MS
@@ -246,6 +252,8 @@ function setSessionCookie(res, user, req) {
 function setLocalCookie(res, user, req) {
   const normalized = parseLocalPayload(user);
   if (!normalized) return;
+  const legacyOptions = !IS_TEST_ENV && legacyDomainCookieOptions(req);
+  if (legacyOptions) res.clearCookie(LOCAL_COOKIE, legacyOptions);
   res.cookie(LOCAL_COOKIE, JSON.stringify(normalized), {
     ...cookieBaseOptions(req),
     maxAge: SESSION_MAX_AGE_MS
@@ -262,7 +270,8 @@ function touchLocalCookie(req, res, user) {
 
 function clearCookiePair(res, name, req) {
   res.clearCookie(name, cookieBaseOptions(req));
-  res.clearCookie(name, hostOnlyCookieOptions(req));
+  const legacyOptions = !IS_TEST_ENV && legacyDomainCookieOptions(req);
+  if (legacyOptions) res.clearCookie(name, legacyOptions);
 }
 
 function clearSessionCookie(res, req) {
@@ -278,6 +287,8 @@ function clearGuestCookie(res, req) {
 
 function createOAuthState(res, req) {
   const state = crypto.randomBytes(16).toString('hex');
+  const legacyOptions = !IS_TEST_ENV && legacyDomainCookieOptions(req);
+  if (legacyOptions) res.clearCookie(OAUTH_STATE_COOKIE, legacyOptions);
   res.cookie(OAUTH_STATE_COOKIE, state, {
     ...cookieBaseOptions(req),
     maxAge: OAUTH_STATE_MAX_AGE_MS
@@ -381,6 +392,8 @@ module.exports = {
   parseSessionFromCookieHeader,
   requireSameOrigin,
   shouldSkipAccessLog,
+  ALLOWED_ORIGINS,
+  ALLOWED_HOSTS,
   resolvePublicBaseUrl,
   signValue,
   unsignValue,

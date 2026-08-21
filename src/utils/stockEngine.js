@@ -518,7 +518,7 @@ async function updateStockPrices() {
   }
 }
 
-// 💰 정기 주식 배당금 자동 지급 엔진 (소수점 보유량 완벽 지원)
+// 💰 정기 주식 배당금 자동 지급 엔진 (기업 영업이익 풀 기반 정산)
 async function distributeStockDividends() {
   try {
     const [stocks] = await pool.query('SELECT stock_id, name, price, dividend_yield FROM stocks WHERE dividend_yield > 0');
@@ -527,6 +527,14 @@ async function distributeStockDividends() {
     for (const s of stocks) {
       const yieldRate = Number(s.dividend_yield || 0);
 
+      // 기업 영업이익 풀 조회
+      const [poolRows] = await pool.query(
+        'SELECT earnings_pool FROM corporate_earnings WHERE stock_id = ? FOR UPDATE',
+        [s.stock_id]
+      ).catch(() => [[]]);
+      let earningsPool = poolRows.length ? BigInt(poolRows[0].earnings_pool || 0) : 10000000n;
+      if (earningsPool <= 0n) continue; // 이익 풀이 고갈된 기업은 배당 미지급
+
       const [holdings] = await pool.query(`
         SELECT us.user_id, us.amount, u.username, u.cash
         FROM user_stocks us
@@ -534,10 +542,21 @@ async function distributeStockDividends() {
         WHERE us.stock_id = ? AND us.amount > 0
       `, [s.stock_id]);
 
+      let totalStockDividend = 0n;
+
       for (const h of holdings) {
         const { unitsToAmountStr, amountToUnits } = require('./moneyScale');
-        const dividendAmount = hourlyDividendForHolding(s.price, h.amount, yieldRate);
+        let dividendAmount = hourlyDividendForHolding(s.price, h.amount, yieldRate);
         if (dividendAmount <= 0n) continue;
+
+        // 이익 풀 한도 내에서 지급
+        if (dividendAmount > earningsPool) {
+          dividendAmount = earningsPool;
+        }
+        if (dividendAmount <= 0n) break;
+
+        earningsPool -= dividendAmount;
+        totalStockDividend += dividendAmount;
 
         const beforeCash = BigInt(String(h.cash || 0).split('.')[0] || 0);
         await pool.query('UPDATE users SET cash = cash + ? WHERE discord_id = ?', [dividendAmount.toString(), h.user_id]);
@@ -547,17 +566,26 @@ async function distributeStockDividends() {
         try {
           const displayCount = unitsToAmountStr(amountToUnits(h.amount));
           await pool.query(`
-            INSERT INTO economy_logs (user_id, username, type, amount, balance_before, balance_after, description)
-            VALUES (?, ?, 'DIVIDEND', ?, ?, ?, ?)
+            INSERT INTO economy_flow_logs (flow_type, category, amount, user_id, balance_after, reason)
+            VALUES ('INFLOW_MINT', 'STOCK_DIVIDEND', ?, ?, ?, ?)
           `, [
-            h.user_id, h.username || `유저_${h.user_id.slice(-4)}`, dividendAmount.toString(),
-            beforeCash.toString(), afterCash.toString(),
-            `💰 [${s.name}] 보유 주식(${displayCount}주) 정기 배당금 수령 (+${dividendAmount.toLocaleString()}원)`
+            dividendAmount.toString(),
+            h.user_id,
+            afterCash.toString(),
+            `💰 [${s.name}] 기업 이익금 기반 정기 배당금 수령 (${displayCount}주)`
           ]);
         } catch (e) {}
       }
+
+      if (totalStockDividend > 0n) {
+        await pool.query(`
+          UPDATE corporate_earnings
+          SET earnings_pool = ?, total_dividend_paid = total_dividend_paid + ?
+          WHERE stock_id = ?
+        `, [earningsPool.toString(), totalStockDividend.toString(), s.stock_id]).catch(() => {});
+      }
     }
-    console.log('💰 [정기 배당 엔진] 소수점 정밀 배당금 분배 완료');
+    console.log('💰 [정기 배당 엔진] 기업 이익 풀 기반 정밀 배당금 분배 완료');
   } catch (err) {
     console.error('❌ 배당금 지급 중 오류:', err);
   }
@@ -645,27 +673,7 @@ function startStockEngine(intervalMs = 10000, client = null) {
   // - 안정(NORMAL): 10~14초
   // - 침체(RECESSION): 차분 → 10~16초
   function getNextTickDelay(baseMs) {
-    let regime = null;
-    try { regime = getCurrentMarketRegime(); } catch (e) {}
-    const regimeType = regime && (regime.type || (regime.id || '').toString()) || 'NORMAL';
-    const minMs = 5 * 1000;   // 절대 최소 5초
-    const maxMs = 30 * 1000;  // 절대 최대 30초
-    let jitterMs = 0;
-    if (regimeType === 'CRASH' || regimeType === 'PANIC') {
-      // 8~10초 (변동성 ↑)
-      jitterMs = -(Math.random() * 2 + 0) * 1000; // -2 ~ 0초
-    } else if (regimeType === 'SUPER_BULL' || regimeType === 'BULL') {
-      // 8~12초
-      jitterMs = (Math.random() * 4 - 2) * 1000; // -2 ~ +2초
-    } else if (regimeType === 'RECESSION' || regimeType === 'COOLDOWN' || regimeType === 'TIGHTENING' || regimeType === 'SLUMP') {
-      // 10~16초 (침체기는 갱신 느리게)
-      jitterMs = Math.random() * 6 * 1000; // 0 ~ +6초
-    } else {
-      // NORMAL/STABLE/LOW_VOL: ±2초 랜덤
-      jitterMs = (Math.random() * 4 - 2) * 1000; // -2 ~ +2초
-    }
-    const next = Math.max(minMs, Math.min(maxMs, baseMs + jitterMs));
-    return Math.floor(next);
+    return 30000; // 30초 주기
   }
 
   // 첫 갱신은 부팅 후 3초
@@ -1216,6 +1224,13 @@ async function createCustomStock(options = {}) {
     peRatio,
     dividendYield
   ]);
+
+  // 🏢 기업 영업이익 풀 자동 초기화 (배당금 및 실물 경제 연동)
+  await pool.query(`
+    INSERT INTO corporate_earnings (stock_id, earnings_pool, total_revenue, total_dividend_paid)
+    VALUES (?, 10000000, 0, 0)
+    ON DUPLICATE KEY UPDATE earnings_pool = earnings_pool;
+  `, [stockId]).catch(() => {});
 
   // 증시 공시 등록
   const title = `👑 [관리자 특례 신규 상장] ${name} (${stockId}) 거래소 신규 상장 공시!`;

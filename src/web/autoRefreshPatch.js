@@ -139,9 +139,15 @@ const AUTO_REFRESH_CLIENT = String.raw`
     if (prevRaw !== null && prevRaw !== '' && prevRaw !== raw) {
       var isUp = false;
       try { isUp = BigInt(raw) > BigInt(prevRaw); } catch (e) { isUp = raw.length > prevRaw.length; }
-      el.style.transition = 'color 0.3s';
+      el.style.transition = 'color 0.2s ease, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1)';
       el.style.color = isUp ? '#34d399' : '#f87171';
-      setTimeout(function() { el.style.color = ''; }, 1200);
+      if (isUp) {
+        el.style.transform = 'scale(1.05)';
+      }
+      setTimeout(function() {
+        el.style.color = '';
+        el.style.transform = '';
+      }, 350);
     }
   }
 
@@ -230,9 +236,14 @@ const AUTO_REFRESH_CLIENT = String.raw`
     return undefined;
   }
 
+  let lastAppliedSnapshotTs = 0;
   function applyUserLiveSnapshot(raw) {
     const user = raw && raw.user ? raw.user : raw;
     if (!user) return;
+
+    const snapTs = Number(user.timestamp || user.ts || 0);
+    if (snapTs && lastAppliedSnapshotTs && snapTs < lastAppliedSnapshotTs) return;
+    if (snapTs) lastAppliedSnapshotTs = snapTs;
 
     const cash = pick(user, 'cash', 'cash');
     const bank = pick(user, 'bank', 'bank');
@@ -322,9 +333,80 @@ const AUTO_REFRESH_CLIENT = String.raw`
       window.__economyLoan = user.loan;
       if (typeof window.applyEconomyLoan === 'function') window.applyEconomyLoan(user.loan);
     }
+
+    if (user.loadout && typeof user.loadout === 'object') {
+      window.__equippedLoadout = user.loadout;
+      applyCosmeticLoadout(user.loadout);
+    }
+  }
+
+  function applyCosmeticLoadout(loadout) {
+    if (!loadout || typeof loadout !== 'object') return;
+
+    // 1. 닉네임 컬러 적용
+    const nameColor = loadout.NAME_COLOR;
+    const nameEls = document.querySelectorAll('#userNickname, .user-name, .user-nickname, #headerUsername, #modal-user-name, .profile-name');
+    if (nameColor && nameColor.itemKey) {
+      let colorCss = '#ffffff';
+      let shadowCss = 'none';
+      if (nameColor.itemKey.includes('cyan')) {
+        colorCss = '#00f3ff'; shadowCss = '0 0 10px rgba(0, 243, 255, 0.7)';
+      } else if (nameColor.itemKey.includes('purple')) {
+        colorCss = '#c084fc'; shadowCss = '0 0 10px rgba(192, 132, 252, 0.7)';
+      } else if (nameColor.itemKey.includes('mint') || nameColor.itemKey.includes('emerald')) {
+        colorCss = '#34d399'; shadowCss = '0 0 10px rgba(52, 211, 153, 0.7)';
+      } else if (nameColor.itemKey.includes('gold')) {
+        colorCss = '#fbbf24'; shadowCss = '0 0 10px rgba(251, 191, 36, 0.7)';
+      }
+      nameEls.forEach(function(el) {
+        el.style.color = colorCss;
+        el.style.textShadow = shadowCss;
+        el.style.fontWeight = '800';
+      });
+    }
+
+    // 2. 프로필 테두리 (PROFILE_FRAME) 적용
+    const frame = loadout.PROFILE_FRAME;
+    const avatarWraps = document.querySelectorAll('#userAvatarWrap, .user-avatar-wrap, #userAvatar, .user-avatar, #modal-user-avatar');
+    if (frame && frame.itemKey) {
+      let borderStyle = '2px solid #6366f1';
+      let boxShadow = '0 0 12px rgba(99, 102, 241, 0.5)';
+      if (frame.itemKey.includes('circuit')) {
+        borderStyle = '2px solid #00f3ff'; boxShadow = '0 0 15px rgba(0, 243, 255, 0.7)';
+      } else if (frame.itemKey.includes('golden') || frame.itemKey.includes('leaf')) {
+        borderStyle = '2px solid #fbbf24'; boxShadow = '0 0 16px rgba(251, 191, 36, 0.8)';
+      } else if (frame.itemKey.includes('nebula')) {
+        borderStyle = '2px solid #ec4899'; boxShadow = '0 0 20px rgba(236, 72, 153, 0.8), 0 0 35px rgba(99, 102, 241, 0.6)';
+      }
+      avatarWraps.forEach(function(el) {
+        el.style.border = borderStyle;
+        el.style.boxShadow = boxShadow;
+        el.style.borderRadius = '50%';
+        el.style.transition = 'all 0.3s ease';
+      });
+    }
+
+    // 3. 배지 (BADGE) 적용
+    const badge = loadout.BADGE;
+    if (badge && badge.name) {
+      let badgeChip = document.getElementById('user-loadout-badge-chip');
+      if (!badgeChip) {
+        const wrap = document.querySelector('.user-info-text, .user-meta, .profile-meta');
+        if (wrap) {
+          badgeChip = document.createElement('span');
+          badgeChip.id = 'user-loadout-badge-chip';
+          badgeChip.style.cssText = 'display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px; background:rgba(251,191,36,0.15); border:1px solid rgba(251,191,36,0.4); color:#fbbf24; margin-left:6px;';
+          wrap.appendChild(badgeChip);
+        }
+      }
+      if (badgeChip) {
+        badgeChip.innerHTML = (badge.icon || '👑') + ' ' + badge.name;
+      }
+    }
   }
 
   window.applyUserLiveSnapshot = applyUserLiveSnapshot;
+  window.applyCosmeticLoadout = applyCosmeticLoadout;
 
   function applyMarketFromSocket(data) {
     if (!data) return;

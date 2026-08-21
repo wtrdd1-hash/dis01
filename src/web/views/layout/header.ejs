@@ -1,0 +1,257 @@
+<%
+function formatKoreanMoney(val) {
+  try {
+    const n = BigInt(val || 0);
+    if (n === 0n) return '0원';
+    const jo = n / 1000000000000n;
+    const eok = (n % 1000000000000n) / 100000000n;
+    const man = (n % 100000000n) / 10000n;
+    const won = n % 10000n;
+    let res = '';
+    if (jo > 0n) res += jo.toLocaleString() + '조 ';
+    if (eok > 0n) res += eok.toLocaleString() + '억 ';
+    if (man > 0n && jo === 0n) res += man.toLocaleString() + '만 ';
+    if (!res) res = won.toLocaleString() + '원';
+    else res += '원';
+    return res.trim();
+  } catch (e) {
+    return Number(val || 0).toLocaleString() + '원';
+  }
+}
+%>
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+  <title><%= (typeof pageTitle !== 'undefined' ? pageTitle + ' - ' : '') %>월덕 (WTRD) 실시간 가상 경제</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦆</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800;900&family=Pretendard:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/wtrd-design.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  
+  <style>
+    :root {
+      --bg-dark: #07090e;
+      --bg-card: rgba(15, 23, 42, 0.85);
+      --border-glow: rgba(99, 102, 241, 0.35);
+      --primary: #6366F1;
+      --accent-gold: #F59E0B;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.1) 0px, transparent 50%),
+        radial-gradient(at 50% 50%, rgba(56, 189, 248, 0.05) 0px, transparent 50%);
+      color: #f8fafc;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* 🌐 고품격 글로벌 핀테크 헤더 */
+    .w-top-navbar {
+      position: sticky;
+      top: 0;
+      z-index: 500;
+      background: rgba(11, 15, 25, 0.92);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 0 20px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .w-nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: #fff;
+      font-size: 19px;
+      font-weight: 900;
+      font-family: 'Outfit', sans-serif;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .w-nav-menu {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      list-style: none;
+      white-space: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .w-nav-menu::-webkit-scrollbar { display: none; }
+
+    .w-nav-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 13px;
+      border-radius: 10px;
+      color: #94a3b8;
+      text-decoration: none;
+      font-size: 13.5px;
+      font-weight: 700;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      border: 1px solid transparent;
+    }
+    .w-nav-link:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .w-nav-link.active {
+      color: #fff;
+      background: rgba(99, 102, 241, 0.15);
+      border-color: rgba(99, 102, 241, 0.4);
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.2);
+    }
+
+    /* VIP 메타버스 골드 버튼 */
+    .w-nav-vip {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.25));
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      color: #fbbf24 !important;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+    }
+    .w-nav-vip:hover {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.4));
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .w-user-panel {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .w-balance-pill {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-login-discord {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #5865F2;
+      color: #fff;
+      text-decoration: none;
+      padding: 7px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 800;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 15px rgba(88, 101, 242, 0.4);
+    }
+    .btn-login-discord:hover {
+      background: #4752C4;
+      box-shadow: 0 0 25px rgba(88, 101, 242, 0.6);
+    }
+
+    .btn-logout-clean {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      transition: all 0.2s ease;
+    }
+    .btn-logout-clean:hover {
+      background: rgba(239, 68, 68, 0.25);
+      color: #fff;
+    }
+
+    @media (max-width: 900px) {
+      .w-nav-menu { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="w-top-navbar">
+    <a href="/stocks" class="w-nav-brand">
+      <span style="font-size:24px;">🦆</span>
+      <span>월덕 <span style="color:#818cf8; font-size:14px; font-weight:700;">WTRD</span></span>
+    </a>
+
+    <!-- 데스크탑 네비게이션 -->
+    <nav class="w-nav-menu">
+      <a href="/stocks" class="w-nav-link <%= (typeof activePage !== 'undefined' && activePage === 'stocks') ? 'active' : '' %>">
+        <span>📈</span> <span>주식</span>
+      </a>
+      <a href="/shop" class="w-nav-link <%= (typeof activePage !== 'undefined' && activePage === 'shop') ? 'active' : '' %>">
+        <span>🛍️</span> <span>명품·상점</span>
+      </a>
+      <a href="/casino" class="w-nav-link <%= (typeof activePage !== 'undefined' && activePage === 'casino') ? 'active' : '' %>">
+        <span>🎰</span> <span>게임</span>
+      </a>
+      <a href="/mining" class="w-nav-link <%= (typeof activePage !== 'undefined' && activePage === 'mining') ? 'active' : '' %>">
+        <span>⛏️</span> <span>채굴</span>
+      </a>
+      <a href="/ranking" class="w-nav-link <%= (typeof activePage !== 'undefined' && activePage === 'ranking') ? 'active' : '' %>">
+        <span>🏆</span> <span>랭킹</span>
+      </a>
+      <a href="/plaza" class="w-nav-link w-nav-vip <%= (typeof activePage !== 'undefined' && activePage === 'plaza') ? 'active' : '' %>">
+        <span>👑</span> <span>VIP 메타버스</span>
+      </a>
+      <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
+        <a href="/admin" class="w-nav-link" style="color:#38bdf8;">
+          <span>🛡️</span> <span>관리자</span>
+        </a>
+      <% } %>
+    </nav>
+
+    <!-- 사용자 프로필 / 로그인 / 로그아웃 -->
+    <div class="w-user-panel">
+      <% if (typeof user !== 'undefined' && user && user.id) { %>
+        <div class="w-balance-pill" title="현금: <%= Number(userAssets.cash).toLocaleString() %>원 | 은행: <%= Number(userAssets.bank).toLocaleString() %>원">
+          <span style="color:#34d399;">💵</span>
+          <span id="user-cash-display" style="color:#34d399;"><%= formatKoreanMoney(userAssets.cash) %></span>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px;">
+          <img src="<%= user.avatar %>" alt="avatar" style="width:32px; height:32px; border-radius:50%; border:2px solid #818cf8;">
+          <span style="font-weight:700; font-size:13px; color:#f8fafc;"><%= user.username %></span>
+        </div>
+
+        <a href="/logout" class="btn-logout-clean" title="완전 로그아웃">
+          <span>🚪</span> <span>로그아웃</span>
+        </a>
+      <% } else { %>
+        <a href="/auth/discord" class="btn-login-discord">
+          <span>👾</span> <span>로그인</span>
+        </a>
+      <% } %>
+    </div>
+  </header>

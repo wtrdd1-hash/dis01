@@ -16,6 +16,7 @@
   .stock-chip.is-active { background: #0284c7; color: #fff; border-color: #38bdf8; }
 </style>
 
+<div class="admin-container">
 <!-- 🌟 1. 신규 주식 상장 & 상장폐지 & 재상장 관리 패널 -->
 <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:18px; margin-bottom:24px;">
 
@@ -875,5 +876,6 @@
   // Enter 키로 조회
   document.getElementById('ph-stock-id').addEventListener('keydown', e => { if (e.key === 'Enter') loadPriceHistory(); });
 </script>
+</div>
 
 <%- include('footer') %>

@@ -16,22 +16,24 @@
   --asset-net-glow: rgba(192, 132, 252, 0.20);
 }
 
-/* 자산 그리드: 카드를 그리드 형식으로 전환 */
+/* 자산 그리드: 카드를 가로 행(Row) 형식으로 모던화하여 큰 금액도 줄바꿈 없이 깔끔하게 표시 */
 .personal-asset-grid {
-  display: grid !important;
-  grid-template-columns: 1fr 1fr;
+  display: flex !important;
+  flex-direction: column !important;
   gap: 8px !important;
-  padding: 10px !important;
+  padding: 10px 12px !important;
 }
 
-/* 자산 카드 (modern glassmorphism) */
+/* 자산 카드 (modern horizontal glassmorphism) */
 .personal-asset-grid .asset-card {
-  flex-direction: column !important;
-  align-items: flex-start !important;
-  padding: 12px 14px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 11px 14px !important;
   border-radius: 10px !important;
-  background: rgba(43, 45, 49, 0.55) !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  background: rgba(30, 32, 38, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   position: relative;
@@ -50,8 +52,8 @@
 
 .personal-asset-grid .asset-card:hover {
   transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.18) !important;
-  background: rgba(54, 57, 63, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  background: rgba(54, 57, 63, 0.8) !important;
 }
 
 .personal-asset-grid .asset-card:hover::before {
@@ -76,63 +78,75 @@
 
 /* 주식 카드 */
 .personal-asset-grid .asset-card:has(#my-stock-val) {
-  grid-column: 1 / -1;
   --asset-glow: var(--asset-stock-glow);
 }
 .personal-asset-grid .asset-card:has(#my-stock-val) .asset-val {
   color: var(--asset-stock-color) !important;
 }
 
-/* 순자산 카드 (full-width accent) */
+/* 순자산 카드 (full-width highlight accent) */
 .personal-asset-grid .asset-card.highlight {
-  grid-column: 1 / -1 !important;
   --asset-glow: var(--asset-net-glow);
-  background: linear-gradient(135deg, rgba(192, 132, 252, 0.18), rgba(88, 101, 242, 0.18)) !important;
-  border: 1px solid rgba(192, 132, 252, 0.35) !important;
-  padding: 16px 18px !important;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(99, 102, 241, 0.25)) !important;
+  border: 1px solid rgba(168, 85, 247, 0.45) !important;
+  padding: 13px 16px !important;
+  border-radius: 12px !important;
 }
 
 .personal-asset-grid .asset-card.highlight .asset-val {
-  font-size: 1.4rem !important;
+  font-size: clamp(1.15rem, 1.5vw, 1.45rem) !important;
   color: var(--asset-net-color) !important;
-  font-weight: 800 !important;
+  font-weight: 900 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.2 !important;
 }
 
 /* 자산 라벨 + 값 모던화 */
 .personal-asset-grid .asset-lbl {
-  font-size: 11px !important;
+  font-size: 12.5px !important;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-faint) !important;
-  margin-bottom: 4px;
+  letter-spacing: 0.04em;
+  color: #94a3b8 !important;
+  font-weight: 800 !important;
+  margin-bottom: 0 !important;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
 .personal-asset-grid .asset-val {
-  font-size: 1.05rem !important;
-  font-weight: 700 !important;
+  font-size: clamp(1rem, 1.3vw, 1.25rem) !important;
+  font-weight: 900 !important;
   font-variant-numeric: tabular-nums !important;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  word-break: keep-all;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  text-align: right !important;
+  line-height: 1.2 !important;
 }
 
 /* 자산 비율 바 모더니즈 */
 .asset-ratio-container {
-  padding: 8px 10px 12px !important;
+  padding: 10px 14px 12px !important;
   background: rgba(17, 18, 20, 0.5);
   border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+.asset-ratio-header {
+  font-size: 12.5px !important;
+  font-weight: 800 !important;
+  margin-bottom: 6px !important;
+  color: #cbd5e1 !important;
+}
+
 .asset-ratio-bar {
   height: 8px !important;
-  border-radius: 4px;
+  border-radius: 6px;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
 }
 
@@ -157,31 +171,36 @@
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
   gap: 6px !important;
-  padding: 10px !important;
+  padding: 10px 12px 24px !important;
   background: transparent !important;
 }
 
 .btn-quick {
   position: relative;
-  background: rgba(43, 45, 49, 0.6) !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
-  color: var(--text-header) !important;
-  font-weight: 600 !important;
-  font-size: 12.5px !important;
-  padding: 10px 6px !important;
+  background: rgba(43, 45, 49, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #fff !important;
+  font-weight: 800 !important;
+  font-size: 13px !important;
+  padding: 10px 4px !important;
+  min-height: 42px !important;
   border-radius: 8px !important;
   cursor: pointer;
   transition: all 0.15s ease;
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .btn-quick:hover {
-  background: rgba(79, 84, 92, 0.6) !important;
-  border-color: rgba(255, 255, 255, 0.16) !important;
-  transform: translateY(-1px);
+  background: rgba(79, 84, 92, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
 }
 
 .btn-quick:active {
@@ -235,31 +254,33 @@ body[data-tab="tab-business"] .btn-quick[onclick*="tab-business"]::after {
 
 /* 지갑 사이드바 (wallet-rail) 모더니즈 */
 .wallet-rail {
-  background: rgba(17, 18, 20, 0.65) !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.04) !important;
-  backdrop-filter: blur(12px);
+  background: rgba(17, 18, 20, 0.75) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(14px);
+  overflow-y: auto !important;
+  padding-bottom: 90px !important;
 }
 
 .wallet-rail .rail-label {
-  font-size: 11px !important;
+  font-size: 16px !important;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-faint) !important;
-  font-weight: 700 !important;
-  padding: 12px 12px 6px !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  letter-spacing: 0.04em;
+  color: #f1f5f9 !important;
+  font-weight: 900 !important;
+  padding: 16px 14px 10px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 /* 세금/대출/이벤트 노트 카드화 */
 #wallet-tax-note,
 #wallet-tax-next,
 #wallet-loan-note {
-  margin: 8px 12px 0 !important;
-  padding: 10px 12px !important;
-  background: rgba(43, 45, 49, 0.4) !important;
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 8px !important;
-  font-size: 12px !important;
+  margin: 8px 10px 0 !important;
+  padding: 12px 14px !important;
+  background: rgba(43, 45, 49, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px !important;
+  font-size: 13.5px !important;
   line-height: 1.5 !important;
   display: flex;
   align-items: flex-start;

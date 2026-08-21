@@ -66,12 +66,21 @@ module.exports = {
   casinoMaxBet: 0,         // 0이면 1회 배팅 상한 없음 (65자리 MAX_MONEY만). 양/구 경제에서 100만 캡은 올인을 0원처럼 만듦
   maxPlayerCash: 0,        // 0이면 현금 보유 상한 없음 (65자리 MAX_MONEY만). 1억 캡은 당첨금을 조용히 버림
   dailyReward: 3000,       // 기본 출석 3,000원
-  dailyStreakBonus: 500,   // 연속 출석 1일당 +500원 (최대 10일 연속 시 +5,000원 보너스)
+  dailyStreakBonus: 200,   // 연속 출석 1일당 +200원 (최대 10일 연속 시 4,800원)
   workCooldownMinutes: 10, // 일하기 쿨타임 10분
-  subsidyAmount: 2000,     // 정기 생활 지원금 2,000원
-  subsidyCooldownMinutes: 10, // 지원금 쿨타임 10분
-  bankInterestRate: 0.0005 / 60, // 분당 분할 지급 (시간당 0.05%, economyBalance.BANK와 동일)
+  subsidyAmount: 2000,     // 생활 지원금 2,000원 (순자산 2만원 이하 유저 대상)
+  subsidyCooldownMinutes: 1440, // 지원금 쿨타임 24시간 (1일 1회)
+  bankInterestRate: (0.001 / 24) / 60, // 분당 분할 복리 지급 (하루 0.1%)
   port: parseInt(process.env.PORT || '8080', 10),
+
+  getServerEnvBadge() {
+    const isTest = 
+      process.env.APP_ENV === 'test' || 
+      process.env.NODE_ENV === 'test' || 
+      (process.env.DB_NAME && process.env.DB_NAME.includes('test')) ||
+      (process.env.WEB_PORT === '8085' || process.env.PORT === '8085');
+    return isTest ? '🧪 [테스트 서버]' : '🚀 [본 서버]';
+  },
 
   // 참고용. 실제 지급 수치는 src/utils/economyBalance.js 의 CLICKER 가 기준이다.
   clicker: {

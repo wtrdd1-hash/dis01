@@ -2,23 +2,51 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { execFile } = require('child_process');
-const { inspectContainer, dockerInfoOk } = require('./docker');
+const { inspectContainer, dockerInfoOk, getAllDockerFleet } = require('./docker');
 
 const CONTAINERS = [
   { id: 'app', name: '웹·봇 프로세스', container: 'wtrdd-discord-app' },
+  { id: 'test-app', name: '테스트 환경', container: 'wtrdd-test-app' },
   { id: 'proxy', name: '엣지 프록시', container: 'wtrdd-edge-proxy' },
   { id: 'tunnel', name: 'Cloudflare 터널', container: 'wtrdd-cloudflared' },
-  { id: 'autoheal', name: '컨테이너 자동복구', container: 'wtrdd-autoheal' }
+  { id: 'autoheal', name: '컨테이너 자동복구', container: 'wtrdd-autoheal' },
+  { id: 'modelrelay', name: 'AI 모델 릴레이', container: 'modelrelay' }
 ];
 
-function pingApp(appHealthUrl) {
+let lastCpuSample = null;
+
+function getHostCpuUsage() {
+  try {
+    const stat = fs.readFileSync('/proc/stat', 'utf8');
+    const firstLine = stat.split('\n')[0];
+    const parts = firstLine.trim().split(/\s+/).slice(1).map(Number);
+    const idle = parts[3] + (parts[4] || 0);
+    const total = parts.reduce((a, b) => a + b, 0);
+    const now = Date.now();
+    let usage = 0;
+    if (lastCpuSample && (now - lastCpuSample.ts) >= 200) {
+      const deltaTotal = total - lastCpuSample.total;
+      const deltaIdle = idle - lastCpuSample.idle;
+      if (deltaTotal > 0) {
+        usage = Math.max(0, Math.min(100, Math.round(((deltaTotal - deltaIdle) / deltaTotal) * 1000) / 10));
+      }
+    }
+    lastCpuSample = { total, idle, ts: now };
+    return usage;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function pingUrl(url, timeoutMs = 4000) {
   const started = Date.now();
   return (async () => {
     try {
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 4000);
-      const res = await fetch(appHealthUrl, { signal: ac.signal, cache: 'no-store' });
+      const timer = setTimeout(() => ac.abort(), timeoutMs);
+      const res = await fetch(url, { signal: ac.signal, cache: 'no-store' });
       clearTimeout(timer);
       const body = await res.json().catch(() => ({}));
       return { ok: res.ok && body.ok !== false, latencyMs: Date.now() - started, body };
@@ -55,9 +83,7 @@ function readWatchdogEvents(logFile, limit) {
     for (const line of lines) {
       try {
         events.push(JSON.parse(line));
-      } catch (_) {
-        /* 깨진 줄은 건너뛴다 */
-      }
+      } catch (_) {}
     }
     return events.reverse();
   } catch (_) {
@@ -65,25 +91,117 @@ function readWatchdogEvents(logFile, limit) {
   }
 }
 
-function hostMetrics() {
-  const os = require('os');
-  const total = os.totalmem();
-  const free = os.freemem();
-  let diskUsedPct = null;
-  try {
-    const st = fs.statfsSync('/');
-    if (st.blocks > 0) {
-      diskUsedPct = Math.round((1 - Number(st.bavail) / Number(st.blocks)) * 100);
-    }
-  } catch (_) {
-    diskUsedPct = null;
+function getDiskMetrics() {
+  const mountConfigs = [
+    { id: 'ssd1', path: '/', label: 'SSD 1 (시스템 NVMe)', mount: '/', model: 'NVMe 256GB' },
+    { id: 'ssd2', path: '/data', label: 'SSD 2 (데이터·DB NVMe)', mount: '/data', model: 'NVMe 256GB' }
+  ];
+
+  const disks = [];
+  let totalBytesAll = 0;
+  let usedBytesAll = 0;
+  let freeBytesAll = 0;
+
+  for (const cfg of mountConfigs) {
+    try {
+      if (fs.existsSync(cfg.path)) {
+        const st = fs.statfsSync(cfg.path);
+        if (st && st.blocks > 0) {
+          const totalBytes = Number(st.blocks) * Number(st.bsize);
+          const freeBytes = Number(st.bavail) * Number(st.bsize);
+          const usedBytes = totalBytes - freeBytes;
+          const totalGb = Math.round((totalBytes / (1024 ** 3)) * 10) / 10;
+          const usedGb = Math.round((usedBytes / (1024 ** 3)) * 10) / 10;
+          const freeGb = Math.round((freeBytes / (1024 ** 3)) * 10) / 10;
+          const usedPct = totalBytes > 0 ? Math.round((usedBytes / totalBytes) * 1000) / 10 : 0;
+
+          disks.push({
+            id: cfg.id,
+            label: cfg.label,
+            mount: cfg.mount,
+            model: cfg.model,
+            totalGb,
+            usedGb,
+            freeGb,
+            usedPercent: usedPct,
+            totalBytes,
+            usedBytes,
+            freeBytes
+          });
+
+          totalBytesAll += totalBytes;
+          usedBytesAll += usedBytes;
+          freeBytesAll += freeBytes;
+        }
+      }
+    } catch (_) {}
   }
-  const loads = os.loadavg();
+
+  const totalGbAll = Math.round((totalBytesAll / (1024 ** 3)) * 10) / 10;
+  const usedGbAll = Math.round((usedBytesAll / (1024 ** 3)) * 10) / 10;
+  const freeGbAll = Math.round((freeBytesAll / (1024 ** 3)) * 10) / 10;
+  const usedPctAll = totalBytesAll > 0 ? Math.round((usedBytesAll / totalBytesAll) * 1000) / 10 : 0;
+
   return {
-    memUsedPct: total ? Math.round(((total - free) / total) * 100) : null,
-    diskUsedPct,
-    load1: Number(loads[0].toFixed(2)),
-    uptimeSec: Math.round(os.uptime())
+    totalGb: totalGbAll,
+    usedGb: usedGbAll,
+    freeGb: freeGbAll,
+    usedPercent: usedPctAll,
+    disks
+  };
+}
+
+function hostMetrics() {
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = totalMem - freeMem;
+  const memUsedPct = totalMem ? Math.round((usedMem / totalMem) * 1000) / 10 : 0;
+
+  const disk = getDiskMetrics();
+  const loads = os.loadavg();
+  const cpus = os.cpus() || [];
+  const cpuModel = cpus[0]?.model || 'Intel / AMD CPU';
+  const cpuCount = cpus.length || 1;
+  const cpuUsagePct = getHostCpuUsage();
+
+  const ifaces = os.networkInterfaces();
+  const ips = [];
+  for (const [name, netList] of Object.entries(ifaces)) {
+    for (const net of netList) {
+      if (net.family === 'IPv4' && !net.internal && !name.includes('docker') && !name.includes('br-')) {
+        let label = 'LAN';
+        if (net.address.startsWith('192.168.100.')) label = '직접 랜선 (eno1)';
+        else if (net.address.startsWith('192.168.0.')) label = '공유기 LAN';
+        ips.push({ iface: name, ip: net.address, label });
+      }
+    }
+  }
+
+  return {
+    cpu: {
+      model: cpuModel,
+      cores: cpuCount,
+      usagePercent: cpuUsagePct,
+      load1: Number(loads[0].toFixed(2)),
+      load5: Number(loads[1].toFixed(2)),
+      load15: Number(loads[2].toFixed(2))
+    },
+    memory: {
+      totalBytes: totalMem,
+      usedBytes: usedMem,
+      freeBytes: freeMem,
+      totalGb: Math.round((totalMem / (1024 ** 3)) * 10) / 10,
+      usedGb: Math.round((usedMem / (1024 ** 3)) * 10) / 10,
+      freeGb: Math.round((freeMem / (1024 ** 3)) * 10) / 10,
+      usedPercent: memUsedPct
+    },
+    disk,
+    uptimeSec: Math.round(os.uptime()),
+    publicIp: '211.43.20.189',
+    sshPort: 34567,
+    ips,
+    nodeVersion: process.version,
+    platform: `${os.type()} ${os.release()} (${os.arch()})`
   };
 }
 
@@ -93,6 +211,39 @@ function overallOf(checks) {
   if (downs.some((c) => c.critical)) return 'down';
   if (downs.length || degraded.length) return 'degraded';
   return 'ok';
+}
+
+function getSshSessions() {
+  return new Promise((resolve) => {
+    execFile('who', [], { timeout: 3000, encoding: 'utf8' }, (err, stdout) => {
+      if (err || !stdout) {
+        return resolve({ count: 0, active: false, sessions: [] });
+      }
+      const lines = String(stdout).split('\n').map((l) => l.trim()).filter(Boolean);
+      const sessions = [];
+      for (const line of lines) {
+        const ipMatch = line.match(/\(([^)]+)\)/);
+        const ip = ipMatch ? ipMatch[1] : '-';
+        const rawWithoutIp = line.replace(/\([^)]+\)/, '').trim();
+        const parts = rawWithoutIp.split(/\s+/);
+        const user = parts[0] || 'unknown';
+        const tty = parts.length > 3 ? parts.slice(1, -2).join(' ') : (parts[1] || 'pts');
+        const loginTime = parts.length >= 3 ? parts.slice(-2).join(' ') : '-';
+
+        sessions.push({
+          user,
+          tty,
+          ip,
+          loginTime
+        });
+      }
+      resolve({
+        count: sessions.length,
+        active: sessions.length > 0,
+        sessions
+      });
+    });
+  });
 }
 
 function createCollector(opts) {
@@ -106,10 +257,15 @@ function createCollector(opts) {
   async function collectHealth() {
     const env = envFileLoad();
     const paused = fs.existsSync(path.join(watchdogStateDir, 'off'));
-    const [appPing, mysql, docker, ...containerStates] = await Promise.all([
-      pingApp(appHealthUrl),
+    
+    // 주요 서비스 핑, 도커 플릿, SSH 접속자 전체 현황 수집
+    const [appPing, testPing, mysql, docker, dockerFleet, sshSessions, ...containerStates] = await Promise.all([
+      pingUrl(appHealthUrl),
+      pingUrl('http://127.0.0.1:8085/healthz'),
       pingMysql(env),
       dockerInfoOk(),
+      getAllDockerFleet(),
+      getSshSessions(),
       ...CONTAINERS.map((item) => inspectContainer(item.container))
     ]);
 
@@ -119,18 +275,16 @@ function createCollector(opts) {
     });
 
     const appBody = appPing.body || {};
+    const testBody = testPing.body || {};
     const webOk = appPing.ok;
+    const testOk = testPing.ok;
     const dbOk = Boolean(mysql.ok || appBody.db);
     const botOk = appBody.bot === true;
-    const appBox = containerMap.app;
-    const proxyBox = containerMap.proxy;
-    const tunnelBox = containerMap.tunnel;
-    const healBox = containerMap.autoheal;
 
     const checks = [
       {
         id: 'web',
-        name: '웹 대시보드',
+        name: '웹 대시보드 (본 서버)',
         detail: webOk
           ? `응답 ${appPing.latencyMs}ms · 버전 ${appBody.label || appBody.version || '-'}`
           : 'HTTP 응답 없음. 감시자가 자동 기동을 시도합니다.',
@@ -139,69 +293,68 @@ function createCollector(opts) {
         critical: true
       },
       {
+        id: 'test-web',
+        name: '테스트 환경 (test.easy-scraping.com)',
+        detail: testOk
+          ? `응답 ${testPing.latencyMs}ms · 버전 ${testBody.label || testBody.version || '-'}`
+          : '테스트 서버 오프라인 또는 미기동 상태입니다.',
+        latencyMs: testPing.latencyMs,
+        level: testOk ? 'ok' : 'degraded',
+        critical: false
+      },
+      {
         id: 'bot',
-        name: '디스코드 봇',
+        name: '디스코드 봇 (월덕봇)',
         detail: !webOk
           ? '웹 프로세스와 함께 내려간 상태입니다.'
           : botOk
-            ? `연결됨 · 업타임 ${appBody.uptime || 0}초`
+            ? `정상 연결 · 업타임 ${appBody.uptime || 0}초`
             : '프로세스는 살아 있으나 디스코드 준비 전(또는 재연결 중)입니다.',
         level: !webOk ? 'down' : botOk ? 'ok' : 'degraded',
         critical: true
       },
       {
         id: 'mysql',
-        name: '데이터베이스',
-        detail: dbOk ? `MySQL 응답 ${mysql.latencyMs}ms` : 'MySQL ping 실패',
+        name: '데이터베이스 (MariaDB / MySQL)',
+        detail: dbOk ? `MySQL 쿼리 핑 ${mysql.latencyMs}ms (포트 3306)` : 'MySQL ping 실패',
         latencyMs: mysql.latencyMs,
         level: dbOk ? 'ok' : 'down',
         critical: true
       },
       {
-        id: 'app-container',
-        name: '앱 컨테이너',
-        detail: appBox.exists
-          ? `${appBox.status}${appBox.health ? ` · health ${appBox.health}` : ''} · 재시작 ${appBox.restartCount}회`
-          : '컨테이너가 없습니다. 감시자가 compose up 합니다.',
-        level: appBox.running ? 'ok' : 'down',
-        critical: true
-      },
-      {
         id: 'proxy',
-        name: '엣지 프록시',
-        detail: proxyBox.running ? `nginx · ${proxyBox.health}` : '프록시 컨테이너가 꺼져 있습니다.',
-        level: proxyBox.running ? 'ok' : 'down',
+        name: 'Nginx 엣지 프록시',
+        detail: containerMap.proxy?.running ? `nginx · ${containerMap.proxy?.health || 'running'}` : '프록시 컨테이너 중지',
+        level: containerMap.proxy?.running ? 'ok' : 'down',
         critical: false
       },
       {
         id: 'tunnel',
         name: 'Cloudflare 터널',
-        detail: tunnelBox.running ? 'cloudflared 실행 중' : '터널 컨테이너가 꺼져 있습니다.',
-        level: tunnelBox.running ? 'ok' : 'degraded',
+        detail: containerMap.tunnel?.running ? 'cloudflared 터널 정상 가동 중' : '터널 컨테이너 중지',
+        level: containerMap.tunnel?.running ? 'ok' : 'degraded',
         critical: false
       },
       {
         id: 'autoheal',
         name: 'Docker Autoheal',
-        detail: healBox.running
-          ? '비정상 컨테이너를 자동 재시작합니다.'
-          : '자동복구 컨테이너가 꺼져 있습니다. 감시자가 다시 올립니다.',
-        level: healBox.running ? 'ok' : 'degraded',
+        detail: containerMap.autoheal?.running ? '비정상 컨테이너 실시간 자동 복구 활성화' : 'Autoheal 중지',
+        level: containerMap.autoheal?.running ? 'ok' : 'degraded',
         critical: false
       },
       {
         id: 'docker',
-        name: 'Docker 엔진',
-        detail: docker.ok ? `Server ${docker.version}` : 'Docker 데몬 응답 없음',
+        name: 'Docker 엔진 데몬',
+        detail: docker.ok ? `Docker Server v${docker.version || ''} (컨테이너 ${dockerFleet.length}개 가동)` : 'Docker 데몬 응답 없음',
         level: docker.ok ? 'ok' : 'down',
         critical: true
       },
       {
         id: 'watchdog',
-        name: '호스트 감시자',
+        name: '미니 PC 24h 감시자',
         detail: paused
-          ? '유지보수 모드(watchdog/off). 자동 기동이 잠시 멈춘 상태입니다.'
-          : 'systemd 타이머가 20초마다 점검하고, 꺼져 있으면 다시 켭니다.',
+          ? '유지보수 모드(watchdog/off). 자동 기동이 일시 정지되었습니다.'
+          : 'systemd 타이머가 20초마다 점검하며 무중단 복구 수행',
         level: paused ? 'degraded' : 'ok',
         critical: false
       }
@@ -216,15 +369,20 @@ function createCollector(opts) {
       return Number.isFinite(t) && Date.now() - t < 24 * 60 * 60 * 1000;
     }).length;
 
+    const host = hostMetrics();
+
     return {
       ok: overallOf(checks) !== 'down',
       overall: overallOf(checks),
       generatedAt: new Date().toISOString(),
-      site: '월덕',
+      site: '월덕 & 이지스크랩 미니 PC 관제',
       publicUrl: 'https://status.easy-scraping.com',
       paused,
       checks,
       containers: containerMap,
+      dockerFleet, // 🐳 미니 PC 내 모든 도커 컨테이너 실시간 통계
+      ssh: sshSessions, // 🔑 SSH 실시간 접속자 현황
+      host,        // 💻 미니 PC CPU, RAM, Disk, Load, Network
       app: {
         version: appBody.version || null,
         label: appBody.label || null,
@@ -237,7 +395,6 @@ function createCollector(opts) {
         restarts24h,
         lastEvent: events[0] || null
       },
-      host: hostMetrics(),
       events
     };
   }

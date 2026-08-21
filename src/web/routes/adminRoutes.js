@@ -10,7 +10,7 @@ const { pool, getOrCreateUser } = require('../../config/database');
 const { formatMoney } = require('../../utils/formatters');
 const { parseAdminMoney } = require('../../utils/moneyScale');
 const { logAdminAction } = require('../../utils/logger');
-const { getSecurityStats, banIp, unbanIp, getBannedIpsList } = require('../security');
+const { getSecurityStats, banIp, unbanIp, getBannedIpsList, getWhitelistedIpsList, addIpToWhitelist, removeIpFromWhitelist } = require('../security');
 const { lookupIp, getFlagEmoji, isValidIp } = require('../../utils/geoIp');
 const config = require('../../config/config');
 const { pushUserLive } = require('../../utils/liveSync');
@@ -2105,6 +2105,36 @@ function createAdminRoutes(getSessionUser) {
     }));
   });
 
+  // ── 🛡️ IP 화이트리스트 API ──────────────────────────────
+  router.get('/security/whitelist', async (req, res) => {
+    try {
+      const list = await getWhitelistedIpsList();
+      return res.json({ success: true, list });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  router.post('/security/whitelist/add', async (req, res) => {
+    const session = req.adminSession;
+    const { ip, description } = req.body || {};
+    if (!ip) return res.status(400).json({ success: false, error: 'IP를 입력하세요.' });
+    const result = await addIpToWhitelist(ip, description, session?.username || 'ADMIN');
+    if (!result.success) return res.status(400).json(result);
+    await logAdminAction(session?.id || 'ADMIN', session?.username || '관리자', 'WEB_WHITELIST_ADD', ip, { description }, req);
+    return res.json(result);
+  });
+
+  router.post('/security/whitelist/remove', async (req, res) => {
+    const session = req.adminSession;
+    const { ip } = req.body || {};
+    if (!ip) return res.status(400).json({ success: false, error: 'IP를 입력하세요.' });
+    const result = await removeIpFromWhitelist(ip);
+    if (!result.success) return res.status(400).json(result);
+    await logAdminAction(session?.id || 'ADMIN', session?.username || '관리자', 'WEB_WHITELIST_REMOVE', ip, {}, req);
+    return res.json(result);
+  });
+
   router.post('/rollback/gambling/:logId', async (req, res) => {
     const session = req.adminSession;
     const { logId } = req.params;
@@ -2586,6 +2616,141 @@ function createAdminRoutes(getSessionUser) {
       });
     } catch (err) {
       console.error('주가 기록 조회 오류:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // ─── 🛍️ 가상 경제 소비 시스템 관리자 API ───────────────────────────────
+  const AdminSpendingService = require('../../core/economy/AdminSpendingService');
+  const PrestigeShopService = require('../../core/economy/PrestigeShopService');
+  const WorkshopService = require('../../core/economy/WorkshopService');
+
+  // 유저 검색
+  router.get('/spending/users/search', async (req, res) => {
+    try {
+      const users = await AdminSpendingService.searchUser(req.query.q);
+      return res.json({ success: true, users });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 유저 소비 프로필 상세 조회
+  router.get('/spending/users/:userId', async (req, res) => {
+    try {
+      const profile = await AdminSpendingService.getUserFullSpendingProfile(req.params.userId);
+      return res.json({ success: true, ...profile });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 유저 아이템 강제 지급
+  router.post('/spending/users/:userId/grant-item', async (req, res) => {
+    try {
+      const adminId = req.adminSession?.id || 'ADMIN';
+      const result = await AdminSpendingService.adminGrantItem(req.params.userId, { ...req.body, adminId });
+      return res.json(result);
+    } catch (err) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  // 유저 아이템 회수 / 삭제
+  router.post('/spending/users/:userId/revoke-item', async (req, res) => {
+    try {
+      const adminId = req.adminSession?.id || 'ADMIN';
+      const result = await AdminSpendingService.adminRevokeItem(req.params.userId, req.body.inventoryId, { ...req.body, adminId });
+      return res.json(result);
+    } catch (err) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  // 유저 제작 재료 수량 설정
+  router.post('/spending/users/:userId/materials', async (req, res) => {
+    try {
+      const adminId = req.adminSession?.id || 'ADMIN';
+      const result = await AdminSpendingService.adminSetMaterials(req.params.userId, req.body.materialKey, req.body.quantity, { ...req.body, adminId });
+      return res.json(result);
+    } catch (err) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  // 유저 덕하우스 레벨 강제 변경
+  router.post('/spending/users/:userId/duck-house-level', async (req, res) => {
+    try {
+      const adminId = req.adminSession?.id || 'ADMIN';
+      const result = await AdminSpendingService.adminSetDuckHouseLevel(req.params.userId, req.body.level, { ...req.body, adminId });
+      return res.json(result);
+    } catch (err) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  // 명예 상점 카탈로그 관리
+  router.get('/spending/catalog', async (req, res) => {
+    try {
+      const items = await PrestigeShopService.listCatalog({ activeOnly: false });
+      return res.json({ success: true, items });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post('/spending/catalog', async (req, res) => {
+    try {
+      const result = await AdminSpendingService.adminSaveCatalogItem(req.body);
+      return res.json(result);
+    } catch (err) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  router.delete('/spending/catalog/:itemKey', async (req, res) => {
+    try {
+      const result = await AdminSpendingService.adminDeleteCatalogItem(req.params.itemKey);
+      return res.json(result);
+    } catch (err) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  // 제작소 레시피 관리
+  router.get('/spending/workshop', async (req, res) => {
+    try {
+      const recipes = await WorkshopService.listRecipes();
+      return res.json({ success: true, recipes });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  router.post('/spending/workshop', async (req, res) => {
+    try {
+      const result = await AdminSpendingService.adminSaveRecipe(req.body);
+      return res.json(result);
+    } catch (err) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  router.delete('/spending/workshop/:recipeKey', async (req, res) => {
+    try {
+      const result = await AdminSpendingService.adminDeleteRecipe(req.params.recipeKey);
+      return res.json(result);
+    } catch (err) {
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  // 소비/소각 통계 및 원장 로그
+  router.get('/spending/ledger', async (req, res) => {
+    try {
+      const data = await AdminSpendingService.getSpendingSummary();
+      return res.json({ success: true, ...data });
+    } catch (err) {
       return res.status(500).json({ success: false, error: err.message });
     }
   });
