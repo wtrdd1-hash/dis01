@@ -118,7 +118,22 @@ class PageController {
       const common = await PageController.getCommonData(req, res);
       const stocks = await StockModel.getAllStocks();
       const regime = getCurrentMarketRegime();
-      res.render('stocks', { ...common, stocks, regime, pageTitle: '실시간 주식 거래소', activePage: 'stocks' });
+      let holdings = [];
+      let totalStockVal = 0n;
+      try {
+        holdings = await StockModel.getUserHoldings(common.user.id);
+        totalStockVal = holdings.reduce((sum, h) => sum + BigInt(h.evalVal || 0), 0n);
+      } catch (e) {}
+
+      res.render('stocks', {
+        ...common,
+        stocks,
+        regime,
+        holdings,
+        totalStockVal,
+        pageTitle: '실시간 주식 거래소',
+        activePage: 'stocks'
+      });
     } catch (e) {
       res.status(500).send('서버 오류: ' + e.message);
     }
