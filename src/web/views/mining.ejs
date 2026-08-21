@@ -1,32 +1,187 @@
-<%- include('layout/header', { pageTitle: '채굴 & 대장간', activePage: 'mining' }) %>
+<%- include('layout/header', { pageTitle: '채굴 광산 & 대장간', activePage: 'mining' }) %>
 
-<main style="flex:1; padding:20px; width:100%; max-width:1240px; margin:0 auto;">
-  
-  <div style="margin-bottom:20px;">
-    <h1 style="font-size:22px; font-weight:900; color:#f8fafc; margin:0; display:flex; align-items:center; gap:8px;">
-      <span>⛏️</span> 채굴 광산 & 대장간 (+1~+15강)
-    </h1>
-    <p style="font-size:13px; color:#94a3b8; margin:4px 0 0 0;">
-      스위트스팟 드릴 클릭 채굴 및 자동 채굴기 업그레이드, 대장간에서 드릴을 강화하세요.
-    </p>
+<style>
+  .mining-hero {
+    background: radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.15), rgba(15, 23, 42, 0.95) 70%);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 20px;
+    padding: 22px;
+    margin-bottom: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  }
+
+  .mining-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+
+  .mining-card {
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 24px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* 💎 채굴 록 애니메이션 */
+  .ore-rock-container {
+    width: 140px;
+    height: 140px;
+    margin: 16px auto;
+    background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
+    border: 3px solid rgba(56, 189, 248, 0.4);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 56px;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.1s ease;
+    box-shadow: 0 0 30px rgba(56, 189, 248, 0.2);
+    position: relative;
+  }
+  .ore-rock-container:hover {
+    transform: scale(1.05);
+    border-color: #38bdf8;
+    box-shadow: 0 0 40px rgba(56, 189, 248, 0.4);
+  }
+  .ore-rock-container:active {
+    transform: scale(0.92);
+    border-color: #f59e0b;
+    box-shadow: 0 0 50px rgba(245, 158, 11, 0.6);
+  }
+
+  /* ✨ 떠오르는 숫자 효과 (Floating Reward) */
+  .floating-reward {
+    position: absolute;
+    color: #34d399;
+    font-size: 20px;
+    font-weight: 900;
+    font-family: 'JetBrains Mono', monospace;
+    pointer-events: none;
+    animation: floatUp 0.8s ease-out forwards;
+    z-index: 100;
+    text-shadow: 0 0 10px rgba(16, 185, 129, 0.8);
+  }
+
+  @keyframes floatUp {
+    0% { opacity: 1; transform: translate(-50%, 0) scale(0.8); }
+    50% { transform: translate(-50%, -30px) scale(1.2); }
+    100% { opacity: 0; transform: translate(-50%, -60px) scale(1); }
+  }
+
+  /* 🔨 대장간 애니메이션 */
+  .forge-hammer {
+    font-size: 48px;
+    display: inline-block;
+    transition: transform 0.15s ease;
+  }
+  .forge-hammer.smash {
+    transform: rotate(-45deg) scale(1.2);
+  }
+
+  .stat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    padding: 6px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+</style>
+
+<main style="flex:1; padding:16px 16px 140px 16px; width:100%; max-width:1240px; margin:0 auto; box-sizing:border-box;">
+
+  <!-- 🏆 상단 배너 -->
+  <div class="mining-hero">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+          <span style="font-size:12px; font-weight:800; padding:3px 8px; background:rgba(56,189,248,0.2); color:#38bdf8; border-radius:6px;">광물 채굴 & 드릴 대장간</span>
+        </div>
+        <h1 style="font-size:22px; font-weight:900; color:#fff; margin:0;">💎 월덕 심해 광산 & 드릴 공방</h1>
+        <p style="font-size:13px; color:#94a3b8; margin:4px 0 0 0;">
+          광석을 클릭하여 채굴하고, 대장간에서 드릴을 강화(+15강)하여 채굴 배율을 극대화하세요.
+        </p>
+      </div>
+
+      <div style="display:flex; gap:10px;">
+        <div class="stat-badge">
+          <span style="color:#94a3b8;">드릴 레벨:</span>
+          <strong id="live-drill-level" style="color:#f59e0b; font-family:'JetBrains Mono',monospace;">Lv.1 (+0강)</strong>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:20px;">
+  <!-- 채굴 & 대장간 그리드 -->
+  <div class="mining-grid">
     
-    <!-- 채굴기 클릭 영역 -->
-    <div style="background:rgba(15,23,42,0.85); border:1px solid rgba(56,189,248,0.3); border-radius:16px; padding:24px; text-align:center;">
-      <div style="font-size:48px; margin-bottom:12px; cursor:pointer;" onclick="mineClick()">⛏️</div>
-      <h3 style="font-size:18px; font-weight:800; color:#fff; margin:0 0 8px 0;">광석 채굴하기</h3>
-      <p style="font-size:13px; color:#94a3b8; margin:0 0 16px 0;">광석을 채굴하여 즉시 현금 보상을 획득하세요.</p>
-      <button onclick="mineClick()" style="width:100%; padding:14px; font-weight:900; background:linear-gradient(135deg,#0284c7,#38bdf8); border:none; border-radius:12px; color:#fff; cursor:pointer; font-size:16px;">채굴 클릭!</button>
+    <!-- ⛏️ 1. 광석 채굴 록 카드 -->
+    <div class="mining-card" style="text-align:center;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h2 style="font-size:17px; font-weight:900; color:#38bdf8; margin:0;">⛏️ 광석 채굴 록</h2>
+        <span id="click-counter-badge" style="font-size:12px; color:#94a3b8; font-family:'JetBrains Mono',monospace;">총 0회 채굴</span>
+      </div>
+
+      <p style="font-size:12.5px; color:#94a3b8; margin:0 0 16px 0;">
+        아래 광석 록을 클릭하여 즉시 현금 보상과 크리티컬 잭팟을 획득하세요!
+      </p>
+
+      <!-- 클릭 대상 록 -->
+      <div id="oreRock" class="ore-rock-container" onclick="triggerMineClick(event)">
+        <span id="oreIcon">💎</span>
+      </div>
+
+      <div style="margin-top:14px; display:flex; justify-content:center; gap:10px; font-size:12.5px;">
+        <span style="color:#94a3b8;">최근 획득:</span>
+        <strong id="last-earned-txt" style="color:#34d399; font-family:'JetBrains Mono',monospace;">0원</strong>
+      </div>
+
+      <button onclick="triggerMineClick(event)" style="width:100%; margin-top:16px; padding:12px; font-weight:900; background:linear-gradient(135deg,#0284c7,#38bdf8); border:none; border-radius:12px; color:#fff; cursor:pointer; font-size:15px; box-shadow:0 0 20px rgba(56,189,248,0.3);">
+        ⛏️ 광석 채굴하기!
+      </button>
     </div>
 
-    <!-- 대장간 강화 영역 -->
-    <div style="background:rgba(15,23,42,0.85); border:1px solid rgba(251,191,36,0.3); border-radius:16px; padding:24px;">
-      <div style="font-size:36px; margin-bottom:8px;">🔨</div>
-      <h3 style="font-size:18px; font-weight:800; color:#fff; margin:0 0 8px 0;">드릴 대장간</h3>
-      <p style="font-size:13px; color:#94a3b8; margin:0 0 16px 0;">드릴을 강화하면 클릭당 채굴 보상이 비약적으로 상승합니다 (+15강까지 지원).</p>
-      <button onclick="upgradeDrill()" style="width:100%; padding:14px; font-weight:900; background:linear-gradient(135deg,#f59e0b,#fbbf24); border:none; border-radius:12px; color:#000; cursor:pointer; font-size:16px;">드릴 강화 시도</button>
+    <!-- 🔨 2. 드릴 대장간 (+1 ~ +15강) 카드 -->
+    <div class="mining-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h2 style="font-size:17px; font-weight:900; color:#fbbf24; margin:0;">🔨 드릴 대장간 (+15강)</h2>
+        <span class="forge-hammer" id="forgeHammer">🔨</span>
+      </div>
+
+      <p style="font-size:12.5px; color:#94a3b8; margin:0 0 16px 0;">
+        드릴을 강화할수록 클릭당 채굴 보상과 크리티컬 확률이 기하급수적으로 증가합니다.
+      </p>
+
+      <div style="background:rgba(30,41,59,0.5); border-radius:12px; padding:14px; margin-bottom:16px; font-size:13px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span style="color:#94a3b8;">현재 장착 드릴</span>
+          <strong id="drill-name-txt" style="color:#fff;">기본 철 드릴 (+0강)</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span style="color:#94a3b8;">채굴 보너스 배율</span>
+          <strong id="drill-bonus-txt" style="color:#34d399; font-family:'JetBrains Mono',monospace;">+0%</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:#94a3b8;">강화 성공 확률</span>
+          <strong id="drill-rate-txt" style="color:#38bdf8; font-family:'JetBrains Mono',monospace;">85%</strong>
+        </div>
+      </div>
+
+      <div id="forge-result-msg" style="min-height:22px; font-size:13px; font-weight:800; text-align:center; color:#fbbf24; margin-bottom:10px;"></div>
+
+      <button id="btn-upgrade-drill" onclick="triggerDrillUpgrade()" style="width:100%; padding:12px; font-weight:900; background:linear-gradient(135deg,#d97706,#f59e0b); border:none; border-radius:12px; color:#000; cursor:pointer; font-size:15px; box-shadow:0 0 20px rgba(245,158,11,0.3);">
+        🔨 드릴 강화 시도하기
+      </button>
     </div>
 
   </div>
@@ -34,30 +189,90 @@
 </main>
 
 <script>
-  async function mineClick() {
+  let totalClicks = 0;
+
+  // ⛏️ 광석 채굴 클릭 (No blocking alert!)
+  async function triggerMineClick(e) {
+    const rock = document.getElementById('oreRock');
+    
+    // 시각적 떠오르는 보상 효과 (Floating Text)
+    const rect = rock.getBoundingClientRect();
+    const floatEl = document.createElement('div');
+    floatEl.className = 'floating-reward';
+    floatEl.innerText = '+채굴 중...';
+    floatEl.style.left = (rect.left + rect.width / 2) + 'px';
+    floatEl.style.top = (rect.top + window.scrollY) + 'px';
+    document.body.appendChild(floatEl);
+
     try {
-      const res = await fetch('/api/clicker/click', { method: 'POST' });
+      const res = await fetch('/api/clicker/click', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clicks: [{ timing: 1.0, pixel: Math.floor(Math.random() * 50) + 1 }]
+        })
+      });
       const data = await res.json();
       if (data.success) {
-        alert(`채굴 성공! +${data.earned || data.reward || 0}원 획득!`);
-        window.location.reload();
+        const earned = Number(data.earned || data.earnedCash || 1500);
+        floatEl.innerText = `+${earned.toLocaleString()}원! 💎`;
+        floatEl.style.color = data.critCount > 0 ? '#fbbf24' : '#34d399';
+        
+        document.getElementById('last-earned-txt').innerText = `+${earned.toLocaleString()}원` + (data.critCount > 0 ? ' (크리티컬!)' : '');
+        totalClicks++;
+        document.getElementById('click-counter-badge').innerText = `총 ${totalClicks}회 채굴`;
+
+        // 상단 헤더 자산 실시간 갱신
+        if (data.newCash) {
+          const cashEl = document.querySelector('.asset-val');
+          if (cashEl) cashEl.innerText = Number(data.newCash).toLocaleString() + '원';
+        }
       } else {
-        alert(data.error || '채굴 쿨다운 중');
+        floatEl.innerText = data.error || '쿨다운 중';
+        floatEl.style.color = '#ef4444';
       }
-    } catch(e) { alert('네트워크 오류'); }
+    } catch (err) {
+      floatEl.innerText = '네트워크 오류';
+      floatEl.style.color = '#ef4444';
+    }
+
+    setTimeout(() => { floatEl.remove(); }, 800);
   }
 
-  async function upgradeDrill() {
+  // 🔨 드릴 대장간 강화
+  async function triggerDrillUpgrade() {
+    const hammer = document.getElementById('forgeHammer');
+    const msgEl = document.getElementById('forge-result-msg');
+    hammer.classList.add('smash');
+    msgEl.innerText = '망치질 중... 🔨';
+    msgEl.style.color = '#38bdf8';
+
     try {
-      const res = await fetch('/api/clicker/upgrade', { method: 'POST' });
+      const res = await fetch('/api/clicker/upgrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'clicker' })
+      });
       const data = await res.json();
-      if (data.success) {
-        alert(`드릴 강화 성공! 현재 레벨: Lv.${data.newLevel}`);
-        window.location.reload();
-      } else {
-        alert(data.error || '강화 실패');
-      }
-    } catch(e) { alert('네트워크 오류'); }
+      setTimeout(() => {
+        hammer.classList.remove('smash');
+        if (data.success) {
+          const lv = data.newLevel || 2;
+          msgEl.innerText = `🎉 강화 대성공! [Lv.${lv} 드릴 달성]`;
+          msgEl.style.color = '#34d399';
+          document.getElementById('live-drill-level').innerText = `Lv.${lv} (+${lv - 1}강)`;
+          document.getElementById('drill-name-txt').innerText = `강화된 드릴 (+${lv - 1}강)`;
+          document.getElementById('drill-bonus-txt').innerText = `+${(lv - 1) * 20}%`;
+        } else {
+          msgEl.innerText = `💥 ${data.error || '강화에 실패했습니다.'}`;
+          msgEl.style.color = '#ef4444';
+        }
+      }, 300);
+    } catch (e) {
+      hammer.classList.remove('smash');
+      msgEl.innerText = '네트워크 오류가 발생했습니다.';
+      msgEl.style.color = '#ef4444';
+    }
   }
 </script>
 
