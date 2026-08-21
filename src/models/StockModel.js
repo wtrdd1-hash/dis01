@@ -106,9 +106,9 @@ class StockModel {
 
       // 3. 거래 로그 기록
       await conn.query(`
-        INSERT INTO stock_trade_logs (user_id, stock_id, action, amount, price, total_cost)
-        VALUES (?, ?, 'BUY', ?, ?, ?)
-      `, [id, stockId, amountStr, price.toString(), cost.toString()]);
+        INSERT INTO economy_logs (user_id, username, type, amount, description)
+        VALUES (?, ?, 'STOCK_BUY', ?, ?)
+      `, [id, id, cost.toString(), `주식 매수: ${stockId} ${amountStr}주`]);
 
       await conn.commit();
       return { success: true, cost: cost.toString(), newCash: (userCash - cost).toString() };
@@ -155,9 +155,9 @@ class StockModel {
 
       // 3. 거래 로그 기록
       await conn.query(`
-        INSERT INTO stock_trade_logs (user_id, stock_id, action, amount, price, total_cost)
-        VALUES (?, ?, 'SELL', ?, ?, ?)
-      `, [id, stockId, amountStr, price.toString(), revenue.toString()]);
+        INSERT INTO economy_logs (user_id, username, type, amount, description)
+        VALUES (?, ?, 'STOCK_SELL', ?, ?)
+      `, [id, id, revenue.toString(), `주식 매도: ${stockId} ${amountStr}주`]);
 
       await conn.commit();
       return { success: true, revenue: revenue.toString() };

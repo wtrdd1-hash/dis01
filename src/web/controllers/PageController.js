@@ -121,8 +121,9 @@ class PageController {
       let holdings = [];
       let totalStockVal = 0n;
       try {
-        holdings = await StockModel.getUserHoldings(common.user.id);
-        totalStockVal = holdings.reduce((sum, h) => sum + BigInt(h.evalVal || 0), 0n);
+        const holdingsRes = await StockModel.getUserHoldings(common.user.id);
+        holdings = holdingsRes.holdings || [];
+        totalStockVal = holdingsRes.totalStockVal || 0n;
       } catch (e) {}
 
       res.render('stocks', {
