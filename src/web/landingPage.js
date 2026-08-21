@@ -2,6 +2,8 @@
  * 랜딩 페이지 뷰 (비로그인 사용자 대상)
  * 2026 모던 다크 테마 디자인 시스템 적용
  */
+const { cssTag } = require('./assetUrl');
+
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
   return String(str)
@@ -52,10 +54,10 @@ function renderNav(stocks, regime) {
         <div class="w-landing__nav-logo">🦆</div>
         <div class="w-landing__nav-title">
           <span>월덕</span>
-          <span style="font-size:12px;color:var(--w-text-muted);font-weight:normal;">(WTRD)</span>
+          <span style="font-size:12px;color:var(--w-text-muted, #94a3b8);font-weight:normal;">(WTRD)</span>
         </div>
       </div>
-      <div style="flex:1;max-width:600px;overflow:hidden;">
+      <div class="w-landing__nav-ticker">
         ${renderTicker(stocks)}
       </div>
       <div class="w-landing__nav-links">
@@ -409,10 +411,125 @@ function renderLandingPage(options) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Noto+Sans+KR:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/wtrd-design.css">
-  <link rel="stylesheet" href="/static/css/dashboard-ux.css">
+  ${cssTag('css/wtrd-design.css')}
+  ${cssTag('css/dashboard-ux.css')}
   <style>
-    body { font-family: var(--w-font-sans); }
+    body { font-family: var(--w-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif); margin: 0; padding: 0; background: #0b0f19; color: #f8fafc; }
+    .w-landing__nav {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 24px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    .w-landing__nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 1.125rem;
+      font-weight: 800;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .w-landing__nav-logo { font-size: 24px; }
+    .w-landing__nav-title {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .w-landing__nav-ticker {
+      flex: 1;
+      max-width: 550px;
+      overflow: hidden;
+      min-width: 0;
+      margin: 0 12px;
+    }
+    .w-landing__nav-links {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .w-landing__nav-link {
+      color: #94a3b8;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.15s ease;
+    }
+    .w-landing__nav-link:hover { color: #f8fafc; }
+    .w-ticker {
+      overflow: hidden;
+      position: relative;
+      white-space: nowrap;
+      width: 100%;
+      mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+      -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+      display: flex;
+      align-items: center;
+    }
+    .w-ticker__track {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      animation: wTickerScroll 25s linear infinite;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .w-ticker__track:hover {
+      animation-play-state: paused;
+    }
+    .w-ticker__item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 9999px;
+      padding: 3px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .w-ticker__symbol {
+      color: #94a3b8;
+      font-family: monospace, var(--w-font-mono);
+      font-weight: 700;
+    }
+    .w-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: monospace, var(--w-font-mono);
+    }
+    .w-badge--up {
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+    }
+    .w-badge--down {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+    }
+    .w-badge--sm {
+      font-size: 11px;
+      padding: 1px 5px;
+    }
+    @keyframes wTickerScroll {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    @media (max-width: 850px) {
+      .w-landing__nav-ticker { display: none !important; }
+    }
     .w-modal-backdrop {
       display: none;
       position: fixed;
