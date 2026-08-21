@@ -226,6 +226,59 @@ function createGameRoutes(getSessionUser) {
     }
   });
 
+  router.post('/plinko', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
+    try {
+      const risk = String(req.body?.risk || 'medium');
+      const mults = risk === 'high' 
+        ? [100, 25, 10, 3, 1.5, 0.5, 0.2, 0.5, 1.5, 3, 10, 25, 100]
+        : risk === 'low'
+        ? [16, 9, 2, 1.4, 1.2, 1.1, 1.0, 1.1, 1.2, 1.4, 2, 9, 16]
+        : [50, 14, 5, 2, 1.5, 0.8, 0.4, 0.8, 1.5, 2, 5, 14, 50];
+      const slotIndex = Math.floor(Math.random() * mults.length);
+      const mult = mults[slotIndex];
+
+      const data = await settleGame(session, req.body?.bet || req.body?.amount, 1000n, (betAmount) => {
+        const isWin = mult >= 1.0;
+        return {
+          game: '플링코',
+          multiplier: mult,
+          isWin,
+          details: { slotIndex, multiplier: mult, risk },
+          payload: { slotIndex, multiplier: mult, risk },
+          message: isWin
+            ? `🔴 플링코 적중! [슬롯 ${slotIndex + 1}] (${mult}배) +${formatMoney(computePayout(betAmount, mult))}`
+            : `🔴 플링코 불발 [슬롯 ${slotIndex + 1}] (${mult}배) -${formatMoney(betAmount)}`
+        };
+      });
+      return res.json(data);
+    } catch (err) {
+      return sendPublicError(res, err);
+    }
+  });
+
+  router.post('/mines/cashout', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
+    try {
+      const mult = Math.max(1.0, Number(req.body?.multiplier) || 1.0);
+      const data = await settleGame(session, req.body?.bet || req.body?.amount, 1000n, (betAmount) => {
+        return {
+          game: '마인즈5x5',
+          multiplier: mult,
+          isWin: true,
+          details: { multiplier: mult },
+          payload: { multiplier: mult },
+          message: `💣 마인즈 캐시아웃 성공! (${mult}배) +${formatMoney(computePayout(betAmount, mult))}`
+        };
+      });
+      return res.json(data);
+    } catch (err) {
+      return sendPublicError(res, err);
+    }
+  });
+
   router.post('/coinflip', async (req, res) => {
     const session = getSessionUser(req);
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });

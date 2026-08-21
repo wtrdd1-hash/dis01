@@ -458,14 +458,14 @@
     const bet = Number(document.getElementById('plinko-bet').value) || 1000;
     const risk = document.getElementById('plinko-risk').value || 'medium';
     try {
-      const res = await fetch('/api/gamble/plinko', {
+      const res = await fetch('/api/game/plinko', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: bet, risk })
+        body: JSON.stringify({ bet, risk })
       });
       const data = await res.json();
       if (data.success) {
-        alert(`🔴 플링코 낙하 결과!\n배율: ${data.multiplier}x\n획득 당첨금: +${Number(data.wonAmount || data.prize || 0).toLocaleString()}원!`);
+        alert(data.message || `🔴 플링코 결과: ${data.multiplier}배 당첨!`);
         window.location.reload();
       } else { alert(data.error || '플링코 실패'); }
     } catch (e) { alert('네트워크 오류'); }
@@ -494,6 +494,7 @@
   function startMinesInteractive() {
     minesActive = true;
     foundGems = 0;
+    currentMinesBet = Number(document.getElementById('mines-bet').value) || 2000;
     document.getElementById('mines-mult').innerText = '1.00x';
     document.getElementById('mines-start-btn').style.display = 'none';
     document.getElementById('mines-cashout-btn').style.display = 'inline-block';
@@ -519,60 +520,92 @@
     }
   }
 
-  function cashoutMinesInteractive() {
+  async function cashoutMinesInteractive() {
     if (!minesActive || foundGems === 0) {
       alert('먼저 다이아몬드를 1개 이상 찾으세요!');
       return;
     }
     const mult = (1 + foundGems * 0.35).toFixed(2);
-    const win = Math.floor(currentMinesBet * Number(mult));
-    alert(`🎉 성공적으로 캐시아웃!\n배율: ${mult}x\n수령액: +${win.toLocaleString()}원`);
+    try {
+      const res = await fetch('/api/game/mines/cashout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bet: currentMinesBet, multiplier: Number(mult) })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || `🎉 마인즈 캐시아웃 성공! (${mult}배)`);
+        window.location.reload();
+      } else {
+        alert(data.error || '캐시아웃 실패');
+      }
+    } catch (e) { alert('네트워크 오류'); }
     minesActive = false;
     document.getElementById('mines-start-btn').style.display = 'inline-block';
     document.getElementById('mines-cashout-btn').style.display = 'none';
-    window.location.reload();
+  }
+
+  // 🃏 블랙잭 게임
+  async function startBlackjackGame() {
+    const bet = Number(document.getElementById('bj-bet').value) || 5000;
+    try {
+      const res = await fetch('/api/game/dice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bet })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message || '블랙잭 게임 완료!');
+        window.location.reload();
+      } else {
+        alert(data.error || '게임 시작 실패');
+      }
+    } catch (e) { alert('네트워크 오류'); }
   }
 
   // 🎰 슬롯머신
   async function spinSlotInteractive() {
     const bet = Number(document.getElementById('slot-bet').value) || 1000;
     try {
-      const res = await fetch('/api/gamble/slot', {
+      const res = await fetch('/api/game/slot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: bet })
+        body: JSON.stringify({ bet })
       });
       const data = await res.json();
       if (data.success) {
-        if (data.reels && data.reels.length >= 3) {
-          document.getElementById('slot-reel-1').innerText = data.reels[0];
-          document.getElementById('slot-reel-2').innerText = data.reels[1];
-          document.getElementById('slot-reel-3').innerText = data.reels[2];
+        const reels = data.payload?.reels || data.details?.slots;
+        if (reels && reels.length >= 3) {
+          document.getElementById('slot-reel-1').innerText = reels[0];
+          document.getElementById('slot-reel-2').innerText = reels[1];
+          document.getElementById('slot-reel-3').innerText = reels[2];
         }
-        document.getElementById('slot-msg').innerText = data.won ? `🎉 축하합니다! 당첨금: +${Number(data.prize).toLocaleString()}원!` : '아쉽게도 낙첨되었습니다.';
+        document.getElementById('slot-msg').innerText = data.message || (data.isWin ? '🎉 축하합니다! 당첨되었습니다!' : '아쉽게도 낙첨되었습니다.');
       } else { alert(data.error || '슬롯 실행 실패'); }
-    } catch (e) { alert('네트워크 오류'); }
+    } catch (e) { alert('네트워크 오류가 발생했습니다.'); }
   }
 
   // 🎫 즉석복권
   async function scratchLotteryInteractive() {
     const bet = Number(document.getElementById('lottery-bet').value) || 1000;
     try {
-      const res = await fetch('/api/gamble/lottery', {
+      const res = await fetch('/api/game/lottery', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: bet })
+        body: JSON.stringify({ bet })
       });
       const data = await res.json();
       if (data.success) {
-        if (data.symbols && data.symbols.length >= 3) {
-          document.getElementById('lottery-1').innerText = data.symbols[0];
-          document.getElementById('lottery-2').innerText = data.symbols[1];
-          document.getElementById('lottery-3').innerText = data.symbols[2];
+        const symbols = data.payload?.symbols || data.details?.symbols;
+        if (symbols && symbols.length >= 3) {
+          document.getElementById('lottery-1').innerText = symbols[0];
+          document.getElementById('lottery-2').innerText = symbols[1];
+          document.getElementById('lottery-3').innerText = symbols[2];
         }
-        document.getElementById('lottery-msg').innerText = data.won ? `🎉 즉석복권 당첨! 상금: +${Number(data.prize).toLocaleString()}원!` : '아쉽게도 낙첨되었습니다.';
+        document.getElementById('lottery-msg').innerText = data.message || (data.isWin ? '🎉 당첨되었습니다!' : '아쉽게도 낙첨되었습니다.');
       } else { alert(data.error || '복권 실행 실패'); }
-    } catch (e) { alert('네트워크 오류'); }
+    } catch (e) { alert('네트워크 오류가 발생했습니다.'); }
   }
 
   // 🏇 오리 경마
@@ -580,17 +613,17 @@
     const lane = Number(document.getElementById('race-lane').value) || 1;
     const bet = Number(document.getElementById('race-bet').value) || 2000;
     try {
-      const res = await fetch('/api/gamble/horse/start', {
+      const res = await fetch('/api/game/horse-race', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ horseIndex: lane, betAmount: bet })
+        body: JSON.stringify({ mode: 'win', horseId: lane, bet })
       });
       const data = await res.json();
       if (data.success) {
-        alert(`🏇 오리 레이스 결과!\n우승: ${data.winnerName || data.winnerLane + '번 오리'}\n${data.isWin ? '🎉 베팅 적중! 상금: +' + Number(data.payout).toLocaleString() + '원' : '아쉽게도 패배했습니다.'}`);
+        alert(data.message || '🏇 경마 레이스가 종료되었습니다!');
         window.location.reload();
       } else { alert(data.error || '경마 시작 실패'); }
-    } catch (e) { alert('네트워크 오류'); }
+    } catch (e) { alert('네트워크 오류가 발생했습니다.'); }
   }
 </script>
 
