@@ -211,9 +211,12 @@
     currentScore += gained;
     updateScoreDisplay();
 
+    // ⚡ 매칭 즉시 실시간 골드 지급 API 호출 (돈이 실시간으로 들어옴!)
+    sendInstantMatchReward(gained);
+
     const comboEl = document.getElementById('combo-banner');
     if (comboEl) {
-      comboEl.innerText = combo > 1 ? `🔥 ${combo}연속 콤보 폭발! (+${gained.toLocaleString()}점)` : `✨ ${matches.length}개 보석 폭파! (+${gained.toLocaleString()}점)`;
+      comboEl.innerText = combo > 1 ? `🔥 ${combo}연속 콤보 폭발! (+${(gained * 10).toLocaleString()}원 즉시 획득!)` : `✨ ${matches.length}개 보석 폭파! (+${(gained * 10).toLocaleString()}원 즉시 획득!)`;
     }
 
     // 터뜨리기 애니메이션
@@ -250,6 +253,23 @@
 
     // 연쇄 반응 검사
     await processCascades(combo + 1);
+  }
+
+  async function sendInstantMatchReward(scoreGained) {
+    if (scoreGained <= 0) return;
+    try {
+      const res = await fetch('/api/casino/arcade/match-reward', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ score: scoreGained })
+      });
+      const data = await res.json();
+      if (data.success && data.afterCash) {
+        if (window.updateUserCashDisplay) window.updateUserCashDisplay(data.afterCash);
+        const cashEls = document.querySelectorAll('#user-cash-display, #userCashDisplay, .header-cash-val');
+        cashEls.forEach(el => { el.innerText = Number(data.afterCash).toLocaleString() + '원'; });
+      }
+    } catch (e) {}
   }
 
   function updateScoreDisplay() {

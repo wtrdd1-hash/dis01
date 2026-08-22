@@ -410,6 +410,8 @@
 
     setTimeout(() => { floatEl.remove(); }, 800);
   }
+  window.handleClickMining = triggerMineClick;
+  window.triggerMineClick = triggerMineClick;
 
   // 🔨 드릴 대장간 상태 조회
   async function loadDrillState() {
