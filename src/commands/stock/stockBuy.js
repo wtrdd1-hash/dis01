@@ -89,6 +89,33 @@ module.exports = {
       });
     }
 
+    // 🛡️ [종목별 전체 발행 / 총 구매 한도 (Total Supply Limit) 검증 - 모든 유저 합산]
+    const maxLimit = stock.max_buy_limit != null && Number(stock.max_buy_limit) > 0 ? Number(stock.max_buy_limit) : null;
+    if (maxLimit !== null) {
+      const [sumRows] = await pool.query('SELECT COALESCE(SUM(amount), 0) AS total_held FROM user_stocks WHERE stock_id = ?', [stock.stock_id]);
+      const currentTotalHeld = Number(sumRows[0]?.total_held || 0);
+      const buyAmountNum = Number(unitsToAmountStr(tradeUnits));
+      if (currentTotalHeld >= maxLimit) {
+        return interaction.reply({
+          embeds: [createErrorEmbed(
+            '종목 매진 (발행 한도 소진) ⚠️',
+            `**[${stock.name}]** 종목은 전체 발행 주식(총 **${maxLimit.toLocaleString()}주**)이 모두 소진되어 더 이상 매수할 수 없습니다.\n다른 유저가 매도할 때까지 기다려주세요.`
+          )],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+      if (currentTotalHeld + buyAmountNum > maxLimit) {
+        const remaining = Math.max(0, maxLimit - currentTotalHeld);
+        return interaction.reply({
+          embeds: [createErrorEmbed(
+            '발행 한도 초과 ⚠️',
+            `**[${stock.name}]** 종목의 남은 매수 가능 잔여 수량은 **${remaining.toLocaleString()}주**입니다.\n(총 발행 한도: ${maxLimit.toLocaleString()}주 / 현재 소진: ${currentTotalHeld.toLocaleString()}주)`
+          )],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+    }
+
     if (tradeUnits <= 0n) {
       return interaction.reply({
         embeds: [createErrorEmbed('매수 불가', '매수할 수 있는 현금이 부족하거나 수량이 0주입니다.')],

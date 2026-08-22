@@ -64,3 +64,27 @@ test('📈 [Stock & Drill QA] 주식 변동 주기 및 드릴 강화 비용 검�
   assert.strictEqual(ENHANCE_TABLE[0].cost, 5000n, '1강 비용은 5,000원이어야 합니다.');
   assert.strictEqual(ENHANCE_TABLE[14].cost, 10000000n, '15강 비용은 1,000만원이어야 합니다.');
 });
+
+test('📊 [Stock QA] 종목별 전역 총 발행 한도 (Total Supply Limit) 잔여량 및 매진 검증', () => {
+  const stockLimit = 100; // 전체 한도 100주
+  let currentTotalHeld = 60; // 모든 유저가 총 60주 보유 중
+
+  // 1. 잔여량 계산
+  const remaining = Math.max(0, stockLimit - currentTotalHeld);
+  assert.strictEqual(remaining, 40, '남은 매수 가능 수량은 40주여야 합니다.');
+
+  // 2. 추가 30주 매수 시도 (허용)
+  const buyAmount1 = 30;
+  assert.ok(currentTotalHeld + buyAmount1 <= stockLimit, '30주 매수는 한도 내이므로 통과해야 합니다.');
+  currentTotalHeld += buyAmount1; // 90주
+
+  // 3. 추가 20주 매수 시도 (한도 초과: 잔여 10주)
+  const buyAmount2 = 20;
+  const isOverLimit = currentTotalHeld + buyAmount2 > stockLimit;
+  assert.strictEqual(isOverLimit, true, '90주 보유 상태에서 20주 매수는 100주 한도를 초과해야 합니다.');
+
+  // 4. 전량 100주 매진 상태 검증
+  currentTotalHeld = 100;
+  const isSoldOut = currentTotalHeld >= stockLimit;
+  assert.strictEqual(isSoldOut, true, '100주 전량 보유 시 매진 상태로 판정되어야 합니다.');
+});

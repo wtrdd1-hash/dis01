@@ -218,37 +218,62 @@
     </div>
   </div>
 
-  <!-- [F] 🛡️ 종목별 1회 최대 구매 한도 (Max Buy Limit) 커스텀 설정 -->
-  <div class="card" style="border: 1px solid rgba(245, 158, 11, 0.35); background: #0f172a; padding: 20px; border-radius: 12px;">
-    <div style="display:flex; align-items:center; gap:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:12px; margin-bottom:16px;">
-      <span style="font-size:1.4rem;">🛡️</span>
-      <h3 style="margin:0; font-size:1.15rem; color:#facc15; font-weight:800;">종목별 1회 최대 구매 한도 설정</h3>
+  <!-- [F] 🛡️ 종목별 전체 발행 / 총 구매 한도 (Total Supply Limit) 커스텀 설정 -->
+  <div class="card" style="border: 1px solid rgba(245, 158, 11, 0.35); background: #0f172a; padding: 20px; border-radius: 12px; grid-column: 1 / -1;">
+    <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:12px; margin-bottom:16px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-size:1.4rem;">🛡️</span>
+        <h3 style="margin:0; font-size:1.15rem; color:#facc15; font-weight:800;">종목별 전체 발행 / 총 구매 한도 (전역 한도) 설정</h3>
+      </div>
+      <button type="button" onclick="loadStockLimitsTable()" style="background:#1e293b; border:1px solid rgba(255,255,255,0.15); color:#94a3b8; padding:4px 10px; border-radius:6px; font-size:0.78rem; font-weight:700; cursor:pointer;">🔄 한도 현황 새로고침</button>
     </div>
 
-    <div style="display:flex; flex-direction:column; gap:12px;">
-      <div style="display:grid; grid-template-columns: 1.1fr 1.4fr; gap:10px;">
-        <div>
-          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">설정할 종목코드</label>
-          <input type="text" id="limit-stock-id" placeholder="예: BIOX, WTRD" style="width:100%; text-transform:uppercase; font-weight:800; color:#facc15; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px;">
-        </div>
-        <div>
-          <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">기초 구매 한도 (주, 빈칸=자동)</label>
-          <input type="text" id="limit-stock-amount" placeholder="예: 50000, 100만" style="width:100%; font-weight:700; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff;">
-        </div>
-      </div>
+    <p style="font-size:0.8rem; color:#cbd5e1; margin-top:-6px; margin-bottom:14px; line-height:1.5;">
+      💡 <b>모든 유저의 보유 주식 총합에 적용되는 전역 발행 한도</b>입니다. (예: 100주로 설정 시 모든 유저가 총 100주를 매수하면 매진되어 누구도 추가 매수할 수 없습니다)
+    </p>
 
-      <div style="display:flex; gap:8px;">
-        <button type="button" onclick="submitStockBuyLimit()" style="flex:2; background:linear-gradient(135deg, #d97706, #f59e0b); border:none; color:#fff; padding:11px; border-radius:8px; font-weight:800; font-size:0.92rem; cursor:pointer; box-shadow:0 4px 12px rgba(245,158,11,0.35);">
-          🛡️ 구매 한도 저장/수정
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin-bottom:16px;">
+      <div>
+        <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">설정할 종목코드</label>
+        <input type="text" id="limit-stock-id" placeholder="예: BIOX, SAM, WTRD" style="width:100%; text-transform:uppercase; font-weight:800; color:#facc15; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px;">
+      </div>
+      <div>
+        <label style="font-size:0.78rem; color:#94a3b8; font-weight:700; display:block; margin-bottom:4px;">전체 발행 / 총 구매 한도 (주, 빈칸=자동)</label>
+        <input type="text" id="limit-stock-amount" placeholder="예: 100, 50000, 100만" style="width:100%; font-weight:700; background:#030712; border:1px solid rgba(255,255,255,0.15); padding:8px 12px; border-radius:6px; color:#fff;">
+      </div>
+      <div style="display:flex; align-items:flex-end; gap:8px;">
+        <button type="button" onclick="submitStockBuyLimit()" style="flex:2; background:linear-gradient(135deg, #d97706, #f59e0b); border:none; color:#fff; padding:10px; border-radius:8px; font-weight:800; font-size:0.9rem; cursor:pointer; box-shadow:0 4px 12px rgba(245,158,11,0.35);">
+          🛡️ 한도 저장/수정
         </button>
-        <button type="button" onclick="submitStockBuyLimitReset()" style="flex:1; background:#334155; border:1px solid rgba(255,255,255,0.15); color:#cbd5e1; padding:11px; border-radius:8px; font-weight:700; font-size:0.82rem; cursor:pointer;">
-          초기화 (자동)
+        <button type="button" onclick="submitStockBuyLimitReset()" style="flex:1; background:#334155; border:1px solid rgba(255,255,255,0.15); color:#cbd5e1; padding:10px; border-radius:8px; font-weight:700; font-size:0.8rem; cursor:pointer;">
+          초기화
         </button>
       </div>
+    </div>
 
-      <p style="font-size:0.75rem; color:#94a3b8; margin:0; line-height:1.4;">
-        💡 관리자가 지정한 기초 한도는 거시경제 국면(대호황 2.0배, 경기침체 0.7배 등)과 실시간 연동되어 모든 유저에게 공통 적용됩니다.
-      </p>
+    <!-- 종목별 실시간 발행/보유/잔여 현황 테이블 -->
+    <div style="background:#090d16; border:1px solid rgba(255,255,255,0.08); border-radius:10px; overflow:hidden;">
+      <div style="padding:8px 12px; background:rgba(255,255,255,0.03); border-bottom:1px solid rgba(255,255,255,0.08); font-size:0.8rem; font-weight:800; color:#94a3b8;">
+        📊 실시간 종목별 총 발행 한도 & 유저 총 보유 현황
+      </div>
+      <div style="max-height:220px; overflow-y:auto;">
+        <table style="width:100%; border-collapse:collapse; text-align:left; font-size:0.82rem;">
+          <thead>
+            <tr style="background:rgba(255,255,255,0.02); border-bottom:1px solid rgba(255,255,255,0.08); color:#94a3b8;">
+              <th style="padding:6px 10px;">종목</th>
+              <th style="padding:6px 10px;">현재가</th>
+              <th style="padding:6px 10px;">총 발행 한도</th>
+              <th style="padding:6px 10px;">유저 총 보유량</th>
+              <th style="padding:6px 10px;">잔여량</th>
+              <th style="padding:6px 10px;">소진율</th>
+              <th style="padding:6px 10px; text-align:right;">선택</th>
+            </tr>
+          </thead>
+          <tbody id="stock-limits-tbody">
+            <tr><td colspan="7" style="padding:14px; text-align:center; color:#64748b;">현황을 불러오는 중...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -696,6 +721,7 @@
         adminNotice(true, res.message || '종목 구매 한도 설정 완료!');
         document.getElementById('limit-stock-id').value = '';
         document.getElementById('limit-stock-amount').value = '';
+        await loadStockLimitsTable();
       } else {
         adminNotice(false, res.error || '구매 한도 설정 실패');
       }
@@ -722,6 +748,7 @@
         adminNotice(true, res.message || '자동 산출 모드로 초기화 완료!');
         document.getElementById('limit-stock-id').value = '';
         document.getElementById('limit-stock-amount').value = '';
+        await loadStockLimitsTable();
       } else {
         adminNotice(false, res.error || '초기화 실패');
       }
@@ -729,6 +756,58 @@
       adminNotice(false, '구매 한도 초기화 통신 오류');
     }
   }
+
+  // 📊 실시간 종목별 한도 및 유저 총 보유 현황 테이블 로드
+  async function loadStockLimitsTable() {
+    const tbody = document.getElementById('stock-limits-tbody');
+    if (!tbody) return;
+    try {
+      const res = await adminFetch('/api/admin/stocks/limits');
+      if (res.success && res.list) {
+        if (!res.list.length) {
+          tbody.innerHTML = '<tr><td colspan="7" style="padding:14px; text-align:center; color:#64748b;">등록된 종목이 없습니다.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = res.list.map(s => {
+          const isSoldOut = s.remainingShares <= 0;
+          return `
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+              <td style="padding:6px 10px;"><b style="color:#fff;">${s.name}</b> <span style="color:#818cf8; font-family:monospace;">(${s.stock_id})</span></td>
+              <td style="padding:6px 10px; font-family:monospace; color:#38bdf8;">${Number(s.price).toLocaleString()}원</td>
+              <td style="padding:6px 10px; font-weight:700; color:${s.isCustom ? '#facc15' : '#cbd5e1'};">${s.currentMaxSharesText} ${s.isCustom ? '<span style="font-size:0.7rem; color:#facc15; font-weight:800;">[수동지정]</span>' : ''}</td>
+              <td style="padding:6px 10px; color:#cbd5e1; font-family:monospace;">${s.totalHeldText}</td>
+              <td style="padding:6px 10px; font-weight:800; color:${isSoldOut ? '#ef4444' : '#34d399'}; font-family:monospace;">${isSoldOut ? '🔴 0주 (매진)' : s.remainingSharesText}</td>
+              <td style="padding:6px 10px;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <div style="flex:1; max-width:60px; height:6px; background:#1e293b; border-radius:3px; overflow:hidden;">
+                    <div style="width:${Math.min(100, s.usageRate)}%; height:100%; background:${isSoldOut ? '#ef4444' : '#f59e0b'};"></div>
+                  </div>
+                  <span style="font-size:0.75rem; font-weight:700; color:${isSoldOut ? '#ef4444' : '#cbd5e1'};">${s.usageRate}%</span>
+                </div>
+              </td>
+              <td style="padding:6px 10px; text-align:right;">
+                <button type="button" onclick="selectStockLimit('${s.stock_id}', ${s.customLimit || ''})" style="background:#1e293b; border:1px solid rgba(255,255,255,0.15); color:#38bdf8; padding:2px 8px; border-radius:4px; font-size:0.72rem; font-weight:700; cursor:pointer;">선택</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="7" style="padding:14px; text-align:center; color:#ef4444;">현황 조회 실패</td></tr>';
+    }
+  }
+
+  function selectStockLimit(stockId, customLimit) {
+    const idInput = document.getElementById('limit-stock-id');
+    const amountInput = document.getElementById('limit-stock-amount');
+    if (idInput) idInput.value = stockId;
+    if (amountInput) amountInput.value = customLimit || '';
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    loadStockLimitsTable();
+  });
+  setTimeout(() => { loadStockLimitsTable(); }, 400);
 
   // ── 📊 주가 기록 조회 ──────────────────────────────────────────
   let _phChart = null;

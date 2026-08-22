@@ -1748,13 +1748,25 @@ function createAdminRoutes(getSessionUser) {
     }
   });
 
-  // 🛡️ 전체 종목 및 현재 매수 한도 목록 조회 API
+  // 🛡️ 전체 종목 및 현재 매수/발행 한도 목록 조회 API (전체 유저 보유 현황 포함)
   router.get('/stocks/limits', async (req, res) => {
     try {
-      const [stocks] = await pool.query('SELECT stock_id, name, sector, price, status, max_buy_limit FROM stocks ORDER BY (status = "DELISTED") ASC, price DESC');
+      const [stocks] = await pool.query(`
+        SELECT s.stock_id, s.name, s.sector, s.price, s.status, s.max_buy_limit,
+               COALESCE(SUM(us.amount), 0) AS total_held
+        FROM stocks s
+        LEFT JOIN user_stocks us ON s.stock_id = us.stock_id
+        GROUP BY s.stock_id
+        ORDER BY (s.status = "DELISTED") ASC, s.price DESC
+      `);
       const { getStockMaxBuyLimit } = require('../../utils/stockEngine');
       const list = stocks.map(s => {
         const info = getStockMaxBuyLimit(s);
+        const totalHeld = Number(s.total_held || 0);
+        const limitShares = s.max_buy_limit != null && Number(s.max_buy_limit) > 0 ? Number(s.max_buy_limit) : info.maxShares;
+        const remainingShares = Math.max(0, limitShares - totalHeld);
+        const usageRate = limitShares > 0 ? Math.min(100, (totalHeld / limitShares) * 100) : 0;
+
         return {
           stock_id: s.stock_id,
           name: s.name,
@@ -1764,8 +1776,13 @@ function createAdminRoutes(getSessionUser) {
           customLimit: s.max_buy_limit,
           isCustom: info.isCustom,
           baseShares: info.baseShares,
-          currentMaxShares: info.maxShares,
-          currentMaxSharesText: info.maxSharesText,
+          currentMaxShares: limitShares,
+          currentMaxSharesText: limitShares.toLocaleString('ko-KR') + '주',
+          totalHeld,
+          totalHeldText: totalHeld.toLocaleString('ko-KR') + '주',
+          remainingShares,
+          remainingSharesText: remainingShares.toLocaleString('ko-KR') + '주',
+          usageRate: Math.round(usageRate * 10) / 10,
           policyName: info.policyName,
           regimeName: info.regimeName
         };

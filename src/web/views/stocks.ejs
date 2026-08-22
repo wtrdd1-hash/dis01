@@ -350,9 +350,10 @@
         if (sid === 'BIOX') cats.push('BIO');
         if (sid === 'CHKN' || sid === 'SLOT') cats.push('CONS');
         if (sid === 'SLOT' || sid === 'CHKN') cats.push('ENTRY');
+        const isSoldOut = stock.max_buy_limit != null && stock.remaining_shares != null && stock.remaining_shares <= 0;
         const catStr = cats.join(' ');
     %>
-      <div class="stock-card" data-stock-id="<%= stock.stock_id %>" data-categories="<%= catStr %>" tabindex="0" role="button" aria-label="<%= stock.name %> (<%= stock.stock_id %>) 현재가 <%= price.toLocaleString() %>원, 상세 차트 및 거래 열기" onclick="openDetailModal('<%= stock.stock_id %>')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); openDetailModal('<%= stock.stock_id %>');}" style="cursor:pointer; outline:none;">
+      <div class="stock-card" data-stock-id="<%= stock.stock_id %>" data-remaining-shares="<%= stock.remaining_shares != null ? stock.remaining_shares : '' %>" data-total-shares-limit="<%= stock.max_buy_limit != null ? stock.max_buy_limit : '' %>" data-categories="<%= catStr %>" tabindex="0" role="button" aria-label="<%= stock.name %> (<%= stock.stock_id %>) 현재가 <%= price.toLocaleString() %>원, 상세 차트 및 거래 열기" onclick="openDetailModal('<%= stock.stock_id %>')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); openDetailModal('<%= stock.stock_id %>');}" style="cursor:pointer; outline:none; <%= isSoldOut ? 'border-color:rgba(239,68,68,0.4); background:rgba(25,15,20,0.85);' : '' %>">
         <div>
           <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
             <div>
@@ -374,6 +375,19 @@
             </button>
           </div>
 
+          <!-- 🛡️ 전체 발행 한도 및 잔여 주식 수량 표시 -->
+          <div style="font-size:11px; margin-top:4px;">
+            <% if (stock.max_buy_limit != null) { %>
+              <% if (isSoldOut) { %>
+                <span style="color:#ef4444; font-weight:900; background:rgba(239,68,68,0.15); padding:1px 6px; border-radius:4px;">🔴 전역 매진 (총 <%= Number(stock.max_buy_limit).toLocaleString() %>주 소진)</span>
+              <% } else { %>
+                <span style="color:#94a3b8;">발행 잔여: <b style="color:#34d399; font-family:'JetBrains Mono',monospace;"><%= Number(stock.remaining_shares).toLocaleString() %>주</b> / <%= Number(stock.max_buy_limit).toLocaleString() %>주</span>
+              <% } %>
+            <% } else { %>
+              <span style="color:#64748b;">발행 한도: 무제한</span>
+            <% } %>
+          </div>
+
           <!-- SVG 미니 스파크라인 추세선 -->
           <svg class="sparkline-svg" viewBox="0 0 100 28" preserveAspectRatio="none">
             <defs>
@@ -389,7 +403,9 @@
 
         <!-- 매수/매도 버튼 -->
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px;">
-          <button onclick="event.stopPropagation(); openOrderModal('BUY', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:7px; font-weight:800; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); border-radius:8px; color:#34d399; cursor:pointer; font-size:12px; transition:all 0.15s ease;">매수</button>
+          <button onclick="event.stopPropagation(); openOrderModal('BUY', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:7px; font-weight:800; background:<%= isSoldOut ? 'rgba(100,116,139,0.2)' : 'rgba(16,185,129,0.15)' %>; border:1px solid <%= isSoldOut ? 'rgba(100,116,139,0.4)' : 'rgba(16,185,129,0.4)' %>; border-radius:8px; color:<%= isSoldOut ? '#94a3b8' : '#34d399' %>; cursor:pointer; font-size:12px; transition:all 0.15s ease;">
+            <%= isSoldOut ? '매진' : '매수' %>
+          </button>
           <button onclick="event.stopPropagation(); openOrderModal('SELL', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:7px; font-weight:800; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); border-radius:8px; color:#f87171; cursor:pointer; font-size:12px; transition:all 0.15s ease;">매도</button>
         </div>
       </div>
@@ -405,6 +421,7 @@
           <th>기업명</th>
           <th>현재가</th>
           <th>변동률 (30초)</th>
+          <th>발행 잔여 수량</th>
           <th>분석 & 주문</th>
         </tr>
       </thead>
@@ -416,6 +433,7 @@
             const isUp = rate >= 0;
             const sign = isUp ? '+' : '';
             const color = isUp ? '#34d399' : '#f87171';
+            const isSoldOut = stock.max_buy_limit != null && stock.remaining_shares != null && stock.remaining_shares <= 0;
 
             let cats = ['ALL'];
             const sid = stock.stock_id;
@@ -427,7 +445,7 @@
             if (sid === 'SLOT' || sid === 'CHKN') cats.push('ENTRY');
             const catStr = cats.join(' ');
         %>
-          <tr data-stock-id="<%= stock.stock_id %>" data-categories="<%= catStr %>" onclick="openDetailModal('<%= stock.stock_id %>')" style="cursor:pointer;">
+          <tr data-stock-id="<%= stock.stock_id %>" data-remaining-shares="<%= stock.remaining_shares != null ? stock.remaining_shares : '' %>" data-total-shares-limit="<%= stock.max_buy_limit != null ? stock.max_buy_limit : '' %>" data-categories="<%= catStr %>" onclick="openDetailModal('<%= stock.stock_id %>')" style="cursor:pointer;">
             <td style="font-family:'JetBrains Mono',monospace; color:#818cf8; font-weight:700;"><%= stock.code || stock.stock_id %></td>
             <td><strong style="color:#fff;"><%= stock.name %></strong></td>
             <td data-stock-price="<%= stock.stock_id %>" style="font-family:'JetBrains Mono',monospace; font-weight:900; color:#38bdf8;"><%= price.toLocaleString() %>원</td>
@@ -435,9 +453,23 @@
               <%= sign %><%= rate.toFixed(2) %>%
             </td>
             <td>
+              <% if (stock.max_buy_limit != null) { %>
+                <% if (isSoldOut) { %>
+                  <span style="color:#ef4444; font-weight:800;">🔴 매진 (0 / <%= Number(stock.max_buy_limit).toLocaleString() %>주)</span>
+                <% } else { %>
+                  <span style="color:#34d399; font-family:'JetBrains Mono',monospace; font-weight:700;"><%= Number(stock.remaining_shares).toLocaleString() %>주</span>
+                  <span style="color:#64748b; font-size:11px;">/ <%= Number(stock.max_buy_limit).toLocaleString() %>주</span>
+                <% } %>
+              <% } else { %>
+                <span style="color:#64748b;">무제한</span>
+              <% } %>
+            </td>
+            <td>
               <div style="display:flex; gap:6px;">
                 <button onclick="event.stopPropagation(); openDetailModal('<%= stock.stock_id %>')" style="padding:4px 8px; font-weight:800; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.4); border-radius:6px; color:#a5b4fc; cursor:pointer; font-size:11.5px;">🔍 차트</button>
-                <button onclick="event.stopPropagation(); openOrderModal('BUY', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:4px 10px; font-weight:800; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); border-radius:6px; color:#34d399; cursor:pointer; font-size:11.5px;">매수</button>
+                <button onclick="event.stopPropagation(); openOrderModal('BUY', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:4px 10px; font-weight:800; background:<%= isSoldOut ? 'rgba(100,116,139,0.2)' : 'rgba(16,185,129,0.15)' %>; border:1px solid <%= isSoldOut ? 'rgba(100,116,139,0.4)' : 'rgba(16,185,129,0.4)' %>; border-radius:6px; color:<%= isSoldOut ? '#94a3b8' : '#34d399' %>; cursor:pointer; font-size:11.5px;">
+                  <%= isSoldOut ? '매진' : '매수' %>
+                </button>
                 <button onclick="event.stopPropagation(); openOrderModal('SELL', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:4px 10px; font-weight:800; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); border-radius:6px; color:#f87171; cursor:pointer; font-size:11.5px;">매도</button>
               </div>
             </td>
@@ -539,9 +571,13 @@
           <span style="color:#94a3b8;">종목명</span>
           <strong id="modal-stock-name" style="color:#fff;">-</strong>
         </div>
-        <div style="display:flex; justify-content:space-between;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
           <span style="color:#94a3b8;">현재가</span>
           <strong id="modal-stock-price" style="color:#38bdf8; font-family:'JetBrains Mono',monospace;">0원</strong>
+        </div>
+        <div id="modal-supply-row" style="display:flex; justify-content:space-between;">
+          <span style="color:#94a3b8;">전체 발행 잔여량</span>
+          <strong id="modal-stock-remaining" style="color:#34d399; font-family:'JetBrains Mono',monospace;">-</strong>
         </div>
       </div>
 
@@ -664,19 +700,48 @@
       if (parsed > 0) price = parsed;
     }
 
-    currentOrder = { action, stockId, price };
+    const stockCard = document.querySelector(`.stock-card[data-stock-id="${stockId}"]`) || document.querySelector(`tr[data-stock-id="${stockId}"]`);
+    let remainingShares = null;
+    let totalSharesLimit = null;
+    if (stockCard) {
+      const rem = stockCard.getAttribute('data-remaining-shares');
+      const tot = stockCard.getAttribute('data-total-shares-limit');
+      if (rem !== null && rem !== '') remainingShares = Number(rem);
+      if (tot !== null && tot !== '') totalSharesLimit = Number(tot);
+    }
+
+    currentOrder = { action, stockId, price, remainingShares, totalSharesLimit };
     document.getElementById('modal-order-title').innerText = `주식 ${action === 'BUY' ? '매수' : '매도'} 주문`;
     document.getElementById('modal-stock-name').innerText = stockName;
     document.getElementById('modal-stock-price').innerText = price.toLocaleString() + '원';
     document.getElementById('modal-order-amount').value = 1;
     
+    const remEl = document.getElementById('modal-stock-remaining');
+    if (remEl) {
+      if (action === 'BUY') {
+        if (remainingShares !== null) {
+          if (remainingShares <= 0) {
+            remEl.innerHTML = '<span style="color:#ef4444; font-weight:900;">🔴 매진됨 (추가 매수 불가)</span>';
+          } else {
+            remEl.innerHTML = `<span style="color:#34d399; font-weight:800;">잔여 ${remainingShares.toLocaleString()}주 / 총 ${totalSharesLimit.toLocaleString()}주</span>`;
+          }
+        } else {
+          remEl.innerText = '무제한 공급';
+        }
+      } else {
+        remEl.innerText = '보유 수량 내 자유 매도 가능';
+      }
+    }
+
     const submitBtn = document.getElementById('modal-submit-btn');
     if (action === 'BUY') {
-      submitBtn.style.background = 'linear-gradient(135deg,#059669,#10b981)';
-      submitBtn.innerText = '매수 체결하기';
+      submitBtn.style.background = (remainingShares !== null && remainingShares <= 0) ? '#475569' : 'linear-gradient(135deg,#059669,#10b981)';
+      submitBtn.innerText = (remainingShares !== null && remainingShares <= 0) ? '❌ 매진되어 매수 불가' : '매수 체결하기';
+      submitBtn.disabled = (remainingShares !== null && remainingShares <= 0);
     } else {
       submitBtn.style.background = 'linear-gradient(135deg,#dc2626,#ef4444)';
       submitBtn.innerText = '매도 체결하기';
+      submitBtn.disabled = false;
     }
     
     updateModalTotal();
@@ -691,7 +756,10 @@
     const cash = Number('<%= (typeof userAssets !== "undefined" && userAssets && userAssets.cash) ? userAssets.cash : 0 %>');
     if (currentOrder.action === 'BUY') {
       if (currentOrder.price <= 0) return;
-      const maxShares = Math.floor((cash * pct) / currentOrder.price);
+      let maxShares = Math.floor((cash * pct) / currentOrder.price);
+      if (currentOrder.remainingShares !== null && currentOrder.remainingShares !== undefined) {
+        maxShares = Math.min(maxShares, currentOrder.remainingShares);
+      }
       document.getElementById('modal-order-amount').value = Math.max(1, maxShares);
     } else {
       document.getElementById('modal-order-amount').value = Math.max(1, Math.floor(10 * pct));

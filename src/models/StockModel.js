@@ -9,11 +9,21 @@ class StockModel {
    * 전체 주식 종목 조회
    */
   static async getAllStocks() {
-    const [rows] = await pool.query('SELECT * FROM stocks ORDER BY stock_id ASC');
+    const [rows] = await pool.query(`
+      SELECT s.*, COALESCE(SUM(us.amount), 0) AS circulating_shares
+      FROM stocks s
+      LEFT JOIN user_stocks us ON s.stock_id = us.stock_id
+      GROUP BY s.stock_id
+      ORDER BY s.stock_id ASC
+    `);
     return rows.map(r => {
       const p = Number(r.price || 0);
       const prev = Number(r.prev_price || r.price || 1);
       const rate = prev > 0 ? ((p - prev) / prev) * 100 : 0;
+      const maxLimit = r.max_buy_limit != null && Number(r.max_buy_limit) > 0 ? Number(r.max_buy_limit) : null;
+      const circulating = Number(r.circulating_shares || 0);
+      const remainingShares = maxLimit !== null ? Math.max(0, maxLimit - circulating) : null;
+
       return {
         stock_id: r.stock_id,
         name: r.name,
@@ -22,7 +32,10 @@ class StockModel {
         price: safeBigInt(r.price).toString(),
         prev_price: safeBigInt(r.prev_price || r.price).toString(),
         rate: isNaN(rate) ? 0 : rate,
-        total_shares: String(r.total_shares || '1000000000000000000000'),
+        total_shares: maxLimit !== null ? String(maxLimit) : String(r.total_shares || '1000000000000000000000'),
+        max_buy_limit: maxLimit,
+        circulating_shares: circulating,
+        remaining_shares: remainingShares,
         is_bankrupt: Number(r.is_bankrupt || 0)
       };
     });
@@ -106,6 +119,21 @@ class StockModel {
       if (!stockRows.length) throw new Error('존재하지 않는 주식 종목입니다.');
       const stock = stockRows[0];
       const price = safeBigInt(stock.price);
+
+      // 🛡️ [종목별 전체 발행/총 구매 한도 (Total Supply Limit) 검증 - 모든 유저 합산]
+      const maxLimit = stock.max_buy_limit != null && Number(stock.max_buy_limit) > 0 ? Number(stock.max_buy_limit) : null;
+      if (maxLimit !== null) {
+        const [sumRows] = await conn.query('SELECT COALESCE(SUM(amount), 0) AS total_held FROM user_stocks WHERE stock_id = ? FOR UPDATE', [stockId]);
+        const currentTotalHeld = Number(sumRows[0]?.total_held || 0);
+        const buyAmountNum = Number(amountStr);
+        if (currentTotalHeld >= maxLimit) {
+          throw new Error(`[${stock.name}] 종목은 전체 발행 주식(총 ${maxLimit.toLocaleString()}주)이 모두 소진되어 더 이상 매수할 수 없습니다.`);
+        }
+        if (currentTotalHeld + buyAmountNum > maxLimit) {
+          const remaining = Math.max(0, maxLimit - currentTotalHeld);
+          throw new Error(`[${stock.name}] 종목의 남은 매수 가능 수량은 ${remaining.toLocaleString()}주입니다. (전체 한도 ${maxLimit.toLocaleString()}주 중 현재 ${currentTotalHeld.toLocaleString()}주 매수됨)`);
+        }
+      }
 
       const [userRows] = await conn.query('SELECT cash FROM users WHERE discord_id = ? FOR UPDATE', [id]);
       if (!userRows.length) throw new Error('유저를 찾을 수 없습니다.');
