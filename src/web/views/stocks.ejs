@@ -295,12 +295,13 @@
   <!-- 툴바 (섹터 필터 + 카드/테이블 뷰 토글) -->
   <div class="stock-toolbar">
     <div class="stock-filter-bar">
-      <button class="stock-filter-btn active" onclick="filterSector('ALL')">전체 종목 (<%= (stocks || []).length %>)</button>
-      <button class="stock-filter-btn" onclick="filterSector('TECH')">🚀 IT·AI</button>
-      <button class="stock-filter-btn" onclick="filterSector('FIN')">🏦 금융</button>
-      <button class="stock-filter-btn" onclick="filterSector('BIO')">🧬 바이오</button>
-      <button class="stock-filter-btn" onclick="filterSector('CONS')">🍗 소비재</button>
-      <button class="stock-filter-btn" onclick="filterSector('ENTRY')">⭐ 초보</button>
+      <button class="stock-filter-btn active" onclick="filterSector('ALL', this)">전체 종목 (<%= (stocks || []).length %>)</button>
+      <button class="stock-filter-btn" onclick="filterSector('AI', this)">🧠 AI·반도체</button>
+      <button class="stock-filter-btn" onclick="filterSector('IT', this)">💻 IT·빅데이터</button>
+      <button class="stock-filter-btn" onclick="filterSector('FIN', this)">🏦 금융·은행</button>
+      <button class="stock-filter-btn" onclick="filterSector('BIO', this)">🧬 바이오</button>
+      <button class="stock-filter-btn" onclick="filterSector('CONS', this)">🍗 소비재</button>
+      <button class="stock-filter-btn" onclick="filterSector('ENTRY', this)">⭐ 초보추천</button>
     </div>
 
     <div style="display:flex; gap:6px;">
@@ -323,8 +324,18 @@
         const sign = isUp ? '+' : '';
         const color = isUp ? '#34d399' : '#f87171';
         const strokeColor = isUp ? '#10b981' : '#ef4444';
+        
+        let cats = ['ALL'];
+        const sid = stock.stock_id;
+        if (sid === 'AICH' || sid === 'WTRD' || sid === 'NEKO') cats.push('AI');
+        if (sid === 'DUCK' || sid === 'SCRP' || sid === 'AICH' || sid === 'SPAC' || sid === 'WTRD') cats.push('IT', 'TECH');
+        if (sid === 'BANK') cats.push('FIN');
+        if (sid === 'BIOX') cats.push('BIO');
+        if (sid === 'CHKN' || sid === 'SLOT') cats.push('CONS');
+        if (sid === 'SLOT' || sid === 'CHKN') cats.push('ENTRY');
+        const catStr = cats.join(' ');
     %>
-      <div class="stock-card" data-stock-id="<%= stock.stock_id %>" data-sector="<%= stock.stock_id %>">
+      <div class="stock-card" data-stock-id="<%= stock.stock_id %>" data-categories="<%= catStr %>">
         <div>
           <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
             <div>
@@ -385,8 +396,18 @@
             const isUp = rate >= 0;
             const sign = isUp ? '+' : '';
             const color = isUp ? '#34d399' : '#f87171';
+
+            let cats = ['ALL'];
+            const sid = stock.stock_id;
+            if (sid === 'AICH' || sid === 'WTRD' || sid === 'NEKO') cats.push('AI');
+            if (sid === 'DUCK' || sid === 'SCRP' || sid === 'AICH' || sid === 'SPAC' || sid === 'WTRD') cats.push('IT', 'TECH');
+            if (sid === 'BANK') cats.push('FIN');
+            if (sid === 'BIOX') cats.push('BIO');
+            if (sid === 'CHKN' || sid === 'SLOT') cats.push('CONS');
+            if (sid === 'SLOT' || sid === 'CHKN') cats.push('ENTRY');
+            const catStr = cats.join(' ');
         %>
-          <tr data-stock-id="<%= stock.stock_id %>">
+          <tr data-stock-id="<%= stock.stock_id %>" data-categories="<%= catStr %>">
             <td style="font-family:'JetBrains Mono',monospace; color:#818cf8; font-weight:700;"><%= stock.code || stock.stock_id %></td>
             <td><strong style="color:#fff;"><%= stock.name %></strong></td>
             <td data-stock-price="<%= stock.stock_id %>" style="font-family:'JetBrains Mono',monospace; font-weight:900; color:#38bdf8;"><%= price.toLocaleString() %>원</td>
@@ -637,17 +658,30 @@
     }
   }
 
-  function filterSector(sector) {
+  function filterSector(category, btn) {
     document.querySelectorAll('.stock-filter-btn').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
+    if (btn) btn.classList.add('active');
+    else if (event && event.currentTarget) event.currentTarget.classList.add('active');
+
     const cards = document.querySelectorAll('.stock-card');
     const tableRows = document.querySelectorAll('#stocks-table-container tbody tr');
     
     cards.forEach(card => {
-      card.style.display = 'flex';
+      const cats = (card.dataset.categories || '').split(' ');
+      if (category === 'ALL' || cats.includes(category)) {
+        card.style.display = 'flex';
+      } else {
+        card.style.display = 'none';
+      }
     });
+
     tableRows.forEach(row => {
-      row.style.display = '';
+      const cats = (row.dataset.categories || '').split(' ');
+      if (category === 'ALL' || cats.includes(category)) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
     });
   }
 </script>

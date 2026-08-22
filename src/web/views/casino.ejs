@@ -413,9 +413,34 @@
   function showGame(gameId) {
     document.querySelectorAll('.casino-tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.game-container').forEach(c => c.classList.remove('active'));
-    event.currentTarget.classList.add('active');
+    if (event && event.currentTarget) event.currentTarget.classList.add('active');
     const target = document.getElementById('game-' + gameId);
     if (target) target.classList.add('active');
+    try { localStorage.setItem('active_casino_tab', gameId); } catch(e) {}
+  }
+
+  // 페이지 진입 시 이전 플레이 탭 복원
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
+      const saved = localStorage.getItem('active_casino_tab');
+      if (saved && document.getElementById('game-' + saved)) {
+        document.querySelectorAll('.casino-tab-btn').forEach(b => {
+          if (b.getAttribute('onclick') && b.getAttribute('onclick').includes(saved)) {
+            b.classList.add('active');
+          } else {
+            b.classList.remove('active');
+          }
+        });
+        document.querySelectorAll('.game-container').forEach(c => c.classList.remove('active'));
+        document.getElementById('game-' + saved).classList.add('active');
+      }
+    } catch(e) {}
+  });
+
+  function updateLiveHeaderCash(newCash) {
+    if (!newCash) return;
+    const cashEl = document.querySelector('.asset-val');
+    if (cashEl) cashEl.innerText = Number(newCash).toLocaleString() + '원';
   }
 
   // 🔴 플링코 인터랙티브 캔버스 렌더러
@@ -466,7 +491,7 @@
       const data = await res.json();
       if (data.success) {
         alert(data.message || `🔴 플링코 결과: ${data.multiplier}배 당첨!`);
-        window.location.reload();
+        if (data.newCash) updateLiveHeaderCash(data.newCash);
       } else { alert(data.error || '플링코 실패'); }
     } catch (e) { alert('네트워크 오류'); }
   }
@@ -535,7 +560,7 @@
       const data = await res.json();
       if (data.success) {
         alert(data.message || `🎉 마인즈 캐시아웃 성공! (${mult}배)`);
-        window.location.reload();
+        if (data.newCash) updateLiveHeaderCash(data.newCash);
       } else {
         alert(data.error || '캐시아웃 실패');
       }
@@ -557,7 +582,7 @@
       const data = await res.json();
       if (data.success) {
         alert(data.message || '블랙잭 게임 완료!');
-        window.location.reload();
+        if (data.newCash) updateLiveHeaderCash(data.newCash);
       } else {
         alert(data.error || '게임 시작 실패');
       }
@@ -582,6 +607,7 @@
           document.getElementById('slot-reel-3').innerText = reels[2];
         }
         document.getElementById('slot-msg').innerText = data.message || (data.isWin ? '🎉 축하합니다! 당첨되었습니다!' : '아쉽게도 낙첨되었습니다.');
+        if (data.newCash) updateLiveHeaderCash(data.newCash);
       } else { alert(data.error || '슬롯 실행 실패'); }
     } catch (e) { alert('네트워크 오류가 발생했습니다.'); }
   }
@@ -604,6 +630,7 @@
           document.getElementById('lottery-3').innerText = symbols[2];
         }
         document.getElementById('lottery-msg').innerText = data.message || (data.isWin ? '🎉 당첨되었습니다!' : '아쉽게도 낙첨되었습니다.');
+        if (data.newCash) updateLiveHeaderCash(data.newCash);
       } else { alert(data.error || '복권 실행 실패'); }
     } catch (e) { alert('네트워크 오류가 발생했습니다.'); }
   }
@@ -621,7 +648,7 @@
       const data = await res.json();
       if (data.success) {
         alert(data.message || '🏇 경마 레이스가 종료되었습니다!');
-        window.location.reload();
+        if (data.newCash) updateLiveHeaderCash(data.newCash);
       } else { alert(data.error || '경마 시작 실패'); }
     } catch (e) { alert('네트워크 오류가 발생했습니다.'); }
   }
