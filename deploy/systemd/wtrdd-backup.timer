@@ -1,0 +1,12 @@
+[Unit]
+Description=Timer for WTRD Duck Economy Automated Backup System
+Requires=wtrdd-backup.service
+
+[Timer]
+# 매일 새벽 4시 및 오후 4시 (12시간 주기 정밀 백업)
+OnCalendar=*-*-* 04,16:00:00
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
