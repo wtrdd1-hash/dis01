@@ -286,6 +286,7 @@ async function sendMessage(session, rawMessage, roomId) {
     await addMember(room.id, userId);
     await markRead(userId, room.id, result.insertId);
 
+    const title = isAdmin ? '👑 총괄 관리자' : (session.title || '');
     const chatObj = {
       id: result.insertId,
       room_id: Number(room.id),
@@ -293,6 +294,7 @@ async function sendMessage(session, rawMessage, roomId) {
       username: session.username || '익명 유저',
       avatar: session.avatar || '',
       message: sanitized,
+      title,
       is_admin: isAdmin,
       created_at: new Date().toISOString()
     };

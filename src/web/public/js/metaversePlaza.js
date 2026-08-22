@@ -427,17 +427,20 @@
       }
 
       // 배지 (BADGE) & 칭호 (TITLE)
+      const isAdm = p.isAdmin || (isSelf && window.__currentUser && window.__currentUser.isAdmin);
       let badgeText = isSelf ? '👑 [나] ' : '';
+      if (isAdm) badgeText += '👑 [총괄 관리자] ';
+      else if (loadout.TITLE && loadout.TITLE.name) badgeText += `[${loadout.TITLE.name}] `;
       if (loadout.BADGE && loadout.BADGE.name) badgeText += (loadout.BADGE.icon || '⭐') + ' ';
-      if (loadout.TITLE && loadout.TITLE.name) badgeText += `[${loadout.TITLE.name}] `;
-      else if (!isSelf && !badgeText) badgeText = '[테스터] ';
 
       if (badgeText) {
         ctx.save();
         ctx.font = 'bold 10.5px Pretendard, sans-serif';
-        ctx.fillStyle = isSelf ? '#38bdf8' : '#fbbf24';
+        ctx.fillStyle = isAdm ? '#fbbf24' : (isSelf ? '#38bdf8' : '#cbd5e1');
         ctx.textAlign = 'center';
         ctx.fillText(badgeText, x, y - 36);
+        ctx.restore();
+      }
         ctx.restore();
       }
 

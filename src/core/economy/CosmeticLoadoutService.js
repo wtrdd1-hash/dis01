@@ -30,6 +30,9 @@ class CosmeticLoadoutService {
       [userId]
     );
 
+    const config = require('../../config/config');
+    const isAdmin = config.isAdmin(userId);
+
     const loadout = {};
     for (const row of loadoutRows) {
       loadout[row.slot] = {
@@ -43,19 +46,47 @@ class CosmeticLoadoutService {
       };
     }
 
+    if (isAdmin && !loadout.TITLE) {
+      loadout.TITLE = {
+        slot: 'TITLE',
+        itemKey: 'title_admin',
+        name: '👑 총괄 관리자',
+        icon: '👑',
+        previewCss: 'background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000;font-weight:900;',
+        rarity: 'LEGENDARY',
+        equippedAt: new Date().toISOString()
+      };
+    }
+
+    const items = invRows.map((r) => ({
+      id: r.id,
+      itemKey: r.item_key,
+      itemType: r.item_type,
+      name: r.item_name || r.name || r.item_key,
+      icon: r.icon || '✨',
+      previewCss: r.preview_css || '',
+      rarity: r.rarity || 'COMMON',
+      expiresAt: r.expires_at,
+      isPermanent: !r.expires_at
+    }));
+
+    if (isAdmin && !items.some(i => i.itemKey === 'title_admin')) {
+      items.unshift({
+        id: 999999,
+        itemKey: 'title_admin',
+        itemType: 'TITLE',
+        name: '👑 총괄 관리자',
+        icon: '👑',
+        previewCss: 'background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000;font-weight:900;',
+        rarity: 'LEGENDARY',
+        expiresAt: null,
+        isPermanent: true
+      });
+    }
+
     return {
       loadout,
-      items: invRows.map((r) => ({
-        id: r.id,
-        itemKey: r.item_key,
-        itemType: r.item_type,
-        name: r.item_name || r.name || r.item_key,
-        icon: r.icon || '✨',
-        previewCss: r.preview_css || '',
-        rarity: r.rarity || 'COMMON',
-        expiresAt: r.expires_at,
-        isPermanent: !r.expires_at
-      }))
+      items
     };
   }
 

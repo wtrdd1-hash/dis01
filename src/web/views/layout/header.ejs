@@ -38,7 +38,8 @@ const isTestEnv = (typeof isTest !== 'undefined' && isTest) || (typeof process !
       username: "<%= (typeof user !== 'undefined' && user && user.username) ? user.username : '여행자' %>",
       avatar: "<%= (typeof user !== 'undefined' && user && user.avatar) ? user.avatar : '' %>",
       avatarUrl: "<%= (typeof user !== 'undefined' && user && user.avatar) ? user.avatar : '' %>",
-      title: "<%= (typeof userLoadout !== 'undefined' && userLoadout && userLoadout.TITLE) ? userLoadout.TITLE.name : '' %>"
+      isAdmin: <%= (typeof isAdmin !== 'undefined' && isAdmin) ? 'true' : 'false' %>,
+      title: "<%= (typeof userLoadout !== 'undefined' && userLoadout && userLoadout.TITLE) ? userLoadout.TITLE.name : ((typeof isAdmin !== 'undefined' && isAdmin) ? '👑 총괄 관리자' : '') %>"
     };
   </script>
   
