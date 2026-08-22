@@ -126,7 +126,12 @@ class PageController {
   static async renderMining(req, res) {
     try {
       const common = await PageController.getCommonData(req, res);
-      res.render('mining', { ...common, pageTitle: '채굴 & 대장간', activePage: 'mining' });
+      let drillEquipment = null;
+      if (common.user && common.user.id) {
+        const { getDrillEquipment } = require('../../utils/enhancementEngine');
+        drillEquipment = await getDrillEquipment(common.user.id);
+      }
+      res.render('mining', { ...common, drillEquipment, pageTitle: '채굴 & 대장간', activePage: 'mining' });
     } catch (e) {
       res.status(500).send('서버 오류: ' + e.message);
     }

@@ -1348,6 +1348,12 @@
 
     // 초기 활성 탭 로드
     loadPrestigeCatalog();
+    loadDrillInfo();
+    if (window.location.hash) {
+      const tabName = window.location.hash.replace('#', '');
+      const tabBtn = document.querySelector(`[onclick*="${tabName}"]`);
+      if (tabBtn) tabBtn.click();
+    }
   </script>
 </body>
 </html>

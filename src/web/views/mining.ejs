@@ -115,8 +115,10 @@
 
       <div style="display:flex; gap:10px;">
         <div class="stat-badge">
-          <span style="color:#94a3b8;">드릴 레벨:</span>
-          <strong id="live-drill-level" style="color:#f59e0b; font-family:'JetBrains Mono',monospace;">Lv.1 (+0강)</strong>
+          <span style="color:#94a3b8;">드릴 장비:</span>
+          <strong id="live-drill-level" style="color:#f59e0b; font-family:'JetBrains Mono',monospace;">
+            <%= (typeof drillEquipment !== 'undefined' && drillEquipment && drillEquipment.enhancementLevel > 0) ? `+${drillEquipment.enhancementLevel}강 (채굴 +${drillEquipment.bonusPercent}%)` : '+0강 (기본)' %>
+          </strong>
         </div>
       </div>
     </div>
@@ -421,6 +423,9 @@
         const spentStr = Number(d.totalSpent || 0).toLocaleString() + '원 소각됨';
         const penaltyMap = { 'KEEP': '안전 (유지)', 'DOWN': '1단계 하락', 'DOWN_OR_RESET': '하락 또는 초기화', 'MAX': '최고 등급' };
 
+        const liveLvlEl = document.getElementById('live-drill-level');
+        if (liveLvlEl) liveLvlEl.innerText = lv > 0 ? `+${lv}강 (채굴 +${d.bonusPercent}%)` : '+0강 (기본)';
+
         document.getElementById('drill-name-txt').innerText = lv > 0 ? `+${lv}강 강화 드릴` : '기본 드릴 (+0강)';
         document.getElementById('drill-bonus-txt').innerText = `+${d.bonusPercent}%`;
         document.getElementById('drill-cost-txt').innerText = lv >= 15 ? '최고 단계 달성' : costStr;
@@ -448,19 +453,20 @@
         body: JSON.stringify({ useProtection: false })
       });
       const data = await res.json();
-      setTimeout(() => {
+      setTimeout(async () => {
         hammer.classList.remove('smash');
         if (data.success && data.result) {
           const r = data.result;
+          const currentLevel = r.currentLevel !== undefined ? r.currentLevel : (r.newLevel || 0);
           if (r.success) {
-            msgEl.innerText = `🎉 강화 대성공! [${r.newLevel}강 드릴 달성] (${Number(r.cost).toLocaleString()}원 소각)`;
+            msgEl.innerText = `🎉 강화 대성공! [+${currentLevel}강 드릴 달성] (${Number(r.cost).toLocaleString()}원 소각)`;
             msgEl.style.color = '#34d399';
-            addMiningLiveLog(`🔨 <b>드릴 대장간 강화 성공!</b> [${r.newLevel}강 달성]`, true);
+            addMiningLiveLog(`🔨 <b>드릴 대장간 강화 성공!</b> [+${currentLevel}강 달성]`, true);
           } else {
-            msgEl.innerText = `💥 강화 실패: ${r.detailMsg || '강화 단계가 유지되었습니다.'} (${Number(r.cost).toLocaleString()}원 소각)`;
+            msgEl.innerText = `💥 강화 실패: ${r.message || '강화 단계가 유지되었습니다.'} (${Number(r.cost).toLocaleString()}원 소각)`;
             msgEl.style.color = '#ef4444';
           }
-          loadDrillState();
+          await loadDrillState();
         } else {
           msgEl.innerText = `💥 ${data.error || '강화에 실패했습니다.'}`;
           msgEl.style.color = '#ef4444';
