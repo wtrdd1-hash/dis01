@@ -668,18 +668,26 @@ async function adjustAllStocksRatio(percentMultiplier, reason = '시장 전체 �
   return results;
 }
 
-function startStockEngine(intervalMs = 10000, client = null) {
-  console.log(`🚀 [월덕 가상 경제 엔진] 가동 시작 (기본 주기: ${intervalMs / 1000}초, 경제 상황별 ±2초 랜덤, 변동폭 30% 축소 + 이상가 감쇠, 이벤트 풀: ${NEWS_EVENTS.length}개)`);
+let currentStockIntervalSec = parseInt(process.env.STOCK_TICK_INTERVAL_SEC || '30', 10);
 
-  // 🌐 경제 상황(레짐)별 주식 가격 갱신 주기 동적 결정 (10초 베이스)
-  // - 기준 주기(10초)에서 경제 상황에 따라 ±랜덤 변동
-  // - ⚠️ 가격 이상 시 변동시간은 건드리지 않고 변동폭만 추가 감쇠 (사용자 요청)
-  // - 급락/패닉(CRASH): 변동성 ↑ → 갱신 살짝 빠르게 (8~10초)
-  // - 번영기(BULL/BOOM): 활발 → 8~12초
-  // - 안정(NORMAL): 10~14초
-  // - 침체(RECESSION): 차분 → 10~16초
-  function getNextTickDelay(baseMs) {
-    return 30000; // 30초 주기
+function getStockIntervalSec() {
+  return currentStockIntervalSec;
+}
+
+function setStockIntervalSec(sec) {
+  const parsed = parseInt(sec, 10);
+  if (!Number.isInteger(parsed) || parsed < 3 || parsed > 3600) {
+    throw new Error('주식 변동 주기는 3초에서 3600초 사이여야 합니다.');
+  }
+  currentStockIntervalSec = parsed;
+  return currentStockIntervalSec;
+}
+
+function startStockEngine(intervalMs = 30000, client = null) {
+  console.log(`🚀 [월덕 가상 경제 엔진] 가동 시작 (기본 변동 주기: ${currentStockIntervalSec}초, 이벤트 풀: ${NEWS_EVENTS.length}개)`);
+
+  function getNextTickDelay() {
+    return currentStockIntervalSec * 1000;
   }
 
   // 첫 갱신은 부팅 후 3초
@@ -1414,6 +1422,8 @@ module.exports = {
   setStockCustomBuyLimit,
   getLastNews,
   getRecentNewsFeed,
+  getStockIntervalSec,
+  setStockIntervalSec,
   MARKET_REGIMES,
   NEWS_EVENTS,
   IPO_CANDIDATE_POOL

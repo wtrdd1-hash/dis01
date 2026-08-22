@@ -184,7 +184,8 @@ function createShopRoutes(session) {
         success: true,
         drill: {
           ...info,
-          totalSpent: info.totalSpent.toString()
+          nextCost: (info.nextCost || 0n).toString(),
+          totalSpent: (info.totalSpent || 0n).toString()
         }
       });
     } catch (err) {

@@ -165,22 +165,34 @@
       <div style="background:rgba(30,41,59,0.5); border-radius:12px; padding:14px; margin-bottom:16px; font-size:13px;">
         <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
           <span style="color:#94a3b8;">현재 장착 드릴</span>
-          <strong id="drill-name-txt" style="color:#fff;">기본 철 드릴 (+0강)</strong>
+          <strong id="drill-name-txt" style="color:#fff;">기본 드릴 (+0강)</strong>
         </div>
         <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
           <span style="color:#94a3b8;">채굴 보너스 배율</span>
           <strong id="drill-bonus-txt" style="color:#34d399; font-family:'JetBrains Mono',monospace;">+0%</strong>
         </div>
-        <div style="display:flex; justify-content:space-between;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span style="color:#94a3b8;">1회 강화 비용 (100% 소각)</span>
+          <strong id="drill-cost-txt" style="color:#f59e0b; font-family:'JetBrains Mono',monospace;">5,000원</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
           <span style="color:#94a3b8;">강화 성공 확률</span>
-          <strong id="drill-rate-txt" style="color:#38bdf8; font-family:'JetBrains Mono',monospace;">85%</strong>
+          <strong id="drill-rate-txt" style="color:#38bdf8; font-family:'JetBrains Mono',monospace;">100%</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span style="color:#94a3b8;">실패 시 위험도</span>
+          <strong id="drill-penalty-txt" style="color:#a5b4fc; font-weight:800;">안전 (유지)</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:#94a3b8;">누적 강화 투자액</span>
+          <strong id="drill-spent-txt" style="color:#ef4444; font-family:'JetBrains Mono',monospace;">0원 소각됨</strong>
         </div>
       </div>
 
       <div id="forge-result-msg" style="min-height:22px; font-size:13px; font-weight:800; text-align:center; color:#fbbf24; margin-bottom:10px;"></div>
 
       <button id="btn-upgrade-drill" onclick="triggerDrillUpgrade()" style="width:100%; padding:12px; font-weight:900; background:linear-gradient(135deg,#d97706,#f59e0b); border:none; border-radius:12px; color:#000; cursor:pointer; font-size:15px; box-shadow:0 0 20px rgba(245,158,11,0.3);">
-        🔨 드릴 강화 시도하기
+        🔨 드릴 강화 시도하기 (<span id="btn-drill-cost-txt">5,000원</span>)
       </button>
     </div>
 
@@ -397,36 +409,63 @@
     setTimeout(() => { floatEl.remove(); }, 800);
   }
 
-  // 🔨 드릴 대장간 강화
+  // 🔨 드릴 대장간 상태 조회
+  async function loadDrillState() {
+    try {
+      const res = await fetch('/api/drill/info');
+      const data = await res.json();
+      if (data.success && data.drill) {
+        const d = data.drill;
+        const lv = d.enhancementLevel || 0;
+        const costStr = Number(d.nextCost || 5000).toLocaleString() + '원';
+        const spentStr = Number(d.totalSpent || 0).toLocaleString() + '원 소각됨';
+        const penaltyMap = { 'KEEP': '안전 (유지)', 'DOWN': '1단계 하락', 'DOWN_OR_RESET': '하락 또는 초기화', 'MAX': '최고 등급' };
+
+        document.getElementById('drill-name-txt').innerText = lv > 0 ? `+${lv}강 강화 드릴` : '기본 드릴 (+0강)';
+        document.getElementById('drill-bonus-txt').innerText = `+${d.bonusPercent}%`;
+        document.getElementById('drill-cost-txt').innerText = lv >= 15 ? '최고 단계 달성' : costStr;
+        document.getElementById('drill-rate-txt').innerText = lv >= 15 ? 'MAX' : `${d.nextRate}%`;
+        document.getElementById('drill-penalty-txt').innerText = penaltyMap[d.failPenalty] || d.failPenalty;
+        document.getElementById('drill-spent-txt').innerText = spentStr;
+        const btnCost = document.getElementById('btn-drill-cost-txt');
+        if (btnCost) btnCost.innerText = lv >= 15 ? 'MAX' : costStr;
+      }
+    } catch (e) {}
+  }
+
+  // 🔨 드릴 대장간 강화 시도
   async function triggerDrillUpgrade() {
     const hammer = document.getElementById('forgeHammer');
     const msgEl = document.getElementById('forge-result-msg');
     hammer.classList.add('smash');
-    msgEl.innerText = '망치질 중... 🔨';
+    msgEl.innerText = '대장장이가 망치질 중... 🔨';
     msgEl.style.color = '#38bdf8';
 
     try {
-      const res = await fetch('/api/clicker/upgrade', {
+      const res = await fetch('/api/drill/enhance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'clicker' })
+        body: JSON.stringify({ useProtection: false })
       });
       const data = await res.json();
       setTimeout(() => {
         hammer.classList.remove('smash');
-        if (data.success) {
-          const lv = data.newLevel || 2;
-          msgEl.innerText = `🎉 강화 대성공! [Lv.${lv} 드릴 달성]`;
-          msgEl.style.color = '#34d399';
-          document.getElementById('live-drill-level').innerText = `Lv.${lv} (+${lv - 1}강)`;
-          document.getElementById('drill-name-txt').innerText = `강화된 드릴 (+${lv - 1}강)`;
-          document.getElementById('drill-bonus-txt').innerText = `+${(lv - 1) * 20}%`;
-          addMiningLiveLog(`🔨 <b>드릴 대장간 강화 성공!</b> [Lv.${lv} 드릴 달성]`, true);
+        if (data.success && data.result) {
+          const r = data.result;
+          if (r.success) {
+            msgEl.innerText = `🎉 강화 대성공! [${r.newLevel}강 드릴 달성] (${Number(r.cost).toLocaleString()}원 소각)`;
+            msgEl.style.color = '#34d399';
+            addMiningLiveLog(`🔨 <b>드릴 대장간 강화 성공!</b> [${r.newLevel}강 달성]`, true);
+          } else {
+            msgEl.innerText = `💥 강화 실패: ${r.detailMsg || '강화 단계가 유지되었습니다.'} (${Number(r.cost).toLocaleString()}원 소각)`;
+            msgEl.style.color = '#ef4444';
+          }
+          loadDrillState();
         } else {
           msgEl.innerText = `💥 ${data.error || '강화에 실패했습니다.'}`;
           msgEl.style.color = '#ef4444';
         }
-      }, 300);
+      }, 400);
     } catch (e) {
       hammer.classList.remove('smash');
       msgEl.innerText = '네트워크 오류가 발생했습니다.';
@@ -558,6 +597,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    loadDrillState();
     loadMineZones();
     loadMiningLeaderboard();
   });

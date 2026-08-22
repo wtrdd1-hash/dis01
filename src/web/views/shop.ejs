@@ -787,14 +787,27 @@
           <p id="drillBonusText" style="font-size:14px; color:#34d399; font-weight:800; margin-top:10px;">채굴 효율 버프: +0%</p>
         </div>
 
-        <div style="background:rgba(0,0,0,0.4); border-radius:16px; padding:20px; margin:24px 0; text-align:left; font-size:13px; color:var(--text-muted); line-height:1.6;">
-          • 강화 성공 시 자동 채굴 수입이 영구 증가합니다 (+1강당 +10% ~ +200%).<br>
+        <div style="background:rgba(0,0,0,0.4); border-radius:16px; padding:20px; margin:24px 0; text-align:left; font-size:13px; color:var(--text-muted); line-height:1.8;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <span style="color:#cbd5e1;">1회 강화 비용 (100% 소각):</span>
+            <strong id="shopDrillCostText" style="color:#f59e0b; font-family:'JetBrains Mono',monospace;">5,000원</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <span style="color:#cbd5e1;">강화 성공 확률:</span>
+            <strong id="shopDrillRateText" style="color:#38bdf8; font-family:'JetBrains Mono',monospace;">100%</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+            <span style="color:#cbd5e1;">누적 강화 소각액:</span>
+            <strong id="shopDrillSpentText" style="color:#ef4444; font-family:'JetBrains Mono',monospace;">0원 소각됨</strong>
+          </div>
+          <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:10px 0;">
+          • 강화 성공 시 채굴 수입이 영구 증가합니다 (+1강당 +15% ~ +1,200%).<br>
           • 고단계 강화 실패 시 수치가 하락하거나 파괴될 수 있습니다.<br>
-          • 강화 비용은 시장에서 <b>100% 완전 소각</b>됩니다.
+          • 모든 강화 비용은 시장에서 <b>100% 완전 소각</b>됩니다.
         </div>
 
-        <button class="btn-action" style="width:100%; padding:14px; font-size:16px; justify-content:center; background:linear-gradient(135deg, #f59e0b, #d97706);" onclick="enhanceDrillAction()">
-          <i class="fa-solid fa-hammer"></i> 드릴 강화 시도하기
+        <button id="btnShopEnhanceDrill" class="btn-action" style="width:100%; padding:14px; font-size:16px; justify-content:center; background:linear-gradient(135deg, #f59e0b, #d97706);" onclick="enhanceDrillAction()">
+          <i class="fa-solid fa-hammer"></i> 드릴 강화 시도하기 (<span id="btnShopDrillCostText">5,000원</span>)
         </button>
       </div>
     </div>
@@ -1230,10 +1243,22 @@
       try {
         const res = await fetch('/api/drill/info');
         const data = await res.json();
-        if (data.success) {
+        if (data.success && data.drill) {
           const d = data.drill;
-          document.getElementById('drillLevelBadge').textContent = '+' + d.enhancementLevel + '강 채굴 드릴';
+          const lv = d.enhancementLevel || 0;
+          const costStr = Number(d.nextCost || 5000).toLocaleString() + '원';
+          const spentStr = Number(d.totalSpent || 0).toLocaleString() + '원 소각됨';
+
+          document.getElementById('drillLevelBadge').textContent = '+' + lv + '강 채굴 드릴';
           document.getElementById('drillBonusText').textContent = '채굴 효율 버프: +' + d.bonusPercent + '%';
+          const costEl = document.getElementById('shopDrillCostText');
+          if (costEl) costEl.textContent = lv >= 15 ? '최고 단계 달성' : costStr;
+          const rateEl = document.getElementById('shopDrillRateText');
+          if (rateEl) rateEl.textContent = lv >= 15 ? 'MAX' : `${d.nextRate}%`;
+          const spentEl = document.getElementById('shopDrillSpentText');
+          if (spentEl) spentEl.textContent = spentStr;
+          const btnCostEl = document.getElementById('btnShopDrillCostText');
+          if (btnCostEl) btnCostEl.textContent = lv >= 15 ? 'MAX' : costStr;
         }
       } catch (e) {}
     }

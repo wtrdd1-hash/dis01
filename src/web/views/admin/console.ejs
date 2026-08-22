@@ -34,13 +34,14 @@
       <span>🎮 관리자 다이렉트 명령 & 경제 조작 콘솔</span>
     </h2>
     <p style="font-size: 0.83rem; color: #94a3b8; margin-top:4px;">
-      유저 자금 즉시 지급/회수, 주식 시장 국면 강제 전환, 국고 보조금 살포 등 서버 핵심 경제를 원클릭으로 직접 조작합니다.
+      유저 자금 즉시 지급/회수, 주식 시장 국면 강제 전환, 시세 변동 주기 설정, 국고 보조금 살포 등 서버 핵심 경제를 원클릭으로 직접 조작합니다.
     </p>
   </div>
 
   <!-- 결과 알림 배너 -->
   <div id="console-result-box" style="display:none; padding:14px 18px; border-radius:8px; margin-bottom:18px; font-weight:700; font-size:0.95rem;"></div>
-<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:20px;">
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:20px;">
     
     <!-- 1. 자금 지급 / 회수 -->
     <div class="console-panel" style="border-top: 3px solid #10b981;">
@@ -104,6 +105,33 @@
       </div>
     </div>
 
+    <!-- 2-1. ⏱️ 주식 가격 변동 주기 설정 -->
+    <div class="console-panel" style="border-top: 3px solid #38bdf8;">
+      <div class="console-panel-header">
+        <span style="font-size:1.4rem;">⏱️</span>
+        <h3 class="console-panel-title" style="color:#38bdf8;">주식 시세 변동 주기 설정</h3>
+      </div>
+      
+      <div>
+        <label class="console-label">변동 주기 (현재: <strong id="current-stock-interval-txt" style="color:#38bdf8;">30초</strong>)</label>
+        <div style="display:flex; gap:6px; margin-bottom:8px;">
+          <input type="number" id="console-stock-interval-input" min="3" max="3600" value="30" placeholder="초 단위 입력 (예: 10, 30)" style="flex:1; color:#38bdf8; font-weight:800;">
+          <span style="display:flex; align-items:center; color:#94a3b8; font-size:0.9rem;">초마다 갱신</span>
+        </div>
+        <div style="display:flex; gap:4px; flex-wrap:wrap;">
+          <button type="button" onclick="setQuickStockInterval(5)" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); color:#38bdf8; padding:3px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;">5초 (초고속)</button>
+          <button type="button" onclick="setQuickStockInterval(10)" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); color:#38bdf8; padding:3px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;">10초 (빠름)</button>
+          <button type="button" onclick="setQuickStockInterval(30)" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); color:#38bdf8; padding:3px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;">30초 (기본)</button>
+          <button type="button" onclick="setQuickStockInterval(60)" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); color:#38bdf8; padding:3px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;">1분</button>
+          <button type="button" onclick="setQuickStockInterval(180)" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); color:#38bdf8; padding:3px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer;">3분</button>
+        </div>
+      </div>
+
+      <div style="margin-top:auto; padding-top:10px;">
+        <button type="button" onclick="execUpdateStockInterval()" style="width:100%; background:linear-gradient(135deg, #0284c7, #38bdf8); border:none; color:#fff; padding:12px; border-radius:8px; font-weight:800; font-size:0.95rem; cursor:pointer; box-shadow:0 4px 12px rgba(56,189,248,0.3); transition:all 0.15s ease;">⏱️ 변동 주기 즉시 저장</button>
+      </div>
+    </div>
+
     <!-- 3. 전 유저 국고 보조금 살포 -->
     <div class="console-panel" style="border-top: 3px solid #8b5cf6;">
       <div class="console-panel-header">
@@ -121,6 +149,9 @@
         <input type="text" id="console-stimulus-reason" placeholder="예: 2026년 설맞이 민생안정 지원금" style="width:100%;">
       </div>
 
+      <div style="margin-top:auto; padding-top:10px;">
+        <button type="button" onclick="execStimulusPackage()" style="width:100%; background:linear-gradient(135deg, #7c3aed, #8b5cf6); border:none; color:#fff; padding:12px; border-radius:8px; font-weight:800; font-size:0.95rem; cursor:pointer; box-shadow:0 4px 12px rgba(139,92,246,0.3); transition:all 0.15s ease;">💸 지원금 일괄 살포</button>
+      </div>
     </div>
 
     <!-- 4. 관리자 신규 주식 종목 즉시 상장 -->
@@ -330,6 +361,48 @@
     }
   }
 
+  function setQuickStockInterval(sec) {
+    const input = document.getElementById('console-stock-interval-input');
+    if (input) input.value = sec;
+  }
+
+  async function loadStockInterval() {
+    try {
+      const res = await adminFetch('/api/admin/stocks/interval');
+      if (res.success && res.intervalSec) {
+        const txt = document.getElementById('current-stock-interval-txt');
+        if (txt) txt.textContent = res.intervalSec + '초';
+        const input = document.getElementById('console-stock-interval-input');
+        if (input) input.value = res.intervalSec;
+      }
+    } catch (e) {}
+  }
+
+  async function execUpdateStockInterval() {
+    const input = document.getElementById('console-stock-interval-input');
+    const sec = parseInt(input ? input.value : '30', 10);
+    if (!sec || sec < 3 || sec > 3600) {
+      return showConsoleResult(false, '주식 변동 주기는 3초에서 3600초 사이여야 합니다.');
+    }
+
+    try {
+      const res = await adminFetch('/api/admin/stocks/interval', {
+        method: 'POST',
+        body: { intervalSec: sec }
+      });
+      if (res.success) {
+        showConsoleResult(true, res.message || `주식 가격 변동 주기가 ${sec}초로 변경되었습니다.`);
+        adminNotice(true, res.message);
+        const txt = document.getElementById('current-stock-interval-txt');
+        if (txt) txt.textContent = sec + '초';
+      } else {
+        showConsoleResult(false, res.error || '주기 변경 실패');
+      }
+    } catch (e) {
+      showConsoleResult(false, '처리 오류 발생');
+    }
+  }
+
   async function execStimulusPackage() {
     const amount = (document.getElementById('console-stimulus-amount') || {}).value.trim();
     const reason = (document.getElementById('console-stimulus-reason') || {}).value.trim();
@@ -435,83 +508,84 @@
       });
 
       if (res.success) {
-        showConsoleResult(true, res.message);
-        adminNotice(true, res.message);
+        showConsoleResult(true, `🎉 [${name} (${stockId})] 종목이 ${price}원에 신규 상장되었습니다!`);
+        adminNotice(true, res.message || '신규 주식 상장 완료');
         document.getElementById('console-stock-id').value = '';
         document.getElementById('console-stock-name').value = '';
         document.getElementById('console-stock-price').value = '';
-        document.getElementById('console-stock-sector').value = '';
         document.getElementById('console-stock-desc').value = '';
       } else {
         showConsoleResult(false, res.error || '신규 주식 상장 실패');
       }
     } catch (e) {
-      showConsoleResult(false, '신규 주식 상장 처리 중 통신 오류가 발생했습니다.');
+      showConsoleResult(false, '서버 통신 오류가 발생했습니다.');
     }
   }
 
-  // 📢 공지사항 목록 조회
-  function escapeNoticeHtml(value) {
-    return String(value == null ? '' : value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
+  // 📢 공지사항 목록 로드
   async function loadAnnouncements() {
     const tbody = document.getElementById('notice-table-body');
     if (!tbody) return;
+
     try {
       const res = await adminFetch('/api/admin/announcements');
-      if (res.success && res.announcements.length) {
-        tbody.innerHTML = res.announcements.map(a => {
-          const id = Number(a.id);
-          if (!Number.isSafeInteger(id) || id <= 0) return '';
-          const type = escapeNoticeHtml(a.type);
-          const title = escapeNoticeHtml(a.title);
-          return `
-          <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:8px 12px; color:#94a3b8;">#${id}</td>
-            <td style="padding:8px 12px;"><span style="font-size:0.75rem; font-weight:800; padding:2px 6px; border-radius:4px; background:${a.type === 'IMPORTANT' ? 'rgba(239,68,68,0.2)' : 'rgba(99,102,241,0.2)'}; color:${a.type === 'IMPORTANT' ? '#f87171' : '#a5b4fc'};">${type}</span></td>
-            <td style="padding:8px 12px; font-weight:700; color:#fff;">${title}</td>
-            <td style="padding:8px 12px;">${a.is_popup ? '<span style="color:#34d399; font-weight:800;">팝업 ON</span>' : '<span style="color:#64748b;">OFF</span>'}</td>
-            <td style="padding:8px 12px;">${a.is_active ? '<span style="color:#34d399;">활성</span>' : '<span style="color:#ef4444;">비활성</span>'}</td>
+      if (res.success && res.announcements) {
+        if (!res.announcements.length) {
+          tbody.innerHTML = '<tr><td colspan="6" style="padding:16px; text-align:center; color:#64748b;">등록된 공지사항이 없습니다.</td></tr>';
+          return;
+        }
+
+        const typeBadges = {
+          'IMPORTANT': '<span style="background:rgba(239,68,68,0.2); color:#ef4444; padding:2px 6px; border-radius:4px; font-weight:800; font-size:0.75rem;">🔥 중요</span>',
+          'EVENT': '<span style="background:rgba(245,158,11,0.2); color:#f59e0b; padding:2px 6px; border-radius:4px; font-weight:800; font-size:0.75rem;">🎉 이벤트</span>',
+          'MAINTENANCE': '<span style="background:rgba(234,179,8,0.2); color:#eab308; padding:2px 6px; border-radius:4px; font-weight:800; font-size:0.75rem;">🛠️ 점검</span>',
+          'GENERAL': '<span style="background:rgba(56,189,248,0.2); color:#38bdf8; padding:2px 6px; border-radius:4px; font-weight:800; font-size:0.75rem;">📢 일반</span>'
+        };
+
+        tbody.innerHTML = res.announcements.map(a => `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+            <td style="padding:8px 12px; color:#64748b; font-family:monospace;">#${a.id}</td>
+            <td style="padding:8px 12px;">${typeBadges[a.type] || a.type}</td>
+            <td style="padding:8px 12px; font-weight:700; color:#f1f5f9;">${escapeHtml(a.title)}</td>
+            <td style="padding:8px 12px; color:${a.is_popup ? '#34d399' : '#64748b'}; font-weight:700;">${a.is_popup ? '✨ 팝업 ON' : 'OFF'}</td>
+            <td style="padding:8px 12px;">
+              <button onclick="execToggleAnnouncement(${a.id})" style="background:${a.is_active ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}; color:${a.is_active ? '#34d399' : '#ef4444'}; border:1px solid ${a.is_active ? '#10b981' : '#ef4444'}; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:800; cursor:pointer;">
+                ${a.is_active ? '🟢 게시중' : '⚪ 숨김'}
+              </button>
+            </td>
             <td style="padding:8px 12px; text-align:right;">
-              <button onclick="execToggleAnnouncement(${id})" class="btn btn-sm" style="padding:3px 8px; font-size:0.75rem; background:#334155; margin-right:4px;">${a.is_active ? '비활성화' : '활성화'}</button>
-              <button onclick="execDeleteAnnouncement(${id})" class="btn btn-sm" style="padding:3px 8px; font-size:0.75rem; background:#ef4444;">삭제</button>
+              <button onclick="execDeleteAnnouncement(${a.id})" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:800; cursor:pointer;">
+                🗑️ 삭제
+              </button>
             </td>
           </tr>
-        `;
-        }).join('');
-      } else {
-        tbody.innerHTML = '<tr><td colspan="6" style="padding:16px; text-align:center; color:#64748b;">등록된 공지사항이 없습니다.</td></tr>';
+        `).join('');
       }
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="6" style="padding:16px; text-align:center; color:#f87171;">공지사항 목록 로드 실패</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="padding:16px; text-align:center; color:#ef4444;">공지사항 목록 조회 실패</td></tr>';
     }
   }
 
-  // 📢 공지사항 신규 등록
+  // 📢 공지사항 생성
   async function execCreateAnnouncement() {
     const title = (document.getElementById('console-notice-title') || {}).value.trim();
-    const content = (document.getElementById('console-notice-content') || {}).value.trim();
     const type = (document.getElementById('console-notice-type') || {}).value;
-    const is_popup = (document.getElementById('console-notice-popup') || {}).checked;
+    const content = (document.getElementById('console-notice-content') || {}).value.trim();
+    const isPopup = (document.getElementById('console-notice-popup') || {}).checked;
 
     if (!title || !content) {
-      showConsoleResult(false, '공지 제목과 상세 내용을 입력하세요.');
+      showConsoleResult(false, '공지사항 제목과 본문 내용을 모두 입력해주세요.');
       return;
     }
 
     try {
       const res = await adminFetch('/api/admin/announcements', {
         method: 'POST',
-        body: { title, content, type, is_popup }
+        body: { title, type, content, isPopup }
       });
+
       if (res.success) {
-        showConsoleResult(true, res.message);
+        showConsoleResult(true, '🎉 공지사항이 성공적으로 등록되었습니다.' + (isPopup ? ' (실시간 팝업 브로드캐스트 전송)' : ''));
         adminNotice(true, res.message);
         document.getElementById('console-notice-title').value = '';
         document.getElementById('console-notice-content').value = '';
@@ -554,6 +628,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     loadBackups();
     loadAnnouncements();
+    loadStockInterval();
     if (window.location.hash) {
       setTimeout(() => {
         const target = document.querySelector(window.location.hash);
@@ -568,6 +643,7 @@
   setTimeout(() => {
     loadBackups();
     loadAnnouncements();
+    loadStockInterval();
   }, 300);
 </script>
 

@@ -3,6 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const chat = require('../src/web/chatService');
+const { getStockIntervalSec, setStockIntervalSec } = require('../src/utils/stockEngine');
+const { getDrillEquipment, ENHANCE_TABLE } = require('../src/utils/enhancementEngine');
 
 test('💬 [Chat QA] 광장 채팅 텍스트 살균(Sanitize) 및 태그 이스케이프 검증', () => {
   const rawXss = '<script>alert(1)</script>&"\'';
@@ -43,4 +45,22 @@ test('💬 [Chat QA] 채팅 수정 및 삭제 권한 및 유효성 검증', asyn
   // 잘못된 ID 검증
   const invalidIdEdit = await chat.editMessage({ id: 'user123' }, -5, '테스트');
   assert.strictEqual(invalidIdEdit.status, 400, '잘못된 ID 시 400 반환');
+});
+
+test('📈 [Stock & Drill QA] 주식 변동 주기 및 드릴 강화 비용 검증', () => {
+  // 1. 주식 변동 주기 검증
+  const currentSec = getStockIntervalSec();
+  assert.ok(currentSec >= 3 && currentSec <= 3600, '기본 주식 변동 주기는 유효한 범위여야 합니다.');
+
+  const updated = setStockIntervalSec(15);
+  assert.strictEqual(updated, 15, '주식 변동 주기가 15초로 변경되어야 합니다.');
+  assert.strictEqual(getStockIntervalSec(), 15, '변경된 주기가 반환되어야 합니다.');
+
+  // 원복
+  setStockIntervalSec(currentSec);
+
+  // 2. 드릴 강화 비용 테이블 검증
+  assert.strictEqual(ENHANCE_TABLE.length, 15, '총 15단계 강화 테이블이 정의되어 있어야 합니다.');
+  assert.strictEqual(ENHANCE_TABLE[0].cost, 5000n, '1강 비용은 5,000원이어야 합니다.');
+  assert.strictEqual(ENHANCE_TABLE[14].cost, 10000000n, '15강 비용은 1,000만원이어야 합니다.');
 });

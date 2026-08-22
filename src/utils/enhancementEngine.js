@@ -32,19 +32,25 @@ async function getDrillEquipment(userId) {
     [userId]
   );
   if (!rows.length) {
+    const firstTable = ENHANCE_TABLE[0];
     return {
       enhancementLevel: 0,
       protectionTickets: 0,
       overclockUntil: null,
       isOverclocked: false,
       totalSpent: 0n,
-      bonusPercent: 0
+      bonusPercent: 0,
+      nextCost: firstTable ? firstTable.cost : 5000n,
+      nextRate: firstTable ? firstTable.rate : 100,
+      failPenalty: firstTable ? firstTable.failPenalty : 'KEEP'
     };
   }
   const r = rows[0];
   const isOverclocked = r.overclock_until ? new Date(r.overclock_until) > new Date() : false;
   const curLevel = r.enhancement_level || 0;
   const currentTable = ENHANCE_TABLE.find(t => t.level === curLevel);
+  const nextLevel = curLevel + 1;
+  const nextTable = ENHANCE_TABLE.find(t => t.level === nextLevel);
 
   return {
     enhancementLevel: curLevel,
@@ -52,7 +58,10 @@ async function getDrillEquipment(userId) {
     overclockUntil: r.overclock_until,
     isOverclocked,
     totalSpent: BigInt(r.total_spent || 0),
-    bonusPercent: (currentTable ? currentTable.bonus : 0) + (isOverclocked ? 20 : 0)
+    bonusPercent: (currentTable ? currentTable.bonus : 0) + (isOverclocked ? 20 : 0),
+    nextCost: nextTable ? nextTable.cost : 0n,
+    nextRate: nextTable ? nextTable.rate : 0,
+    failPenalty: nextTable ? nextTable.failPenalty : 'MAX'
   };
 }
 

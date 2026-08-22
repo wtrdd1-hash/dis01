@@ -1862,6 +1862,34 @@ function createAdminRoutes(getSessionUser) {
   router.post('/action/market-regime', handleMarketRegimeChange);
   router.post('/stocks/regime', handleMarketRegimeChange);
 
+  // 📈 주식 가격 변동 주기 조회 및 설정
+  router.get('/stocks/interval', async (req, res) => {
+    const { getStockIntervalSec } = require('../../utils/stockEngine');
+    return res.json({ success: true, intervalSec: getStockIntervalSec() });
+  });
+
+  router.post(['/stocks/interval', '/action/stock-interval'], async (req, res) => {
+    const session = req.adminSession;
+    const { intervalSec, seconds } = req.body;
+    const targetSec = parseInt(intervalSec || seconds, 10);
+    if (!Number.isInteger(targetSec) || targetSec < 3 || targetSec > 3600) {
+      return res.status(400).json({ success: false, error: '주식 변동 주기는 3초에서 3600초 사이여야 합니다.' });
+    }
+
+    try {
+      const { setStockIntervalSec } = require('../../utils/stockEngine');
+      const updated = setStockIntervalSec(targetSec);
+      await logAdminAction(session?.id || 'WEB_ADMIN', 'UPDATE_STOCK_INTERVAL', { intervalSec: updated });
+      return res.json({
+        success: true,
+        intervalSec: updated,
+        message: `주식 가격 변동 주기가 ${updated}초로 성공적으로 변경되었습니다.`
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   // 🎁 전 유저 국고 보조금 살포
   const handleStimulusPackage = async (req, res) => {
     const session = req.adminSession;
