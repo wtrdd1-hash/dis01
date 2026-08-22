@@ -22,7 +22,7 @@ git ls-files | grep -E "\.sql$|backups/" && echo LEAK! || echo OK
 ## 백업 규칙
 
 1. **로컬 백업**: `\.bak\full_YYYYMMDD_HHMMSS\` (zip 압축, git 추적 안됨)
-2. **VPS 백업**: 도커 mysql을 `/home/wtrdd/backups/` 에 6시간마다 dump (git 추적 안됨)
+2. **미니 PC 백업**: 도커 mysql을 `/home/wtrdd/backups/` 에 6시간마다 dump (git 추적 안됨)
 3. **원격 백업**: GitHub 등 외부에는 절대 push 하지 않음
 
 ## 만약 SQL 파일이 실수로 추적되면

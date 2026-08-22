@@ -12,6 +12,9 @@ RUN npm ci --omit=dev \
 
 COPY --chown=node:node src ./src
 COPY --chown=node:node scripts ./scripts
+COPY --chown=node:node test ./test
+
+RUN mkdir -p /app/logs /app/uploads /app/backups && chown -R node:node /app
 
 ENV NODE_ENV=production
 STOPSIGNAL SIGTERM

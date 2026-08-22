@@ -48,7 +48,7 @@ function createSpendingRoutes(session) {
   });
 
   // 3. 🎨 외형 로드아웃 & 보유 아이템 조회
-  router.get('/economy/cosmetics', async (req, res) => {
+  router.get(['/economy/cosmetics', '/economy/cosmetics/loadout', '/cosmetics/loadout', '/cosmetics'], async (req, res) => {
     const user = resolveUser(session, req);
     const userId = getUserId(user);
     if (!userId) return res.status(401).json({ success: false, error: '로그인이 필요합니다.' });
@@ -62,7 +62,7 @@ function createSpendingRoutes(session) {
   });
 
   // 4. 🔲 외형 슬롯 장착
-  router.post('/economy/cosmetics/equip', async (req, res) => {
+  router.post(['/economy/cosmetics/equip', '/cosmetics/equip'], async (req, res) => {
     const user = resolveUser(session, req);
     const userId = getUserId(user);
     if (!userId) return res.status(401).json({ success: false, error: '로그인이 필요합니다.' });
@@ -77,7 +77,7 @@ function createSpendingRoutes(session) {
   });
 
   // 5. ❌ 외형 슬롯 장착 해제
-  router.post('/economy/cosmetics/unequip', async (req, res) => {
+  router.post(['/economy/cosmetics/unequip', '/cosmetics/unequip'], async (req, res) => {
     const user = resolveUser(session, req);
     const userId = getUserId(user);
     if (!userId) return res.status(401).json({ success: false, error: '로그인이 필요합니다.' });

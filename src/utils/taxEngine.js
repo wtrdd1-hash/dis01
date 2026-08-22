@@ -99,11 +99,24 @@ function getPolicy() {
 }
 
 // 🏛️ 누진적 초과 재산세 계산 (초과 누진 과세)
-function computeProgressiveWealthTax(liquidAmount, multiplier = 1.0) {
+function computeProgressiveWealthTax(liquidAmount, multiplier = 1.0, threshold = null) {
   const liquid = safeBigInt(liquidAmount);
-  if (liquid < 5000000n) return { annualTax: 0n, periodLevy: 0n, effectiveRate: 0, breakdown: [] };
+  let thresh = 5000000n;
+  if (threshold !== null && threshold !== undefined) {
+    thresh = safeBigInt(threshold);
+  } else {
+    try {
+      const { getDynamicSettings } = require('./economyBalancer');
+      const dyn = getDynamicSettings();
+      if (dyn && Number.isFinite(Number(dyn.wealthThresholdForTax))) {
+        thresh = safeBigInt(dyn.wealthThresholdForTax);
+      }
+    } catch (e) {}
+  }
 
-  const mult = Math.max(0.2, Math.min(3.0, Number(multiplier) || 1.0));
+  if (liquid < thresh) return { annualTax: 0n, periodLevy: 0n, effectiveRate: 0, breakdown: [] };
+
+  const mult = Math.max(0.1, Math.min(5.0, Number(multiplier) || 1.0));
   let totalAnnual = 0n;
   const breakdown = [];
 
@@ -453,10 +466,10 @@ async function collectWealthTax() {
           const snap = await loadWealthSnapshot(row.discord_id);
           // 🏛️ 과세 대상: 유동자산(현금+예금) + 주식평가액의 50% (부동산과세 방지)
           const taxableWealth = snap.liquid + snap.stock / 2n;
-          if (taxableWealth < 5000000n) return 0n;
+          if (taxableWealth < threshold) return 0n;
 
           // 🏛️ 유동자산 기준 누진 과세 (현금+예금+주식50%)
-          const prog = computeProgressiveWealthTax(taxableWealth, policy.wealthTaxMultiplier);
+          const prog = computeProgressiveWealthTax(taxableWealth, policy.wealthTaxMultiplier, threshold);
           const periodLevy = prog.periodLevy;
           const levy = minBigInt([periodLevy, snap.liquid]);
           if (levy <= 0n) return 0n;

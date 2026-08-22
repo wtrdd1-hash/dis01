@@ -194,7 +194,7 @@ graph TD
 * **Backend / Engine:** Node.js 20, Express.js 5, Discord.js 14, mysql2
 * **Frontend:** Vanilla JS (ES6+), Vanilla CSS (Tailored Design System, Sparkline SVG, CSS Grid/Flexbox)
 * **Database:** MySQL 8.0 (`accountax_db`)
-* **Server & Infra:** Ubuntu 24.04 LTS VPS, Nginx 1.28, Let's Encrypt SSL Certbot, PM2 Daemon Manager
+* **Server & Infra:** Ubuntu 24.04 LTS 미니 PC 서버, Nginx 1.28, Let's Encrypt SSL Certbot, PM2 Daemon Manager
 
 ---
 
@@ -265,7 +265,7 @@ pm2 logs discord-bot --lines 30
 - 오프라인 수금 누적 상한을 6시간으로 단축하여 커뮤니티 활동성 촉진.
 
 ### ⏰ 6. 서버 및 데이터베이스 타임존 한국 표준시(KST) 완전 동기화
-- VPS 호스트 OS, MySQL Database, Docker Container 및 Node.js의 타임존을 `Asia/Seoul (KST, UTC+9)`로 100% 일치.
+- 미니 PC 호스트 OS, MySQL Database, Docker Container 및 Node.js의 타임존을 `Asia/Seoul (KST, UTC+9)`로 100% 일치.
 - 모든 파일 로그 및 DB 감사 로그의 밀리초 단위 한국 시간 기록 보장.
 
 ### 🌐 7. 거시경제 연동 전방위 자동 탄력 조절 시스템 (Dynamic Macroeconomic Engine)

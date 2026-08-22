@@ -728,6 +728,8 @@ function startWebServer(client) {
   app.use('/api/mine', createMineRoutes(session.getPlayUser));
   app.use('/api/p2p', require('./routes/p2pRoutes')(session.getPlayUser));
   app.use('/api', createEconomyRoutes(session.getPlayUser));
+  app.use('/api', require('./routes/spendingRoutes').createSpendingRoutes(session));
+  app.use('/api', require('./routes/shopRoutes').createShopRoutes(session));
   app.use('/api/business', createBusinessRoutes(session.getPlayUser));
   app.use('/api/stocks', createStockRoutes(session.getPlayUser));
   app.use('/api/stock', createStockRoutes(session.getPlayUser));
@@ -737,6 +739,34 @@ function startWebServer(client) {
 
   // 🔌 모듈화된 라우터 마운트 (auth)
   createAuthRoutes({ getOrCreateUser, allowOauthAttempt })(app);
+
+  // 📢 실시간 팝업 공지 API
+  app.get('/api/announcements/popup', async (req, res) => {
+    try {
+      const [rows] = await pool.query(`
+        SELECT * FROM site_announcements 
+        WHERE is_active = 1 AND is_popup = 1 
+          AND (starts_at IS NULL OR starts_at <= NOW()) 
+          AND (ends_at IS NULL OR ends_at > NOW())
+        ORDER BY id DESC LIMIT 5
+      `);
+      res.json({
+        success: true,
+        announcements: rows.map(r => ({
+          id: Number(r.id),
+          title: r.title,
+          content: r.content,
+          type: r.type,
+          is_popup: Boolean(r.is_popup),
+          is_active: Boolean(r.is_active),
+          starts_at: r.starts_at || null,
+          ends_at: r.ends_at || null
+        }))
+      });
+    } catch (e) {
+      res.json({ success: true, announcements: [] });
+    }
+  });
 
   // 12. 📰 실시간 증시 뉴스 & 공시 피드 API
   app.get('/api/market/news', async (req, res) => {
@@ -1317,14 +1347,13 @@ function startWebServer(client) {
   app.get('/auth/discord/callback', AuthController.discordCallback);
   app.get(['/logout', '/auth/logout'], AuthController.logout);
 
-  app.get(['/', '/home'], PageController.renderHome);
-  app.get(['/plaza', '/metaverse', '/map', '/world'], PageController.renderPlaza);
-  app.get(['/stocks', '/stock'], PageController.renderStocks);
+  app.get(['/', '/home', '/stocks', '/stock'], PageController.renderStocks);
   app.get(['/casino', '/gamble'], PageController.renderCasino);
   app.get(['/arcade', '/puzzle', '/game'], PageController.renderArcade);
   app.get(['/mining', '/mine', '/clicker'], PageController.renderMining);
   app.get(['/ranking', '/leaderboard'], PageController.renderRanking);
   app.get(['/shop', '/cosmetics', '/wardrobe', '/dressroom', '/prestige', '/workshop', '/duckhouse'], PageController.renderShop);
+  app.get(['/plaza', '/metaverse', '/map', '/world'], PageController.renderPlaza);
 
   app.get('/api/leaderboard', async (req, res) => {
     try {
@@ -1333,8 +1362,8 @@ function startWebServer(client) {
     } catch (err) { res.status(500).json({ error: '처리 중 오류가 발생했습니다.' }); }
   });
 
-  // 메인 웹사이트 대시보드 및 게임 허브
-  app.get('/', async (req, res) => {
+  // 레거시 디스코드 단일 페이지 앱
+  app.get('/legacy', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     try {
       const stocks = await getCachedMarketStocks();
@@ -1586,8 +1615,25 @@ function startWebServer(client) {
             </div>
           `;
 
+        const categoryMap = {
+          'AICH': 'AI,반도체,인공지능',
+          'NEKO': 'AI,반도체,양자,에너지',
+          'SCRP': 'IT,빅데이터,클라우드',
+          'WTRD': '지주사,IT,빅데이터',
+          'BANK': '금융,핀테크,초보입문,국민주',
+          'CHKN': '소비재,푸드,치킨,초보입문',
+          'LUXU': '소비재,명품,부티크',
+          'AUTO': '모빌리티,자율주행,전기차',
+          'SLOT': '게이밍,초보입문,국민주',
+          'CASN': '게이밍,엔터',
+          'AERO': '우주항공,방산,위성',
+          'ARMS': '우주항공,방산,무기',
+          'SPAC': '우주항공,방산,위성'
+        };
+        const stockCats = categoryMap[s.stock_id] || '기타';
+
         stockCardsHtml += `
-          <div class="stock-card" id="stock-${s.stock_id}" data-stock-id="${escapeHtml(s.stock_id)}" data-name="${escapeHtml(s.name)}" data-price="${escapeHtml(String(s.price))}" data-holding="${Number(userHolding)}" onclick="openTradeModal(this.dataset.stockId, this.dataset.name, this.dataset.price, 'buy', this.dataset.holding)">
+          <div class="stock-card" id="stock-${s.stock_id}" data-stock-id="${escapeHtml(s.stock_id)}" data-name="${escapeHtml(s.name)}" data-categories="${stockCats}" data-price="${escapeHtml(String(s.price))}" data-holding="${Number(userHolding)}" onclick="openTradeModal(this.dataset.stockId, this.dataset.name, this.dataset.price, 'buy', this.dataset.holding)">
             <div class="sr-name">
               <span class="stock-symbol">${escapeHtml(s.stock_id)}</span>
               <span class="stock-name" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</span>
@@ -2006,6 +2052,29 @@ function startWebServer(client) {
           <script src="/socket.io/socket.io.js"></script>
           <style>
             input, textarea { -webkit-user-select: text !important; user-select: text !important; }
+            .btn-stock-filter {
+              background: rgba(30, 41, 59, 0.7);
+              border: 1px solid rgba(255, 255, 255, 0.12);
+              border-radius: 20px;
+              padding: 5px 12px;
+              color: #94a3b8;
+              font-size: 12px;
+              font-weight: 600;
+              cursor: pointer;
+              white-space: nowrap;
+              transition: all 0.2s;
+            }
+            .btn-stock-filter:hover {
+              background: rgba(99, 102, 241, 0.3);
+              color: #fff;
+              border-color: rgba(99, 102, 241, 0.5);
+            }
+            .btn-stock-filter.active {
+              background: #6366f1;
+              color: #fff;
+              border-color: #818cf8;
+              box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+            }
           </style>
         </head>
         <body data-tab="tab-stocks">
@@ -2127,6 +2196,15 @@ function startWebServer(client) {
               </div>
               <p class="market-flash">${news ? escapeHtml(news.text) : '장중 거래가 이어지고 있습니다.'}</p>
               ${isDiscordUser ? portfolioSectionHtml : ''}
+              <div class="stock-category-filter-bar" style="display:flex; gap:6px; margin: 10px 0 14px 0; overflow-x:auto; padding-bottom:4px;">
+                <button type="button" class="btn-stock-filter active" onclick="filterStockCategory('ALL', this)">전체</button>
+                <button type="button" class="btn-stock-filter" onclick="filterStockCategory('AI', this)">AI·반도체</button>
+                <button type="button" class="btn-stock-filter" onclick="filterStockCategory('IT', this)">IT·빅데이터</button>
+                <button type="button" class="btn-stock-filter" onclick="filterStockCategory('금융', this)">금융</button>
+                <button type="button" class="btn-stock-filter" onclick="filterStockCategory('소비재', this)">소비재·푸드</button>
+                <button type="button" class="btn-stock-filter" onclick="filterStockCategory('우주', this)">우주·방산</button>
+                <button type="button" class="btn-stock-filter" onclick="filterStockCategory('초보', this)">초보입문/국민주</button>
+              </div>
               <div class="market-layout">
                 <div class="market-list">
                   <div class="market-cols">
@@ -3793,6 +3871,22 @@ function startWebServer(client) {
                 if (typeof refreshHorseCard === 'function') refreshHorseCard();
               }
             }
+            function filterStockCategory(cat, btn) {
+              if (btn) {
+                document.querySelectorAll('.btn-stock-filter').forEach(function(b) { b.classList.remove('active'); });
+                btn.classList.add('active');
+              }
+              const cards = document.querySelectorAll('.stocks-grid .stock-card');
+              cards.forEach(function(card) {
+                if (cat === 'ALL') {
+                  card.style.display = '';
+                } else {
+                  const cardCats = (card.getAttribute('data-categories') || '') + ' ' + (card.getAttribute('data-name') || '');
+                  card.style.display = cardCats.indexOf(cat) !== -1 ? '' : 'none';
+                }
+              });
+            }
+            window.filterStockCategory = filterStockCategory;
             window.switchTab = switchTab;
             window.closeDrawers = closeDrawers;
             window.toggleSidebar = toggleSidebar;

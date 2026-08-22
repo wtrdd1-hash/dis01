@@ -380,18 +380,24 @@ async function updateStockPrices() {
         }
       } catch (e) {}
 
-      // 📉 단기 과열 방지 및 차익 실현 매도 압력 (Profit Taking & Mean Reversion)
-      let profitTakingDrag = 0;
-      const low24 = BigInt(stock.low_24h || stock.price || 100);
-      if (low24 > 0n && currentPrice > low24) {
-        const gainRatio = Number(currentPrice - low24) / Number(low24);
-        if (gainRatio > 0.25) {
-          // 25% 이상 급등 시 완만한 차익 실현 (-0.5% ~ -1.5%)
-          profitTakingDrag = -Math.min(0.015, (gainRatio - 0.25) * 0.04);
-        }
+      // 🌐 1. 거시 국면 배경 효과 (과도한 일괄 쏠림을 방지하여 ±0.5% 내외로 완만하게 반영)
+      const macroBackground = Math.max(-0.006, Math.min(0.006, (regimeDrift * 0.15) + (macroCycleBias * 0.2) + (communityLiquidityFactor * 0.15)));
+
+      // 🎲 2. 종목별 독립 등락 방향 & 고유 브라운 운동 (종목마다 독자적인 상승/하락 결정)
+      // 국면에 따라 상승 확률이 45%~55% 사이로 미세하게 조정되며, 각 종목은 독립적으로 등락합니다.
+      const bullChance = 0.50 + Math.max(-0.15, Math.min(0.15, regimeDrift * 2.0));
+      const stockTrendSign = (Math.random() < bullChance ? 1 : -1);
+      const individualWalk = stockTrendSign * (Math.random() * baseVolatility * 1.5);
+
+      // 🎲 3. 20% 확률로 개별 종목 단독 호재/악재 미니 이벤트 발생 (-4% ~ +5%)
+      let stockMicroShock = 0;
+      if (Math.random() < 0.20) {
+        const isGood = Math.random() < 0.5;
+        stockMicroShock = isGood ? (Math.random() * 0.04 + 0.01) : -(Math.random() * 0.035 + 0.01);
       }
 
-      const rawDelta = regimeDrift + eventBoost + userImpact + communityLiquidityFactor + macroCycleBias + profitTakingDrag + noise;
+      // 🎲 4. 종합 델타 계산: 거시 배경 + 개별 변동 + 마이크로 호재/악재 + 유저 거래 충격 + 차익 실현
+      const rawDelta = macroBackground + eventBoost + userImpact + profitTakingDrag + noise + individualWalk + stockMicroShock;
       const totalDelta = clampStockDelta(eventBoost, rawDelta);
       let newPrice = BigInt(Math.max(10, Math.round(Number(currentPrice) * (1 + totalDelta))));
 
@@ -1361,11 +1367,16 @@ async function setStockCustomBuyLimit(stockId, maxLimit) {
 
 // 자동 경제 조절 시스템에서 호출 - 시장 국면 강제 변경
 function setMarketRegime(index) {
-  if (index >= 0 && index < MARKET_REGIMES.length) {
-    currentRegimeIndex = index;
-    forcedRegimeIndex = index;
+  if (index === null || index === undefined || index === '') {
+    forcedRegimeIndex = null;
+    return;
+  }
+  const n = Number(index);
+  if (Number.isInteger(n) && n >= 0 && n < MARKET_REGIMES.length) {
+    currentRegimeIndex = n;
+    forcedRegimeIndex = n;
     regimeCyclesLeft = 3;
-    console.log(`🔧 [시장국면] 즉시 전환: ${MARKET_REGIMES[index].name}`);
+    console.log(`🔧 [시장국면] 즉시 전환: ${MARKET_REGIMES[n].name}`);
   }
 }
 

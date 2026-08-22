@@ -6,12 +6,6 @@ const EconomyCore = require('../src/core/economy/EconomyCore');
 const { pool } = require('../src/config/database');
 
 test('EconomyCoreFacade 통합 검증', async (t) => {
-  t.after(async () => {
-    try {
-      await pool.end();
-    } catch (e) {}
-  });
-
   // 1. Vault test
   assert.equal(typeof EconomyCore.vault.safeBigInt, 'function');
   assert.equal(typeof EconomyCore.vault.applyCashDelta, 'function');

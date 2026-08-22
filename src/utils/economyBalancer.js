@@ -679,6 +679,18 @@ function getDynamicSettings() {
   return { ...dynamicSettings };
 }
 
+function updateDynamicSetting(key, value) {
+  dynamicSettings[key] = value;
+  return dynamicSettings[key];
+}
+
+function updateDynamicSettings(updates) {
+  for (const [k, v] of Object.entries(updates)) {
+    dynamicSettings[k] = v;
+  }
+  return { ...dynamicSettings };
+}
+
 function getLastReport() {
   return lastReport;
 }
@@ -687,6 +699,8 @@ module.exports = {
   startAutoBalancer,
   linkStockEngine,
   getDynamicSettings,
+  updateDynamicSetting,
+  updateDynamicSettings,
   getLastReport,
   analyzeEconomyHealth,
   applyAutoBalancing,

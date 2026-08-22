@@ -1995,7 +1995,7 @@ function createAdminRoutes(getSessionUser) {
       const session = getSessionUser(req);
       const adminId = session ? session.id : 'admin';
       const result = await bulkUpdate(updates || {}, adminId);
-      if (!result.success && (!result.skipped || result.skipped.length === 0)) {
+      if (!result.success || (Array.isArray(result.applied) && result.applied.length === 0)) {
         return res.status(400).json(result);
       }
       res.json(result);
@@ -2043,6 +2043,51 @@ function createAdminRoutes(getSessionUser) {
     if (!isValidIp(ip)) return res.status(400).json({ success: false, error: '올바른 IP 주소가 아닙니다.' });
     const geo = lookupIp(ip);
     return res.json({ success: true, geo });
+  });
+
+  // 🔍 특정 유저 IP 기록 조회
+  router.get('/users/:userId/ips', async (req, res) => {
+    const { userId } = req.params;
+    if (!userId) return res.status(400).json({ success: false, error: '유저 ID가 필요합니다.' });
+    try {
+      const [rows] = await pool.query(`
+        SELECT DISTINCT ip, country, country_name, created_at
+        FROM web_access_logs
+        WHERE user_id = ?
+        ORDER BY id DESC LIMIT 20
+      `, [userId]);
+
+      const ips = (rows || []).map(row => {
+        const geo = row.ip && row.ip !== 'DELETED' ? lookupIp(row.ip) : null;
+        return {
+          ip: row.ip,
+          country: row.country || (geo && geo.country) || 'KR',
+          countryName: row.country_name || (geo && geo.countryName) || '대한민국',
+          flag: geo ? geo.flag : getFlagEmoji(row.country),
+          createdAt: row.created_at
+        };
+      });
+      return res.json({ success: true, ips });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // 📈 특정 유저 보유 주식 목록 조회
+  router.get('/users/:userId/stocks', async (req, res) => {
+    const { userId } = req.params;
+    if (!userId) return res.status(400).json({ success: false, error: '유저 ID가 필요합니다.' });
+    try {
+      const [rows] = await pool.query(`
+        SELECT us.stock_id, us.amount, us.average_price, s.name, s.price as current_price
+        FROM user_stocks us
+        JOIN stocks s ON us.stock_id = s.stock_id
+        WHERE us.user_id = ? AND us.amount > 0
+      `, [userId]);
+      return res.json({ success: true, stocks: rows });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message });
+    }
   });
 
   router.get('/security/user-ips', async (req, res) => {

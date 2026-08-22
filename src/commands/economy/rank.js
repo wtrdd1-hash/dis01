@@ -20,12 +20,16 @@ module.exports = {
         u.discord_id, 
         u.cash, 
         u.bank,
-        ${NET_WORTH_SQL} AS net
+        ${NET_WORTH_SQL} AS net,
+        ucl.item_key AS title_key,
+        eci.name AS title_name
       FROM users u
       LEFT JOIN user_stocks us ON u.discord_id = us.user_id AND us.amount > 0
       LEFT JOIN stocks s ON us.stock_id = s.stock_id
+      LEFT JOIN user_cosmetic_loadout ucl ON u.discord_id = ucl.user_id AND ucl.slot = 'TITLE'
+      LEFT JOIN economy_catalog_items eci ON ucl.item_key = eci.item_key
       WHERE ${filter.sql}
-      GROUP BY u.discord_id, u.cash, u.bank
+      GROUP BY u.discord_id, u.cash, u.bank, ucl.item_key, eci.name
       ORDER BY net DESC
     `, filter.params);
 
@@ -42,7 +46,15 @@ module.exports = {
       const row = top10[i];
       const emoji = rankEmojis[i] || '🔹';
       const net = safeBigInt(row.net);
-      description += `${emoji} <@${row.discord_id}> - **${formatMoney(net)}**\n`;
+      let titleTag = '';
+      if (row.title_name) {
+        titleTag = `\`[${row.title_name}]\` `;
+      } else if (row.discord_id === '1481258930909872239') {
+        titleTag = '`[🍔 버거킹]` ';
+      } else {
+        titleTag = '`[🧪 테스터]` ';
+      }
+      description += `${emoji} ${titleTag}<@${row.discord_id}> - **${formatMoney(net)}**\n`;
     }
 
     const myRankIndex = rows.findIndex(r => r.discord_id === interaction.user.id);

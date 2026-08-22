@@ -110,6 +110,23 @@
     background: rgba(56, 189, 248, 0.1);
   }
 
+  .chart-tf-btn {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 3px 10px;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .chart-tf-btn:hover, .chart-tf-btn.active {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: rgba(56, 189, 248, 0.5);
+    color: #38bdf8;
+  }
+
   /* 콤팩트 카드 그리드 (짤림 방지 최적화) */
   .stocks-grid {
     display: grid;
@@ -335,7 +352,7 @@
         if (sid === 'SLOT' || sid === 'CHKN') cats.push('ENTRY');
         const catStr = cats.join(' ');
     %>
-      <div class="stock-card" data-stock-id="<%= stock.stock_id %>" data-categories="<%= catStr %>">
+      <div class="stock-card" data-stock-id="<%= stock.stock_id %>" data-categories="<%= catStr %>" tabindex="0" role="button" aria-label="<%= stock.name %> (<%= stock.stock_id %>) 현재가 <%= price.toLocaleString() %>원, 상세 차트 및 거래 열기" onclick="openDetailModal('<%= stock.stock_id %>')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); openDetailModal('<%= stock.stock_id %>');}" style="cursor:pointer; outline:none;">
         <div>
           <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
             <div>
@@ -347,11 +364,14 @@
             </span>
           </div>
 
-          <!-- 실시간 호가 -->
-          <div style="margin-top:2px;">
+          <!-- 실시간 호가 & 차트보기 뱃지 -->
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
             <div data-stock-price="<%= stock.stock_id %>" style="font-size:17.5px; font-weight:900; color:#38bdf8; font-family:'JetBrains Mono',monospace; transition:color 0.3s ease;">
               <%= price.toLocaleString() %>원
             </div>
+            <button type="button" onclick="event.stopPropagation(); openDetailModal('<%= stock.stock_id %>')" style="background:rgba(129,140,248,0.15); border:1px solid rgba(129,140,248,0.3); border-radius:6px; padding:2px 6px; font-size:11px; color:#818cf8; font-weight:700; cursor:pointer;" aria-label="<%= stock.name %> 상세 차트 보기">
+              🔍 차트
+            </button>
           </div>
 
           <!-- SVG 미니 스파크라인 추세선 -->
@@ -369,8 +389,8 @@
 
         <!-- 매수/매도 버튼 -->
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px;">
-          <button onclick="openOrderModal('BUY', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:7px; font-weight:800; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); border-radius:8px; color:#34d399; cursor:pointer; font-size:12px; transition:all 0.15s ease;">매수</button>
-          <button onclick="openOrderModal('SELL', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:7px; font-weight:800; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); border-radius:8px; color:#f87171; cursor:pointer; font-size:12px; transition:all 0.15s ease;">매도</button>
+          <button onclick="event.stopPropagation(); openOrderModal('BUY', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:7px; font-weight:800; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); border-radius:8px; color:#34d399; cursor:pointer; font-size:12px; transition:all 0.15s ease;">매수</button>
+          <button onclick="event.stopPropagation(); openOrderModal('SELL', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:7px; font-weight:800; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); border-radius:8px; color:#f87171; cursor:pointer; font-size:12px; transition:all 0.15s ease;">매도</button>
         </div>
       </div>
     <% }) %>
@@ -385,7 +405,7 @@
           <th>기업명</th>
           <th>현재가</th>
           <th>변동률 (30초)</th>
-          <th>빠른 주문</th>
+          <th>분석 & 주문</th>
         </tr>
       </thead>
       <tbody>
@@ -407,7 +427,7 @@
             if (sid === 'SLOT' || sid === 'CHKN') cats.push('ENTRY');
             const catStr = cats.join(' ');
         %>
-          <tr data-stock-id="<%= stock.stock_id %>" data-categories="<%= catStr %>">
+          <tr data-stock-id="<%= stock.stock_id %>" data-categories="<%= catStr %>" onclick="openDetailModal('<%= stock.stock_id %>')" style="cursor:pointer;">
             <td style="font-family:'JetBrains Mono',monospace; color:#818cf8; font-weight:700;"><%= stock.code || stock.stock_id %></td>
             <td><strong style="color:#fff;"><%= stock.name %></strong></td>
             <td data-stock-price="<%= stock.stock_id %>" style="font-family:'JetBrains Mono',monospace; font-weight:900; color:#38bdf8;"><%= price.toLocaleString() %>원</td>
@@ -416,14 +436,94 @@
             </td>
             <td>
               <div style="display:flex; gap:6px;">
-                <button onclick="openOrderModal('BUY', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:4px 10px; font-weight:800; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); border-radius:6px; color:#34d399; cursor:pointer; font-size:11.5px;">매수</button>
-                <button onclick="openOrderModal('SELL', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:4px 10px; font-weight:800; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); border-radius:6px; color:#f87171; cursor:pointer; font-size:11.5px;">매도</button>
+                <button onclick="event.stopPropagation(); openDetailModal('<%= stock.stock_id %>')" style="padding:4px 8px; font-weight:800; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.4); border-radius:6px; color:#a5b4fc; cursor:pointer; font-size:11.5px;">🔍 차트</button>
+                <button onclick="event.stopPropagation(); openOrderModal('BUY', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:4px 10px; font-weight:800; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); border-radius:6px; color:#34d399; cursor:pointer; font-size:11.5px;">매수</button>
+                <button onclick="event.stopPropagation(); openOrderModal('SELL', '<%= stock.stock_id %>', '<%= stock.name %>', <%= price %>)" style="padding:4px 10px; font-weight:800; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); border-radius:6px; color:#f87171; cursor:pointer; font-size:11.5px;">매도</button>
               </div>
             </td>
           </tr>
         <% }) %>
       </tbody>
     </table>
+  </div>
+
+  <!-- 📈 실시간 주식 상세 차트 & 기업 분석 모달 -->
+  <div id="detail-modal" class="order-modal-backdrop" onclick="if(event.target===this) closeDetailModal()" style="display:none;">
+    <div class="order-modal-box" style="max-width: 540px; width: 92%;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+        <div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span id="detail-symbol" style="font-size:11px; font-weight:800; color:#818cf8; font-family:'JetBrains Mono',monospace;">[CODE]</span>
+            <span id="detail-sector" style="font-size:11px; background:rgba(99,102,241,0.15); color:#a5b4fc; padding:2px 6px; border-radius:4px; font-weight:700;">주식</span>
+          </div>
+          <h3 id="detail-stock-name" style="font-size:18px; font-weight:900; color:#fff; margin:4px 0 0 0;">종목명</h3>
+        </div>
+        <button onclick="closeDetailModal()" style="background:none; border:none; color:#94a3b8; font-size:20px; cursor:pointer; padding:4px;">✕</button>
+      </div>
+
+      <!-- 실시간 시세 & 변동률 헤더 -->
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:12px; padding:10px 14px; background:rgba(15,23,42,0.6); border-radius:10px; border:1px solid rgba(255,255,255,0.06);">
+        <div>
+          <div style="font-size:11px; color:#94a3b8;">현재가</div>
+          <div id="detail-price" style="font-size:22px; font-weight:900; color:#38bdf8; font-family:'JetBrains Mono',monospace;">0원</div>
+        </div>
+        <div style="text-align:right;">
+          <div id="detail-rate" style="font-size:15px; font-weight:900; font-family:'JetBrains Mono',monospace; color:#34d399;">+0.00%</div>
+          <div id="detail-prev" style="font-size:11px; color:#64748b;">이전가 0원</div>
+        </div>
+      </div>
+
+      <!-- 타임프레임 탭 -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div style="display:flex; gap:4px;">
+          <button type="button" class="chart-tf-btn active" onclick="switchChartTf(this, 15)">1분</button>
+          <button type="button" class="chart-tf-btn" onclick="switchChartTf(this, 30)">5분</button>
+          <button type="button" class="chart-tf-btn" onclick="switchChartTf(this, 60)">15분</button>
+          <button type="button" class="chart-tf-btn" onclick="switchChartTf(this, 100)">1일</button>
+        </div>
+        <span style="font-size:11px; color:#64748b;">30초 주기 실시간 캔들/추세</span>
+      </div>
+
+      <!-- 📊 메인 인터랙티브 차트 캔버스 영역 -->
+      <div id="detail-chart-svg" style="width:100%; height:180px; background:#0b0f19; border:1px solid rgba(255,255,255,0.08); border-radius:10px; display:flex; align-items:center; justify-content:center; margin-bottom:14px; position:relative; overflow:hidden;">
+        <span style="color:#94a3b8; font-size:13px;">차트를 불러오는 중...</span>
+      </div>
+
+      <!-- 24H 시세 지표 & 기업 정보 -->
+      <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:14px; font-size:11.5px;">
+        <div style="background:rgba(30,41,59,0.5); padding:8px 10px; border-radius:8px;">
+          <span style="color:#94a3b8; display:block;">24H 최고가</span>
+          <b id="detail-high" style="color:#34d399; font-family:'JetBrains Mono',monospace;">0원</b>
+        </div>
+        <div style="background:rgba(30,41,59,0.5); padding:8px 10px; border-radius:8px;">
+          <span style="color:#94a3b8; display:block;">24H 최저가</span>
+          <b id="detail-low" style="color:#f87171; font-family:'JetBrains Mono',monospace;">0원</b>
+        </div>
+        <div style="background:rgba(30,41,59,0.5); padding:8px 10px; border-radius:8px;">
+          <span style="color:#94a3b8; display:block;">시가총액</span>
+          <b id="detail-cap" style="color:#cbd5e1;">-</b>
+        </div>
+      </div>
+
+      <!-- 내 보유 현황 & 기업 설명 -->
+      <div style="background:rgba(30,41,59,0.4); border-radius:8px; padding:10px; margin-bottom:16px; font-size:12px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <span style="color:#94a3b8;">내 보유 수량</span>
+          <b id="detail-my-holding" style="color:#fff;">0주 (0스택)</b>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span style="color:#94a3b8;">매수 평균단가</span>
+          <b id="detail-my-avg" style="color:#38bdf8; font-family:'JetBrains Mono',monospace;">0원</b>
+        </div>
+        <p id="detail-description" style="color:#94a3b8; font-size:11.5px; margin:6px 0 0 0; line-height:1.4; border-top:1px solid rgba(255,255,255,0.05); padding-top:6px;">-</p>
+      </div>
+
+      <!-- 매수 / 매도 버튼 -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <button onclick="tradeFromDetail('BUY')" style="padding:12px; font-weight:900; background:linear-gradient(135deg,#059669,#10b981); border:none; border-radius:10px; color:#fff; cursor:pointer; font-size:14px; box-shadow:0 0 14px rgba(16,185,129,0.3);">🛒 매수하기</button>
+        <button onclick="tradeFromDetail('SELL')" style="padding:12px; font-weight:900; background:linear-gradient(135deg,#dc2626,#ef4444); border:none; border-radius:10px; color:#fff; cursor:pointer; font-size:14px; box-shadow:0 0 14px rgba(239,68,68,0.3);">💰 매도하기</button>
+      </div>
+    </div>
   </div>
 
   <!-- 🛒 원클릭 주문 모달 (10%, 25%, 50%, MAX) -->
@@ -605,9 +705,33 @@
     document.getElementById('modal-order-total').innerText = total.toLocaleString() + '원';
   }
 
+  function showStockToast(msg, isSuccess = true) {
+    const toast = document.createElement('div');
+    toast.style.position = 'fixed';
+    toast.style.top = '24px';
+    toast.style.right = '24px';
+    toast.style.zIndex = '99999';
+    toast.style.background = isSuccess ? 'rgba(15, 23, 42, 0.95)' : 'rgba(30, 10, 15, 0.95)';
+    toast.style.border = isSuccess ? '1px solid rgba(52, 211, 153, 0.5)' : '1px solid rgba(239, 68, 68, 0.5)';
+    toast.style.boxShadow = '0 10px 30px rgba(0,0,0,0.8), 0 0 15px ' + (isSuccess ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)');
+    toast.style.borderRadius = '12px';
+    toast.style.padding = '12px 20px';
+    toast.style.color = '#fff';
+    toast.style.fontSize = '13.5px';
+    toast.style.fontWeight = '800';
+    toast.innerText = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(-10px)';
+      toast.style.transition = 'all 0.3s ease';
+      setTimeout(() => toast.remove(), 300);
+    }, 2500);
+  }
+
   async function submitOrder() {
     const amount = Number(document.getElementById('modal-order-amount').value) || 0;
-    if (amount <= 0) { alert('수량을 입력하세요.'); return; }
+    if (amount <= 0) { showStockToast('수량을 입력하세요.', false); return; }
 
     const url = currentOrder.action === 'BUY' ? '/api/stocks/buy' : '/api/stocks/sell';
     try {
@@ -618,12 +742,13 @@
       });
       const data = await res.json();
       if (data.success) {
-        alert(`🎉 주식 ${currentOrder.action === 'BUY' ? '매수' : '매도'}가 체결되었습니다!`);
-        window.location.reload();
+        showStockToast(`🎉 주식 ${currentOrder.action === 'BUY' ? '매수' : '매도'}가 체결되었습니다!`, true);
+        closeOrderModal();
+        setTimeout(() => window.location.reload(), 800);
       } else {
-        alert(data.error || '주문 실패');
+        showStockToast(data.error || '주문 실패', false);
       }
-    } catch (e) { alert('네트워크 오류가 발생했습니다.'); }
+    } catch (e) { showStockToast('네트워크 오류가 발생했습니다.', false); }
   }
 
   async function claimDividends() {
@@ -631,12 +756,12 @@
       const res = await fetch('/api/stocks/dividends/claim', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        alert(`💰 배당금 +${Number(data.reward || 0).toLocaleString()}원이 지급되었습니다!`);
-        window.location.reload();
+        showStockToast(`💰 배당금 +${Number(data.reward || 0).toLocaleString()}원이 지급되었습니다!`, true);
+        setTimeout(() => window.location.reload(), 800);
       } else {
-        alert(data.error || '수령 가능한 배당금이 없습니다.');
+        showStockToast(data.error || '수령 가능한 배당금이 없습니다.', false);
       }
-    } catch (e) { alert('배당금 수령 요청 실패'); }
+    } catch (e) { showStockToast('배당금 수령 요청 실패', false); }
   }
 
   function switchView(mode) {
@@ -683,6 +808,132 @@
         row.style.display = 'none';
       }
     });
+  }
+
+  // 📈 실시간 종목 상세 차트 모달 & 타임프레임 전환
+  let currentDetailStock = null;
+  let cachedDetailHistory = [];
+  let currentTfLimit = 15;
+
+  async function openDetailModal(stockId) {
+    const modal = document.getElementById('detail-modal');
+    modal.classList.add('is-open');
+    modal.style.display = 'flex';
+    document.getElementById('detail-stock-name').innerText = '데이터 로딩 중...';
+    document.getElementById('detail-chart-svg').innerHTML = '<span style="color:#94a3b8; font-size:13px;">차트를 불러오는 중...</span>';
+
+    try {
+      const res = await fetch('/api/stocks/' + stockId);
+      const data = await res.json();
+      if (!data.success || !data.stock) {
+        alert(data.error || '종목 정보를 불러올 수 없습니다.');
+        closeDetailModal();
+        return;
+      }
+
+      const s = data.stock;
+      currentDetailStock = s;
+      cachedDetailHistory = data.history || [];
+
+      const price = Number(s.price || 0);
+      const prevPrice = Number(s.prev_price || price || 1);
+      const diff = price - prevPrice;
+      const rate = prevPrice > 0 ? ((diff / prevPrice) * 100) : 0;
+      const isUp = diff >= 0;
+      const sign = isUp ? '+' : '';
+      const color = isUp ? '#34d399' : '#f87171';
+
+      document.getElementById('detail-symbol').innerText = '[' + (s.stock_id) + ']';
+      document.getElementById('detail-sector').innerText = s.sector || '주식';
+      document.getElementById('detail-stock-name').innerText = s.name;
+      document.getElementById('detail-price').innerText = price.toLocaleString() + '원';
+      document.getElementById('detail-rate').innerText = `${sign}${rate.toFixed(2)}%`;
+      document.getElementById('detail-rate').style.color = color;
+      document.getElementById('detail-prev').innerText = `이전가 ${prevPrice.toLocaleString()}원`;
+
+      document.getElementById('detail-high').innerText = Number(s.high_24h || price).toLocaleString() + '원';
+      document.getElementById('detail-low').innerText = Number(s.low_24h || price).toLocaleString() + '원';
+      
+      const cap = Number(s.market_cap || (price * 10000000));
+      document.getElementById('detail-cap').innerText = (cap >= 1000000000000) 
+        ? (cap / 1000000000000).toFixed(1) + '조원' 
+        : (cap / 100000000).toLocaleString() + '억원';
+
+      const userHold = Number(s.userHolding || 0);
+      const stackStr = userHold > 0 ? (userHold / 10).toFixed(1) + '스택' : '0스택';
+      document.getElementById('detail-my-holding').innerText = `${userHold.toLocaleString()}주 (${stackStr})`;
+      document.getElementById('detail-my-avg').innerText = Number(s.userAvgPrice || 0).toLocaleString() + '원';
+      document.getElementById('detail-description').innerText = s.description || `${s.name} 실시간 거래 종목`;
+
+      renderDetailChart(cachedDetailHistory.slice(-currentTfLimit), isUp);
+    } catch (e) {
+      alert('종목 정보 통신에 실패했습니다.');
+      closeDetailModal();
+    }
+  }
+
+  function closeDetailModal() {
+    const modal = document.getElementById('detail-modal');
+    modal.classList.remove('is-open');
+    modal.style.display = 'none';
+  }
+
+  function switchChartTf(btn, limit) {
+    document.querySelectorAll('.chart-tf-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    currentTfLimit = limit;
+    if (cachedDetailHistory && cachedDetailHistory.length > 0) {
+      const isUp = currentDetailStock ? (currentDetailStock.price >= currentDetailStock.prev_price) : true;
+      renderDetailChart(cachedDetailHistory.slice(-limit), isUp);
+    }
+  }
+
+  function tradeFromDetail(action) {
+    if (!currentDetailStock) return;
+    const s = currentDetailStock;
+    closeDetailModal();
+    openOrderModal(action, s.stock_id, s.name, Number(s.price || 0));
+  }
+
+  function renderDetailChart(historyData, isUp) {
+    const box = document.getElementById('detail-chart-svg');
+    let prices = (historyData || []).map(h => typeof h === 'number' ? h : Number(h.price || 0)).filter(p => p > 0);
+    if (!prices || prices.length < 2) {
+      const p = currentDetailStock ? Number(currentDetailStock.price || 1000) : 1000;
+      prices = [Math.round(p * 0.98), Math.round(p * 0.99), p, Math.round(p * 1.01), p];
+    }
+
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = max - min || 1;
+    const width = 480;
+    const height = 180;
+    const padX = 14;
+    const padY = 20;
+
+    const points = prices.map((p, i) => {
+      const x = padX + (i / (prices.length - 1)) * (width - padX * 2);
+      const y = height - padY - ((p - min) / range) * (height - padY * 2);
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+
+    const stroke = isUp ? '#10b981' : '#ef4444';
+    const fill = isUp ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
+    const area = `${padX},${height} ${points} ${width - padX},${height}`;
+
+    box.innerHTML = `
+      <svg width="100%" height="100%" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display:block;">
+        <line x1="${padX}" y1="${padY}" x2="${width - padX}" y2="${padY}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4,4"/>
+        <line x1="${padX}" y1="${height / 2}" x2="${width - padX}" y2="${height / 2}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4,4"/>
+        <line x1="${padX}" y1="${height - padY}" x2="${width - padX}" y2="${height - padY}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4,4"/>
+        <polygon points="${area}" fill="${fill}"/>
+        <polyline points="${points}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="${points.split(' ').pop().split(',')[0]}" cy="${points.split(' ').pop().split(',')[1]}" r="4" fill="${stroke}" stroke="#fff" stroke-width="1.5"/>
+      </svg>
+      <div style="position:absolute; top:6px; right:10px; font-size:11px; font-family:'JetBrains Mono',monospace; color:#64748b;">
+        최고 ${max.toLocaleString()} / 최저 ${min.toLocaleString()}
+      </div>
+    `;
   }
 </script>
 

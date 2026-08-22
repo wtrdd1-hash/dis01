@@ -27,7 +27,31 @@
               <%= idx + 1 %>
             </td>
             <td style="padding:14px 18px; font-weight:700; font-size:14px; color:#fff;">
-              <%= row.username %>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span><%= row.username %></span>
+                <span style="color:#64748b; font-size:11px; font-family:'JetBrains Mono',monospace; font-weight:600; background:rgba(255,255,255,0.05); padding:1px 5px; border-radius:4px;" title="식별 태그: <%= row.discord_id %>">#<%= String(row.discord_id || '').slice(-4) %></span>
+                <% if (row.title_name) { %>
+                  <span style="<%= row.title_css || 'background:linear-gradient(135deg,#38bdf8,#818cf8); color:#fff; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:800;' %>">
+                    <%= row.title_name %>
+                  </span>
+                <% } else if (row.discord_id === '1481258930909872239') { %>
+                  <span style="background:linear-gradient(135deg,#d97706,#b45309); color:#fff; font-weight:900; padding:2px 8px; border-radius:6px; font-size:11px; box-shadow:0 0 10px rgba(217,119,6,0.6);">
+                    🍔 버거
+                  </span>
+                <% } else if (row.discord_id === '1233844690487345153') { %>
+                  <span style="background:linear-gradient(135deg,#a855f7,#6366f1); color:#fff; font-weight:900; padding:2px 8px; border-radius:6px; font-size:11px; box-shadow:0 0 10px rgba(168,85,247,0.6);">
+                    👑 인내심왕
+                  </span>
+                <% } else if (row.discord_id === '270537117673717760') { %>
+                  <span style="background:linear-gradient(135deg,#f97316,#ea580c); color:#fff; font-weight:900; padding:2px 8px; border-radius:6px; font-size:11px; box-shadow:0 0 10px rgba(249,115,22,0.6);">
+                    🦊 내꼬리
+                  </span>
+                <% } else { %>
+                  <span style="background:linear-gradient(135deg,#38bdf8,#818cf8); color:#fff; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:800;">
+                    🧪 테스터
+                  </span>
+                <% } %>
+              </div>
             </td>
             <td style="padding:14px 18px; text-align:right; font-family:'JetBrains Mono',monospace; font-weight:800; font-size:14px; color:#38bdf8;">
               <%= Number(row.net_worth || row.cash || 0).toLocaleString() %>원

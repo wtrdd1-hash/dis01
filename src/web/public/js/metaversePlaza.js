@@ -12,14 +12,42 @@
 
       this.ctx = this.canvas.getContext('2d');
       this.socket = null;
-      this.selfId = null;
-      this.players = new Map(); // id -> { id, username, avatar, loadout, x, y, targetX, targetY, dir, speech: { text, ts }, emote: { type, ts } }
-      this.myPlayer = null;
+      
+      const user = window.__currentUser || { id: 'guest_' + Math.random().toString(36).slice(2, 8), username: '월덕', avatar: '' };
+      this.selfId = String(user.id || 'guest');
+      
+      this.players = new Map();
+      this.myPlayer = {
+        id: this.selfId,
+        username: user.username || '월덕',
+        avatar: user.avatar || '',
+        loadout: {},
+        x: 600,
+        y: 450,
+        targetX: 600,
+        targetY: 450,
+        dir: 'down',
+        speech: null,
+        emote: null
+      };
+      this.players.set(this.selfId, this.myPlayer);
+
       this.keys = {};
-      this.speed = 4.5;
+      this.speed = 5;
       this.bounds = { minX: 40, maxX: 1160, minY: 40, maxY: 680 };
       this.targetPos = null;
       this.avatarCache = new Map();
+
+      // 로컬 유저 칭호/외형 프리패치
+      try {
+        fetch('/api/economy/cosmetics/loadout')
+          .then(r => r.json())
+          .then(data => {
+            if (data && data.loadout && this.myPlayer) {
+              this.myPlayer.loadout = data.loadout;
+            }
+          }).catch(() => {});
+      } catch (e) {}
 
       this.zones = [
         { id: 'shop', name: '🛍️ 명품 부티크', x: 220, y: 180, w: 140, h: 100, color: '#fbbf24', url: '/shop' },
@@ -72,71 +100,86 @@
     }
 
     initSocket() {
-      const socketUrl = window.location.origin;
-      this.socket = io(socketUrl + '/metaverse', {
-        transports: ['websocket', 'polling'],
-        secure: window.location.protocol === 'https:',
-        withCredentials: true
-      });
-
-      this.socket.on('connect', () => {
-        const user = window.__currentUser || { id: 'guest_' + Math.random().toString(36).slice(2, 8), username: '게스트' };
-        this.selfId = user.id;
-        this.socket.emit('metaverse:join', {
-          id: user.id,
-          username: user.username,
-          avatar: user.avatarUrl || user.avatar,
-          x: 600,
-          y: 380
+      try {
+        if (typeof io === 'undefined') return;
+        const socketUrl = window.location.origin;
+        this.socket = io(socketUrl + '/metaverse', {
+          transports: ['websocket', 'polling']
         });
-      });
 
-      this.socket.on('metaverse:init', (data) => {
-        this.selfId = data.selfId;
-        if (data.bounds) this.bounds = data.bounds;
-        this.players.clear();
-        (data.players || []).forEach(p => {
-          this.players.set(p.id, {
-            ...p,
-            targetX: p.x,
-            targetY: p.y,
-            speech: null,
-            emote: null
+        this.socket.on('connect', () => {
+          const user = window.__currentUser || { id: this.selfId, username: this.myPlayer.username };
+          this.socket.emit('metaverse:join', {
+            id: user.id,
+            username: user.username,
+            avatar: user.avatarUrl || user.avatar,
+            x: this.myPlayer.x,
+            y: this.myPlayer.y
           });
         });
-        this.myPlayer = this.players.get(this.selfId);
-      });
 
-      this.socket.on('metaverse:player_joined', (p) => {
-        this.players.set(p.id, { ...p, targetX: p.x, targetY: p.y, speech: null, emote: null });
-      });
+        this.socket.on('metaverse:init', (data) => {
+          if (data && data.selfId) this.selfId = String(data.selfId);
+          if (data && data.bounds) this.bounds = data.bounds;
+          if (data && Array.isArray(data.players)) {
+            data.players.forEach(p => {
+              const pid = String(p.id);
+              if (pid === this.selfId && this.myPlayer) {
+                this.myPlayer.loadout = p.loadout || this.myPlayer.loadout;
+              } else {
+                this.players.set(pid, {
+                  ...p,
+                  id: pid,
+                  targetX: p.x,
+                  targetY: p.y,
+                  speech: null,
+                  emote: null
+                });
+              }
+            });
+          }
+        });
 
-      this.socket.on('metaverse:player_moved', (data) => {
-        const p = this.players.get(data.id);
-        if (p) {
-          p.targetX = data.x;
-          p.targetY = data.y;
-          p.dir = data.dir;
-        }
-      });
+        this.socket.on('metaverse:player_joined', (p) => {
+          const pid = String(p.id);
+          if (pid !== this.selfId) {
+            this.players.set(pid, { ...p, id: pid, targetX: p.x, targetY: p.y, speech: null, emote: null });
+          }
+        });
 
-      this.socket.on('metaverse:player_chat', (data) => {
-        const p = this.players.get(data.id);
-        if (p) {
-          p.speech = { text: data.text, ts: Date.now() };
-        }
-      });
+        this.socket.on('metaverse:player_moved', (data) => {
+          const pid = String(data.id);
+          const p = this.players.get(pid);
+          if (p) {
+            p.targetX = data.x;
+            p.targetY = data.y;
+            p.dir = data.dir;
+          }
+        });
 
-      this.socket.on('metaverse:player_emote', (data) => {
-        const p = this.players.get(data.id);
-        if (p) {
-          p.emote = { type: data.emote, ts: Date.now() };
-        }
-      });
+        this.socket.on('metaverse:player_chat', (data) => {
+          const pid = String(data.id);
+          const p = this.players.get(pid);
+          if (p) {
+            p.speech = { text: data.text, ts: Date.now() };
+          }
+        });
 
-      this.socket.on('metaverse:player_left', (data) => {
-        this.players.delete(data.id);
-      });
+        this.socket.on('metaverse:player_emote', (data) => {
+          const pid = String(data.id);
+          const p = this.players.get(pid);
+          if (p) {
+            p.emote = { type: data.emote, ts: Date.now() };
+          }
+        });
+
+        this.socket.on('metaverse:player_left', (data) => {
+          const pid = String(data.id);
+          this.players.delete(pid);
+        });
+      } catch (err) {
+        console.error('[MetaversePlaza] initSocket error:', err);
+      }
     }
 
     sendChat(text) {
@@ -319,10 +362,21 @@
       ctx.fill();
       ctx.restore();
 
+      // 내 캐릭터 식별 오라 링
+      if (isSelf) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, p.y + 18, 22 + Math.sin(Date.now() * 0.006) * 3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       // 프로필 테두리 (PROFILE_FRAME)
       ctx.save();
       const frame = loadout.PROFILE_FRAME;
-      let frameColor = '#64748b';
+      let frameColor = isSelf ? '#38bdf8' : '#64748b';
       if (frame && frame.name) {
         if (frame.name.includes('성운') || frame.name.includes('오로라')) frameColor = '#ec4899';
         else if (frame.name.includes('황금') || frame.name.includes('월계관')) frameColor = '#f59e0b';
@@ -340,23 +394,48 @@
       ctx.arc(x, y, 20, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-
-      // 캐릭터 아이콘 / 아바타
-      ctx.font = '22px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('🦆', x, y);
       ctx.restore();
 
+      // 캐릭터 아바타 이미지 또는 기본 오리 🦆
+      let renderedAvatar = false;
+      if (p.avatar && p.avatar.startsWith('http')) {
+        let img = this.avatarCache.get(p.avatar);
+        if (!img) {
+          img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.src = p.avatar;
+          this.avatarCache.set(p.avatar, img);
+        }
+        if (img.complete && img.naturalWidth !== 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(x, y, 18, 0, Math.PI * 2);
+          ctx.clip();
+          ctx.drawImage(img, x - 18, y - 18, 36, 36);
+          ctx.restore();
+          renderedAvatar = true;
+        }
+      }
+
+      if (!renderedAvatar) {
+        ctx.save();
+        ctx.font = '22px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🦆', x, y);
+        ctx.restore();
+      }
+
       // 배지 (BADGE) & 칭호 (TITLE)
-      let badgeText = '';
-      if (loadout.BADGE && loadout.BADGE.name) badgeText = (loadout.BADGE.icon || '👑') + ' ';
+      let badgeText = isSelf ? '👑 [나] ' : '';
+      if (loadout.BADGE && loadout.BADGE.name) badgeText += (loadout.BADGE.icon || '⭐') + ' ';
       if (loadout.TITLE && loadout.TITLE.name) badgeText += `[${loadout.TITLE.name}] `;
+      else if (!isSelf && !badgeText) badgeText = '[테스터] ';
 
       if (badgeText) {
         ctx.save();
-        ctx.font = '10px sans-serif';
-        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 10.5px Pretendard, sans-serif';
+        ctx.fillStyle = isSelf ? '#38bdf8' : '#fbbf24';
         ctx.textAlign = 'center';
         ctx.fillText(badgeText, x, y - 36);
         ctx.restore();
@@ -376,10 +455,10 @@
         ctx.shadowBlur = 8;
       }
 
-      ctx.font = 'bold 12px Pretendard, sans-serif';
+      ctx.font = 'bold 12.5px Pretendard, sans-serif';
       ctx.fillStyle = nameColor;
       ctx.textAlign = 'center';
-      ctx.fillText(p.username, x, y - 24);
+      ctx.fillText(p.username, x, y - 23);
       ctx.restore();
 
       // 이모트 플로팅 아이콘 (하트, 돈뿌리기, 인사)

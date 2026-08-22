@@ -38,7 +38,24 @@ function installSocketChatHandler() {
     socket.on('chat:send', async (payload, callback) => {
       try {
         const sess = getSocketSessionUser(socket);
-        const result = await chat.sendMessage(sess, payload && payload.message, payload && payload.roomId);
+        const text = payload && (payload.message || payload.text || payload.content);
+        const roomId = payload && (payload.roomId || payload.room_id || 1);
+        const result = await chat.sendMessage(sess, text, roomId);
+        const { status, ...response } = result;
+        if (typeof callback === 'function') callback(response);
+      } catch (err) {
+        if (typeof callback === 'function') {
+          callback({ success: false, error: '채팅 전송 중 오류가 발생했습니다.' });
+        }
+      }
+    });
+
+    socket.on('chat:message', async (payload, callback) => {
+      try {
+        const sess = getSocketSessionUser(socket);
+        const text = payload && (payload.message || payload.text || payload.content);
+        const roomId = payload && (payload.roomId || payload.room_id || 1);
+        const result = await chat.sendMessage(sess, text, roomId);
         const { status, ...response } = result;
         if (typeof callback === 'function') callback(response);
       } catch (err) {
@@ -130,9 +147,11 @@ function createChatRoutes(getSessionUser) {
     }
   });
 
-  router.post('/send', async (req, res) => {
+  router.post(['/send', '/messages'], async (req, res) => {
     const sess = getSessionUser(req);
-    const result = await chat.sendMessage(sess, req.body && req.body.message, req.body && req.body.roomId);
+    const text = req.body && (req.body.message || req.body.text || req.body.content);
+    const roomId = req.body && (req.body.roomId || req.body.room_id || 1);
+    const result = await chat.sendMessage(sess, text, roomId);
     const { status, ...response } = result;
     return res.status(status).json(response);
   });

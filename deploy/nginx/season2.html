@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>시즌 2 준비 중 | 월덕 경제 시스템</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; font-family:-apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", Roboto, sans-serif; }
+    body { min-height:100vh; background:#0b0e14; color:#f8fafc; display:flex; align-items:center; justify-content:center; padding:20px; overflow-x:hidden; position:relative; }
+    .bg-glow { position:absolute; width:450px; height:450px; background:radial-gradient(circle, rgba(99,102,241,0.22) 0%, rgba(168,85,247,0.12) 50%, transparent 70%); border-radius:50%; top:50%; left:50%; transform:translate(-50%, -50%); pointer-events:none; filter:blur(40px); animation:pulse 4s ease-in-out infinite alternate; }
+    @keyframes pulse { 0% { transform:translate(-50%, -50%) scale(0.9); opacity:0.7; } 100% { transform:translate(-50%, -50%) scale(1.15); opacity:1; } }
+    .card { position:relative; z-index:10; background:rgba(18,22,34,0.92); border:1px solid rgba(99,102,241,0.4); border-radius:24px; padding:40px 32px; max-width:540px; width:100%; text-align:center; box-shadow:0 25px 50px -12px rgba(0,0,0,0.8), 0 0 35px rgba(99,102,241,0.25); backdrop-filter:blur(16px); }
+    .badge { display:inline-flex; align-items:center; gap:8px; padding:6px 16px; border-radius:9999px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.5); color:#a5b4fc; font-size:13px; font-weight:800; letter-spacing:1px; margin-bottom:20px; text-transform:uppercase; }
+    .badge .dot { width:8px; height:8px; border-radius:50%; background:#6366f1; box-shadow:0 0 10px #6366f1; animation:blink 1.5s infinite; }
+    @keyframes blink { 0%, 100% { opacity:1; } 50% { opacity:0.3; } }
+    .duck-icon { font-size:56px; margin-bottom:16px; display:inline-block; animation:float 3s ease-in-out infinite; }
+    @keyframes float { 0%, 100% { transform:translateY(0); } 50% { transform:translateY(-8px); } }
+    h1 { font-size:26px; font-weight:900; color:#ffffff; margin-bottom:12px; letter-spacing:-0.5px; background:linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    p.desc { font-size:14.5px; line-height:1.6; color:#94a3b8; margin-bottom:24px; word-break:keep-all; }
+    
+    /* 🚨 알림 및 자동 이동 배너 */
+    .redirect-alert {
+      background: linear-gradient(135deg, rgba(234, 179, 8, 0.15), rgba(249, 115, 22, 0.15));
+      border: 1px solid rgba(234, 179, 8, 0.4);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .redirect-alert .title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fbbf24;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .redirect-alert .info {
+      font-size: 13px;
+      color: #e2e8f0;
+      margin-bottom: 12px;
+    }
+    .redirect-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 12px 20px;
+      background: linear-gradient(135deg, #6366f1, #3b82f6);
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 14px;
+      border-radius: 12px;
+      text-decoration: none;
+      box-shadow: 0 4px 15px rgba(99,102,241,0.4);
+      transition: all 0.2s ease;
+      cursor: pointer;
+      border: none;
+    }
+    .redirect-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(99,102,241,0.6);
+      background: linear-gradient(135deg, #4f46e5, #2563eb);
+    }
+    
+    .features { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:24px; text-align:left; }
+    .feature-item { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; padding:12px 14px; }
+    .feature-item i { color:#818cf8; margin-bottom:4px; font-size:15px; }
+    .feature-item .title { font-size:12.5px; font-weight:700; color:#e2e8f0; }
+    .feature-item .sub { font-size:11px; color:#64748b; margin-top:2px; }
+    
+    .status-box { background:rgba(15,23,42,0.6); border:1px dashed rgba(148,163,184,0.2); border-radius:12px; padding:10px 14px; font-size:11.5px; color:#64748b; display:flex; align-items:center; justify-content:center; gap:8px; }
+  </style>
+</head>
+<body>
+  <div class="bg-glow"></div>
+  <div class="card">
+    <div class="badge"><span class="dot"></span> SEASON 2 COMING SOON</div>
+    <div class="duck-icon">🦆</div>
+    <h1>월덕 경제 시스템 시즌 2 준비 중</h1>
+    <p class="desc">정식 시즌 2 오픈을 앞두고 시스템 정비 및 데이터베이스 마이그레이션이 진행 중입니다.</p>
+
+    <!-- 📢 자동 리다이렉트 안내 알림창 -->
+    <div class="redirect-alert">
+      <div class="title">
+        <i class="fa-solid fa-circle-info"></i>
+        <span>테스트 서버 자동 이동 안내</span>
+      </div>
+      <div class="info">
+        현재 운영 중인 <strong>테스트 서버</strong>로 <span id="countdown-timer" style="color:#38bdf8; font-weight:800;">3초</span> 후 자동 이동합니다.
+      </div>
+      <a href="https://test.easy-scraping.com" id="manual-redirect-btn" class="redirect-btn">
+        <i class="fa-solid fa-arrow-right"></i>
+        <span>지금 바로 테스트 서버로 이동</span>
+      </a>
+    </div>
+    
+    <div class="features">
+      <div class="feature-item">
+        <i class="fa-solid fa-gem"></i>
+        <div class="title">주간 명예 상점</div>
+        <div class="sub">화폐 완전 소각 외형</div>
+      </div>
+      <div class="feature-item">
+        <i class="fa-solid fa-screwdriver-wrench"></i>
+        <div class="title">컬렉션 제작소</div>
+        <div class="sub">잉여 외형 분해 & 제작</div>
+      </div>
+      <div class="feature-item">
+        <i class="fa-solid fa-landmark"></i>
+        <div class="title">덕하우스 궁전</div>
+        <div class="sub">나만의 트로피 거치대</div>
+      </div>
+      <div class="feature-item">
+        <i class="fa-solid fa-ticket"></i>
+        <div class="title">로또 6/45 2일 주기</div>
+        <div class="sub">70% 잭팟 & 30% 소각</div>
+      </div>
+    </div>
+
+    <div class="status-box">
+      <i class="fa-solid fa-wrench"></i>
+      <span>시스템 정비 진행 중 · 테스트 환경은 정상 이용 가능</span>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var targetUrl = 'https://test.easy-scraping.com' + window.location.pathname + window.location.search;
+      var btn = document.getElementById('manual-redirect-btn');
+      if (btn) btn.href = targetUrl;
+
+      var secondsLeft = 3;
+      var timerEl = document.getElementById('countdown-timer');
+
+      var countdownInterval = setInterval(function() {
+        secondsLeft--;
+        if (timerEl) {
+          timerEl.innerText = secondsLeft + '초';
+        }
+        if (secondsLeft <= 0) {
+          clearInterval(countdownInterval);
+          window.location.replace(targetUrl);
+        }
+      }, 1000);
+    })();
+  </script>
+</body>
+</html>

@@ -126,12 +126,12 @@ function buildWhitelistIps() {
 }
 const WHITELIST_IPS = buildWhitelistIps();
 
-// ── 🚦 Rate Limiter (IP별 요청 제한) ─────────────────────
+// ── 🚦 Rate Limiter (IP별 요청 제한 & DDoS 방어 기준 완화) ──
 const requestCounts = new Map(); // IP → { count, firstTime, blocked }
 const RATE_LIMIT_WINDOW_MS  = 60 * 1000; // 1분 윈도우
-const RATE_LIMIT_MAX         = 240;       // 1분에 240회 초과 시 경고 (폴링 페이지 여유)
-const RATE_LIMIT_HARD_BAN    = 800;       // 800회 초과 시 자동 IP 차단
-const SUSPICIOUS_THRESHOLD   = 5;         // 악성 경로 5회 누적 시 자동 밴
+const RATE_LIMIT_MAX         = 1200;      // 1분에 1,200회 초과 시 경고 (연타/채굴/다중탭 친화적)
+const RATE_LIMIT_HARD_BAN    = 3000;      // 3,000회 초과 시에만 비정상 공격으로 판단하여 자동 IP 차단
+const SUSPICIOUS_THRESHOLD   = 15;        // 악성 경로 15회 누적 시 자동 밴
 const RATE_LIMIT_SKIP_PATHS = new Set([
   '/healthz',
   '/nginx-health',
@@ -250,7 +250,8 @@ function isInternalClient(ip, geo) {
 function shouldSkipRateLimit(urlPath) {
   const path = String(urlPath || '/').split('?')[0];
   if (RATE_LIMIT_SKIP_PATHS.has(path)) return true;
-  if (path.startsWith('/css/') || path.startsWith('/js/') || path.startsWith('/public/')) return true;
+  if (path.startsWith('/css/') || path.startsWith('/js/') || path.startsWith('/public/') || path.startsWith('/images/')) return true;
+  if (path.startsWith('/api/clicker/') || path.startsWith('/api/chat/') || path.startsWith('/api/game/') || path.startsWith('/socket.io/')) return true;
   return false;
 }
 

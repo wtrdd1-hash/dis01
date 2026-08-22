@@ -901,9 +901,9 @@ body[data-tab="tab-stocks"] .channel-content { padding: 10px 12px 20px; }
   margin: 0 auto;
 }
 
-/* 📱 Ultra-Modern Mobile Bottom Navigation Bar */
+/* 📱 Ultra-Modern Mobile Bottom Navigation Bar (PC에서는 절대 노출 방지) */
 .mobile-bottom-nav {
-  display: none;
+  display: none !important;
   position: fixed;
   bottom: 0;
   left: 0;

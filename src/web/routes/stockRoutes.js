@@ -178,6 +178,61 @@ function createStockRoutes(getSessionUser) {
     }
   });
 
+  // 6. 단일 종목 상세 정보 및 차트 데이터 조회
+  router.get('/:stockId', async (req, res) => {
+    const { stockId } = req.params;
+    try {
+      const stock = await StockModel.getStockById(stockId);
+      if (!stock) {
+        return res.status(404).json({ success: false, error: '해당 종목을 찾을 수 없습니다.' });
+      }
+
+      const history = await StockModel.getStockHistory(stockId, 60);
+      const user = await resolveUser(req);
+      let userHolding = 0;
+      let userAvgPrice = 0;
+
+      if (user && user.id) {
+        try {
+          const [holdingRow] = await pool.query(
+            'SELECT amount, total_spent FROM user_stocks WHERE user_id = ? AND stock_id = ?',
+            [user.id, stockId]
+          );
+          if (holdingRow && holdingRow.length > 0) {
+            userHolding = Number(holdingRow[0].amount || 0);
+            const spent = Number(holdingRow[0].total_spent || 0);
+            userAvgPrice = userHolding > 0 ? Math.round(spent / userHolding) : 0;
+          }
+        } catch (_) {}
+      }
+
+      const price = Number(stock.price || 0);
+      const prevPrice = Number(stock.prev_price || stock.price || 1);
+
+      res.json({
+        success: true,
+        stock: {
+          stock_id: stock.stock_id,
+          name: stock.name,
+          sector: stock.sector || '성장주',
+          price,
+          prev_price: prevPrice,
+          high_24h: Number(stock.high_price || stock.high_24h || Math.round(price * 1.05)),
+          low_24h: Number(stock.low_price || stock.low_24h || Math.round(price * 0.95)),
+          market_cap: Number(stock.market_cap || (price * 10000000)),
+          pe_ratio: stock.pe_ratio || '14.2',
+          dividend_yield: stock.dividend_yield || '3.5',
+          description: stock.description || `${stock.name} - 실시간 가상 주식 거래 종목`,
+          userHolding,
+          userAvgPrice
+        },
+        history: history || []
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: '종목 상세 정보를 불러오지 못했습니다.' });
+    }
+  });
+
   return router;
 }
 

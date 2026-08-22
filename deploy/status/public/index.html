@@ -518,10 +518,53 @@
       </table>
     </div>
 
+    <!-- 🌐 Cloudflare DNS 주소 & 서브도메인 매핑 현황 -->
+    <div class="section-title">
+      <span>🌐 Cloudflare DNS 주소 및 원격 접속 엔드포인트</span>
+    </div>
+    <div class="docker-table-box" style="margin-bottom: 24px;">
+      <table class="docker-table">
+        <thead>
+          <tr>
+            <th>도메인 (DNS)</th>
+            <th>레코드 타입</th>
+            <th>연결 대상 (IP / 터널)</th>
+            <th>서비스 포트</th>
+            <th>용도 / 기능</th>
+            <th>보안 상태</th>
+          </tr>
+        </thead>
+        <tbody id="dns-table-rows">
+          <tr><td colspan="6" style="text-align:center;color:var(--text-faint);padding:18px;">DNS 레코드 정보를 불러오는 중입니다...</td></tr>
+        </tbody>
+    <!-- 🛡️ 5. SSH IP 화이트리스트 보안 제어 (방화벽 실시간 연동) -->
+    <div class="section-title">
+      <span>🛡️ SSH 포트(34567) 방화벽 허용 IP 화이트리스트 관리</span>
+      <span class="live-indicator" style="font-size:11px;"><span class="live-dot"></span>실시간 동기화</span>
+    </div>
+    <div class="info-card" style="margin-bottom: 24px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px; background:rgba(255,255,255,0.03); padding:14px; border-radius:8px; border:1px solid var(--border);">
+        <div>
+          <span style="font-size:12px; color:var(--text-muted);">현재 내 접속 공인 IP:</span>
+          <b id="my-detected-ip" style="font-family:var(--mono); color:var(--neon-cyan); font-size:15px; margin-left:6px;">확인 중...</b>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" onclick="quickAddMyIp()" style="background:#10b981; color:#fff; border:0; padding:8px 14px; border-radius:6px; font-weight:700; cursor:pointer; font-size:12px; transition:0.2s;">⚡ 현재 내 IP 즉시 허용</button>
+          <button type="button" onclick="openCustomIpModal()" style="background:var(--brand); color:#fff; border:0; padding:8px 14px; border-radius:6px; font-weight:700; cursor:pointer; font-size:12px; transition:0.2s;">+ 직접 IP 등록</button>
+        </div>
+      </div>
+      <div id="whitelist-rules-container">
+        <div style="color:var(--text-faint); font-size:13px; text-align:center; padding:12px;">화이트리스트 목록을 불러오는 중...</div>
+      </div>
+    </div>
+
     <!-- 📋 4. 시스템 네트워크 정보, SSH 접속자 현황, 최근 감시자 로그 -->
     <div class="info-grid">
       <div class="info-card">
-        <h3>🌐 미니 PC 네트워크 & 접속 IP (SSH: 34567)</h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h3>🌐 미니 PC 네트워크 & 접속 IP</h3>
+          <a href="/ops" style="color:var(--neon-cyan);font-size:12px;text-decoration:none;font-weight:700;">운영 콘솔 →</a>
+        </div>
         <div id="net-info-rows"></div>
       </div>
       <div class="info-card">
@@ -539,7 +582,7 @@
 
     <div class="footer">
       <span>미니 PC 하드웨어 실시간 관제 엔진 · Autoheal 24h</span>
-      <a href="/ops">관리자 운영 콘솔 (로그 뷰어)</a>
+      <a href="/ops">🛡️ 관리자 운영 콘솔 (SSH 화이트리스트 & 로그 뷰어)</a>
     </div>
   </div>
 
@@ -654,6 +697,30 @@
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-faint);padding:24px;">가동 중인 도커 컨테이너가 없습니다.</td></tr>`;
       }
 
+      // 7-2. DNS 레코드 테이블 렌더링
+      const dnsRows = document.getElementById('dns-table-rows');
+      const dnsList = host.dns || [];
+      if (dnsList && dnsList.length > 0) {
+        dnsRows.innerHTML = dnsList.map(d => `
+          <tr>
+            <td>
+              <b style="color:#fff;font-family:var(--mono);">${d.domain}</b>
+            </td>
+            <td>
+              <span class="badge ${d.type === 'A' ? 'ok' : 'warn'}">${d.type}</span>
+            </td>
+            <td style="font-family:var(--mono);color:var(--neon-cyan);">${d.target || d.ip || '-'}</td>
+            <td style="font-family:var(--mono);font-weight:700;">${d.port || '-'}</td>
+            <td style="color:var(--text-muted);">${d.purpose || '-'}</td>
+            <td>
+              <span class="badge ${d.proxied ? 'ok' : 'warn'}">${d.proxied ? '🔒 CDN 프록시' : '⚡ 직접 A 레코드'}</span>
+            </td>
+          </tr>
+        `).join('');
+      } else {
+        dnsRows.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-faint);padding:18px;">DNS 정보가 없습니다.</td></tr>`;
+      }
+
       // 8. 네트워크 정보
       const ips = host.ips || [];
       let netHtml = '';
@@ -723,6 +790,117 @@
       }
     }
 
+    let adminOpsKey = localStorage.getItem('status_ops_key') || '';
+
+    function getAdminKey() {
+      if (adminOpsKey) return adminOpsKey;
+      const input = prompt('관리자 운영 키(Admin Key)를 입력하세요:');
+      if (input) {
+        adminOpsKey = input.trim();
+        localStorage.setItem('status_ops_key', adminOpsKey);
+        return adminOpsKey;
+      }
+      return null;
+    }
+
+    async function quickAddMyIp() {
+      const key = getAdminKey();
+      if (!key) return;
+      try {
+        const res = await fetch('/ops/api/whitelist/add-my-ip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-ops-key': key },
+          body: JSON.stringify({ key })
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          alert('✅ ' + (data.message || '현재 내 IP가 SSH 방화벽에 허용되었습니다.'));
+          loadWhitelistPublic();
+        } else {
+          alert('❌ 오류: ' + (data.error || '실패'));
+          if (data.error && data.error.includes('키')) {
+            localStorage.removeItem('status_ops_key');
+            adminOpsKey = '';
+          }
+        }
+      } catch (err) {
+        alert('❌ 통신 오류: ' + err.message);
+      }
+    }
+
+    async function openCustomIpModal() {
+      const ip = prompt('추가할 IP 또는 CIDR 대역 (예: 211.43.18.200 또는 192.168.100.0/24):');
+      if (!ip) return;
+      const comment = prompt('메모 / 설명 (예: 사무실 PC):') || 'Admin-Web';
+      const key = getAdminKey();
+      if (!key) return;
+      try {
+        const res = await fetch('/ops/api/whitelist/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-ops-key': key },
+          body: JSON.stringify({ ip, comment, key })
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          alert('✅ ' + (data.message || 'IP가 방화벽에 허용되었습니다.'));
+          loadWhitelistPublic();
+        } else {
+          alert('❌ 오류: ' + (data.error || '실패'));
+        }
+      } catch (err) {
+        alert('❌ 통신 오류: ' + err.message);
+      }
+    }
+
+    async function deleteWhitelistIp(ip) {
+      if (!confirm(`정말로 IP [${ip}] 접근 허용 규칙을 삭제하시겠습니까?`)) return;
+      const key = getAdminKey();
+      if (!key) return;
+      try {
+        const res = await fetch('/ops/api/whitelist/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-ops-key': key },
+          body: JSON.stringify({ ip, key })
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          alert('✅ 삭제되었습니다.');
+          loadWhitelistPublic();
+        } else {
+          alert('❌ 오류: ' + (data.error || '삭제 실패'));
+        }
+      } catch (err) {
+        alert('❌ 통신 오류: ' + err.message);
+      }
+    }
+
+    async function loadWhitelistPublic() {
+      try {
+        const res = await fetch('/ops/api/whitelist', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.clientIp) {
+            document.getElementById('my-detected-ip').textContent = data.clientIp;
+          }
+          const container = document.getElementById('whitelist-rules-container');
+          const rules = data.ufwRules || [];
+          if (rules.length > 0) {
+            container.innerHTML = rules.map(r => `
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:9px 12px; margin-bottom:6px; background:rgba(255,255,255,0.02); border-radius:6px; border:1px solid var(--border);">
+                <div>
+                  <b style="color:#fff; font-family:var(--mono); font-size:13.5px;">${r.from}</b>
+                  <span style="font-size:11px; color:var(--text-faint); margin-left:8px;">${r.to} ${r.comment ? `(${r.comment})` : ''}</span>
+                </div>
+                <button type="button" onclick="deleteWhitelistIp('${r.from}')" style="background:rgba(239,68,68,0.15); color:#f87171; border:1px solid rgba(239,68,68,0.3); border-radius:5px; padding:3px 10px; font-size:11px; font-weight:700; cursor:pointer; transition:0.2s;">삭제</button>
+              </div>
+            `).join('');
+          } else {
+            container.innerHTML = '<div style="color:var(--text-faint); font-size:13px; padding:8px 0; text-align:center;">현재 등록된 개별 허용 IP가 없습니다.</div>';
+          }
+        }
+      } catch (_) {}
+    }
+
     async function tick() {
       try {
         const res = await fetch('/health.json', { cache: 'no-store' });
@@ -737,7 +915,9 @@
     }
 
     tick();
+    loadWhitelistPublic();
     setInterval(tick, 3000); // 3초 주기 실시간 갱신
+    setInterval(loadWhitelistPublic, 10000); // 10초 주기 화이트리스트 갱신
   </script>
 </body>
 </html>

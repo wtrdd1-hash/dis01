@@ -6,9 +6,14 @@
     <!-- 👑 1. 캐릭터 해금 자산가 전용 2D 메타버스 라운지 -->
     <div style="width:100%; display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:12px;">
       <div>
-        <h1 style="font-size:22px; font-weight:900; color:#fbbf24; margin:0; display:flex; align-items:center; gap:8px;">
-          <span>👑</span> 월덕 VIP 하이롤러 메타버스 광장
-        </h1>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <h1 style="font-size:22px; font-weight:900; color:#fbbf24; margin:0; display:flex; align-items:center; gap:8px;">
+            <span>👑</span> 월덕 VIP 하이롤러 메타버스 광장
+          </h1>
+          <span style="display:inline-flex; align-items:center; gap:4px; background:rgba(239,68,68,0.18); border:1px solid rgba(239,68,68,0.45); color:#fca5a5; font-size:12px; font-weight:800; padding:3px 10px; border-radius:20px; box-shadow:0 0 12px rgba(239,68,68,0.25);">
+            <span>⚠️</span> 베타 버전 입니다 (오류가 있을 수 있습니다)
+          </span>
+        </div>
         <p style="font-size:13px; color:#94a3b8; margin:4px 0 0 0;">
           키보드(WASD / 방향키) 또는 화면 터치/클릭으로 이동하세요. 건물에 다가가 클릭하면 해당 시설로 이동합니다.
         </p>
@@ -33,13 +38,19 @@
       <button style="padding:0 24px; font-weight:800; background:linear-gradient(135deg,#f59e0b,#fbbf24); border:none; border-radius:12px; color:#000; cursor:pointer; font-size:14px;" onclick="const inp=document.getElementById('metaverse-chat-input'); if(inp&&window.__metaEngine){window.__metaEngine.sendChat(inp.value); inp.value='';}">말하기</button>
     </div>
 
-    <script src="/static/js/metaversePlaza.js"></script>
+    <script src="/static/js/metaversePlaza.js?v=2.0.3"></script>
     <script>
-      window.addEventListener('DOMContentLoaded', () => {
+      (function initPlaza() {
         if (typeof MetaversePlazaEngine === 'function') {
           window.__metaEngine = new MetaversePlazaEngine('metaverse-canvas', 'metaverse-container');
+        } else {
+          window.addEventListener('DOMContentLoaded', () => {
+            if (typeof MetaversePlazaEngine === 'function') {
+              window.__metaEngine = new MetaversePlazaEngine('metaverse-canvas', 'metaverse-container');
+            }
+          });
         }
-      });
+      })();
     </script>
 
   <% } else { %>

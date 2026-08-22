@@ -196,8 +196,17 @@ function hostMetrics() {
     },
     disk,
     uptimeSec: Math.round(os.uptime()),
-    publicIp: '211.43.20.189',
+    publicIp: process.env.PUBLIC_IP || '14.49.239.119',
+    sshHost: 'ssh.easy-scraping.com',
     sshPort: 34567,
+    dns: [
+      { domain: 'ssh.easy-scraping.com', type: 'A', target: '14.49.239.119', port: '34567', purpose: 'SSH 원격 관리 (Direct)', proxied: false },
+      { domain: 'mini.easy-scraping.com', type: 'A', target: '14.49.239.119', port: '34567', purpose: '미니 PC 직접 접속', proxied: false },
+      { domain: 'direct.easy-scraping.com', type: 'A', target: '14.49.239.119', port: '80 / 443', purpose: '다이렉트 원격 라우팅', proxied: false },
+      { domain: 'easy-scraping.com', type: 'CNAME', target: 'Cloudflare Tunnel', port: '8080 (HTTPS)', purpose: '월덕 메인 웹 대시보드', proxied: true },
+      { domain: 'status.easy-scraping.com', type: 'CNAME', target: 'Cloudflare Tunnel', port: '8090 (HTTPS)', purpose: '미니 PC 실시간 관제 대시보드', proxied: true },
+      { domain: 'test.easy-scraping.com', type: 'CNAME', target: 'Cloudflare Tunnel', port: '8085 (HTTPS)', purpose: '테스트 & 스테이징 환경', proxied: true }
+    ],
     ips,
     nodeVersion: process.version,
     platform: `${os.type()} ${os.release()} (${os.arch()})`
@@ -245,6 +254,61 @@ function getSshSessions() {
   });
 }
 
+function getUfwWhitelist() {
+  return new Promise((resolve) => {
+    execFile('sudo', ['ufw', 'status'], { timeout: 3000, encoding: 'utf8' }, (err, stdout) => {
+      if (err || !stdout) {
+        try {
+          const rules = fs.readFileSync('/etc/ufw/user.rules', 'utf8');
+          const ips = [];
+          const matches = rules.matchAll(/-A ufw-user-input.*--dport 34567.*-s ([0-9\.\/]+)/g);
+          for (const m of matches) {
+            if (m[1] && !ips.includes(m[1])) ips.push(m[1]);
+          }
+          return resolve(ips);
+        } catch (_) {
+          return resolve([]);
+        }
+      }
+      const lines = stdout.split('\n');
+      const ips = [];
+      for (const line of lines) {
+        if (line.includes('34567') && (line.includes('ALLOW') || line.includes('ALLOW IN'))) {
+          const match = line.match(/ALLOW(?: IN)?\s+([^\s]+)/i) || line.match(/([0-9\.\/a-fA-F:]+)\s+.*ALLOW/);
+          if (match && match[1] && match[1] !== 'Anywhere' && match[1] !== '(v6)') {
+            if (!ips.includes(match[1])) ips.push(match[1]);
+          }
+        }
+      }
+      resolve(ips);
+    });
+  });
+}
+
+let cachedDdnsRecords = [];
+let lastDdnsCheck = 0;
+
+async function getDdnsRecords() {
+  const now = Date.now();
+  if (now - lastDdnsCheck < 8000 && cachedDdnsRecords.length > 0) {
+    return cachedDdnsRecords;
+  }
+  const dns = require('dns').promises;
+  const domains = ['ssh.easy-scraping.com', 'mini.easy-scraping.com', 'direct.easy-scraping.com'];
+  const records = [];
+  for (const d of domains) {
+    try {
+      const res = await dns.resolve4(d);
+      records.push({ domain: d, ip: res[0] || '-', status: 'ok' });
+    } catch (e) {
+      records.push({ domain: d, ip: '조회 중', status: 'pending' });
+    }
+  }
+  cachedDdnsRecords = records;
+  lastDdnsCheck = now;
+  return records;
+}
+
 function createCollector(opts) {
   const {
     appHealthUrl,
@@ -258,12 +322,15 @@ function createCollector(opts) {
     const paused = fs.existsSync(path.join(watchdogStateDir, 'off'));
     
     // 주요 서비스 핑, 도커 플릿, SSH 접속자 전체 현황 수집
-    const [appPing, testPing, mysql, docker, dockerFleet, sshSessions, ...containerStates] = await Promise.all([
+    const [appPing, testPing, mysql, docker, dockerFleet, sshSessions, ufwWhitelist, ddnsRecords, ...containerStates] = await Promise.all([
       pingUrl(appHealthUrl),
       pingUrl('http://127.0.0.1:8085/healthz'),
       pingMysql(env),
       dockerInfoOk(),
       getAllDockerFleet(),
+      getSshSessions(),
+      getUfwWhitelist(),
+      getDdnsRecords(),
       getSshSessions(),
       ...CONTAINERS.map((item) => inspectContainer(item.container))
     ]);
@@ -381,6 +448,11 @@ function createCollector(opts) {
       containers: containerMap,
       dockerFleet, // 🐳 미니 PC 내 모든 도커 컨테이너 실시간 통계
       ssh: sshSessions, // 🔑 SSH 실시간 접속자 현황
+      sshWhitelist: ufwWhitelist || [], // 🛡️ UFW SSH 포트 34567 허용 IP 목록
+      ddns: {
+        intervalSec: 10,
+        records: ddnsRecords || []
+      },
       host,        // 💻 미니 PC CPU, RAM, Disk, Load, Network
       app: {
         version: appBody.version || null,

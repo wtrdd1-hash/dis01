@@ -354,7 +354,16 @@ function createEconomyRoutes(getSessionUser) {
           }
         }
 
-        const subsidyAmount = safeBigInt(SUBSIDY.AMOUNT);
+        let subsidyMult = 1.0;
+        try {
+          const { getDynamicSettings } = require('../../utils/economyBalancer');
+          const dyn = getDynamicSettings();
+          if (dyn && Number.isFinite(Number(dyn.subsidyMultiplier)) && Number(dyn.subsidyMultiplier) > 0) {
+            subsidyMult = Number(dyn.subsidyMultiplier);
+          }
+        } catch (e) {}
+        const subsidyAmount = safeBigInt(Math.max(1, Math.floor(SUBSIDY.AMOUNT * subsidyMult)));
+
         const claimed = await tryClaimCooldown(session.id, 'last_subsidy', cooldownMs);
         if (!claimed) {
           return res.status(400).json({ success: false, error: '지원금은 하루 1회만 신청하실 수 있습니다!' });

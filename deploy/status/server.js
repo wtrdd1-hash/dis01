@@ -9,6 +9,7 @@ const { createHistory } = require('./lib/history');
 const { createAlerter } = require('./lib/alert');
 const { createOpsAuth } = require('./lib/opsAuth');
 const { containerLogs, ALLOWED_LOG_CONTAINERS } = require('./lib/docker');
+const { getSshWhitelist, addSshWhitelist, removeSshWhitelist, getClientIp } = require('./lib/firewall');
 
 const HOST = process.env.STATUS_HOST || '0.0.0.0';
 const PORT = Number(process.env.STATUS_PORT || 8090);
@@ -142,7 +143,52 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (urlPath.startsWith('/ops/api/')) {
-      if (!opsAuth.hasSession(req)) {
+      const authKeyHeader = String(req.headers['x-ops-key'] || '');
+      const hasKeyHeader = authKeyHeader && opsAuth.checkKey(authKeyHeader);
+      const isAuthedSession = opsAuth.hasSession(req);
+
+      if (req.method === 'GET' && urlPath === '/ops/api/whitelist') {
+        const data = await getSshWhitelist();
+        sendJson(res, 200, {
+          ok: true,
+          saved: data.saved,
+          ufwRules: data.ufwRules,
+          clientIp: getClientIp(req)
+        });
+        return;
+      }
+
+      if (urlPath.startsWith('/ops/api/whitelist/')) {
+        const raw = await readBody(req, 4096);
+        let body = {};
+        try { body = JSON.parse(raw); } catch (_) {}
+        const bodyKey = String(body.key || '');
+        const hasKeyBody = bodyKey && opsAuth.checkKey(bodyKey);
+
+        if (!isAuthedSession && !hasKeyHeader && !hasKeyBody) {
+          sendJson(res, 401, { ok: false, error: '관리자 인증 키가 올바르지 않습니다.' });
+          return;
+        }
+
+        if (req.method === 'POST' && urlPath === '/ops/api/whitelist/add') {
+          const result = await addSshWhitelist(body.ip, body.comment || 'Web-Admin');
+          sendJson(res, result.ok ? 200 : 400, result);
+          return;
+        }
+        if (req.method === 'POST' && urlPath === '/ops/api/whitelist/add-my-ip') {
+          const myIp = getClientIp(req);
+          const result = await addSshWhitelist(myIp, 'Admin-My-IP');
+          sendJson(res, result.ok ? 200 : 400, { ...result, ip: myIp });
+          return;
+        }
+        if (req.method === 'POST' && urlPath === '/ops/api/whitelist/remove') {
+          const result = await removeSshWhitelist(body.ip);
+          sendJson(res, result.ok ? 200 : 400, result);
+          return;
+        }
+      }
+
+      if (!isAuthedSession && !hasKeyHeader) {
         sendJson(res, 401, { ok: false, error: '관리자 로그인이 필요합니다.' });
         return;
       }

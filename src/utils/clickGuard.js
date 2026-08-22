@@ -53,17 +53,15 @@ function normalizeMinerId(raw) {
 
 function claimMinerSlot(slot, minerId, now) {
   const ts = Number(now) || Date.now();
-  if (!minerId) {
-    return { ok: false, reason: 'invalid', slot };
-  }
-  if (!slot || slot.id === minerId || ts > Number(slot.until || 0)) {
+  const effectiveId = minerId || 'default_miner_slot';
+  if (!slot || slot.id === effectiveId || ts > Number(slot.until || 0)) {
     return {
       ok: true,
       reason: null,
-      slot: { id: minerId, until: ts + MINER_SLOT_MS, at: ts }
+      slot: { id: effectiveId, until: ts + MINER_SLOT_MS }
     };
   }
-  return { ok: false, reason: 'window', slot };
+  return { ok: false, reason: 'busy', slot };
 }
 
 module.exports = {

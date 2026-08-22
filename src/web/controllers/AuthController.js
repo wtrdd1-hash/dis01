@@ -6,11 +6,26 @@ const UserModel = require('../../models/UserModel');
 
 class AuthController {
   /**
+   * 🔗 요청 호스트에 따른 동적 Redirect URI 산출 (테스트 서버 / 운영 서버 분기)
+   */
+  static getRedirectUri(req) {
+    const host = req.get('host') || '';
+    const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    if (host.includes('test.easy-scraping.com')) {
+      return 'https://test.easy-scraping.com/auth/discord/callback';
+    }
+    if (host.includes('localhost') || host.includes('127.0.0.1')) {
+      return `${proto}://${host}/auth/discord/callback`;
+    }
+    return config.DISCORD_REDIRECT_URI || `${proto}://${host}/auth/discord/callback`;
+  }
+
+  /**
    * 🔑 디스코드 로그인 시작 (OAuth2 리다이렉트)
    */
   static async loginWithDiscord(req, res) {
     const clientId = config.DISCORD_CLIENT_ID;
-    const redirectUri = encodeURIComponent(config.DISCORD_REDIRECT_URI || `${req.protocol}://${req.get('host')}/auth/discord/callback`);
+    const redirectUri = encodeURIComponent(AuthController.getRedirectUri(req));
     const scope = encodeURIComponent('identify guilds');
     const state = Math.random().toString(36).substring(2, 15);
 
@@ -33,7 +48,7 @@ class AuthController {
     }
 
     try {
-      const redirectUri = config.DISCORD_REDIRECT_URI || `${req.protocol}://${req.get('host')}/auth/discord/callback`;
+      const redirectUri = AuthController.getRedirectUri(req);
       const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

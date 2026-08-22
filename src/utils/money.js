@@ -336,6 +336,13 @@ async function applyCashDelta(userId, delta, opts) {
   const afterCash = await getUserCash(userId);
   notifyLive(userId);
 
+  // ⚡ 실시간 전역/개인 소켓 잔액 즉시 동기화 브로드캐스트
+  if (global.__io) {
+    const payload = { userId: String(userId), cash: afterCash.toString() };
+    global.__io.to('user:' + String(userId)).emit('user:balance_update', payload);
+    global.__io.emit('user:balance_update', payload);
+  }
+
   // 📝 100% 무조건 전수 자동 로깅
   if (!opts || opts.skipLog !== true) {
     const logType = opts && opts.logType ? opts.logType : (d > 0n ? 'CASH_INFLOW' : 'CASH_OUTFLOW');
@@ -439,6 +446,17 @@ async function applyBankTransfer(userId, cashDelta, bankDelta, opts) {
 
   const afterFunds = await getUserFunds(userId);
   notifyLive(userId);
+
+  // ⚡ 실시간 전역/개인 소켓 은행/현금 잔액 즉시 동기화 브로드캐스트
+  if (global.__io) {
+    const payload = {
+      userId: String(userId),
+      cash: afterFunds.cash.toString(),
+      bank: afterFunds.bank.toString()
+    };
+    global.__io.to('user:' + String(userId)).emit('user:balance_update', payload);
+    global.__io.emit('user:balance_update', payload);
+  }
 
   // 📝 은행/현금 이동 전수 자동 로깅
   if (!opts || opts.skipLog !== true) {

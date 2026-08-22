@@ -55,34 +55,60 @@
       position: sticky;
       top: 0;
       z-index: 100;
+      overflow: hidden;
     }
     .ticker-badge {
       background: var(--accent-gold);
       color: #000;
       font-weight: 900;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 11px;
+      padding: 5px 12px;
+      border-radius: 8px;
+      font-size: 11.5px;
       display: flex;
       align-items: center;
       gap: 6px;
-      box-shadow: 0 0 10px var(--accent-gold-glow);
+      box-shadow: 0 0 12px var(--accent-gold-glow);
+      flex-shrink: 0;
+      z-index: 2;
+    }
+    .ticker-track {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      white-space: nowrap;
+      height: 24px;
+      display: flex;
+      align-items: center;
     }
     .ticker-content {
-      flex: 1;
+      display: inline-block;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      color: #E2E8F0;
-      font-weight: 500;
+      padding-left: 100%;
+      animation: tickerScroll 25s linear infinite;
+      color: #FDE68A;
+      font-weight: 700;
+      font-size: 13.5px;
+    }
+    .ticker-content:hover {
+      animation-play-state: paused;
+    }
+    @keyframes tickerScroll {
+      0%   { transform: translate3d(0, 0, 0); }
+      100% { transform: translate3d(-100%, 0, 0); }
     }
     .ticker-btn {
       background: rgba(245, 158, 11, 0.2);
       border: 1px solid var(--accent-gold);
       color: var(--accent-gold);
-      padding: 4px 12px;
-      border-radius: 6px;
-      font-size: 11px;
+      padding: 5px 14px;
+      border-radius: 8px;
+      font-size: 11.5px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+      z-index: 2;
+    }
       font-weight: 700;
       cursor: pointer;
       transition: all 0.2s;
@@ -498,8 +524,10 @@
   <!-- 📢 실시간 확성기 전광판 티커 -->
   <div class="ticker-bar">
     <div class="ticker-badge"><i class="fa-solid fa-bullhorn"></i> 실시간 확성기</div>
-    <div class="ticker-content" id="tickerMsg">
-      ✨ 월덕 가상경제 소비 시스템 v1.0 정식 가동! 주간 명예 상점, 컬렉션 제작소, 덕하우스 확장 및 로또 6/45가 열렸습니다!
+    <div class="ticker-track">
+      <div class="ticker-content" id="tickerMsg">
+        ✨ 월덕 가상경제 소비 시스템 v1.0 정식 가동! 주간 명예 상점, 컬렉션 제작소, 덕하우스 확장 및 로또 6/45가 열렸습니다!
+      </div>
     </div>
     <button class="ticker-btn" onclick="openMegaphoneModal()"><i class="fa-solid fa-paper-plane"></i> 확성기 송출 (5만원)</button>
   </div>
@@ -514,7 +542,9 @@
       <a href="/stock" class="nav-link">주식 거래소</a>
       <a href="/casino" class="nav-link">카지노 룸</a>
       <a href="/shop" class="nav-link active">🛍️ 명품 상점</a>
-      <a href="/admin/spending" class="nav-link" style="color:#a855f7;">👑 관리자 관제</a>
+      <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
+        <a href="/admin/spending" class="nav-link" style="color:#a855f7;">👑 관리자 관제</a>
+      <% } %>
     </nav>
   </header>
 

@@ -56,42 +56,10 @@ class PageController {
   }
 
   static async renderHome(req, res) {
-    const discordUser = session.getSessionUser(req);
-    if (discordUser && discordUser.id) {
-      return res.redirect(302, '/stocks');
-    }
-
-    try {
-      const { renderLandingPage } = require('../landingPage');
-      const stocks = await StockModel.getAllStocks();
-      const regime = getCurrentMarketRegime();
-      const [leaderboard] = await pool.query(`
-        SELECT discord_id, username, cash, bank, (cash + bank) AS net_worth
-        FROM users ORDER BY net_worth DESC LIMIT 10
-      `);
-
-      const html = renderLandingPage({
-        stocks,
-        leaderboard,
-        regime,
-        news: null,
-        treasuryBalance: '500000000',
-        discordLoginUrl: '/auth/discord'
-      });
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.send(html);
-    } catch (e) {
-      console.error('[PageController] renderLandingPage fallback:', e);
-      res.render('landing');
-    }
+    return PageController.renderStocks(req, res);
   }
 
   static async renderPlaza(req, res) {
-    const discordUser = session.getSessionUser(req);
-    if (!discordUser || !discordUser.id) {
-      return res.redirect(302, '/');
-    }
-
     try {
       const common = await PageController.getCommonData(req, res);
       const loadout = common.userLoadout || {};
@@ -109,22 +77,19 @@ class PageController {
   }
 
   static async renderStocks(req, res) {
-    const discordUser = session.getSessionUser(req);
-    if (!discordUser || !discordUser.id) {
-      return res.redirect(302, '/');
-    }
-
     try {
       const common = await PageController.getCommonData(req, res);
       const stocks = await StockModel.getAllStocks();
       const regime = getCurrentMarketRegime();
       let holdings = [];
       let totalStockVal = 0n;
-      try {
-        const holdingsRes = await StockModel.getUserHoldings(common.user.id);
-        holdings = holdingsRes.holdings || [];
-        totalStockVal = holdingsRes.totalStockVal || 0n;
-      } catch (e) {}
+      if (common.user && common.user.id) {
+        try {
+          const holdingsRes = await StockModel.getUserHoldings(common.user.id);
+          holdings = holdingsRes.holdings || [];
+          totalStockVal = holdingsRes.totalStockVal || 0n;
+        } catch (e) {}
+      }
 
       res.render('stocks', {
         ...common,
@@ -141,11 +106,6 @@ class PageController {
   }
 
   static async renderCasino(req, res) {
-    const discordUser = session.getSessionUser(req);
-    if (!discordUser || !discordUser.id) {
-      return res.redirect(302, '/');
-    }
-
     try {
       const common = await PageController.getCommonData(req, res);
       res.render('casino', { ...common, pageTitle: '카지노 & 핫게임', activePage: 'casino' });
@@ -155,11 +115,6 @@ class PageController {
   }
 
   static async renderArcade(req, res) {
-    const discordUser = session.getSessionUser(req);
-    if (!discordUser || !discordUser.id) {
-      return res.redirect(302, '/');
-    }
-
     try {
       const common = await PageController.getCommonData(req, res);
       res.render('arcade', { ...common, pageTitle: '보석 맞추기 퍼즐', activePage: 'casino' });
@@ -169,11 +124,6 @@ class PageController {
   }
 
   static async renderMining(req, res) {
-    const discordUser = session.getSessionUser(req);
-    if (!discordUser || !discordUser.id) {
-      return res.redirect(302, '/');
-    }
-
     try {
       const common = await PageController.getCommonData(req, res);
       res.render('mining', { ...common, pageTitle: '채굴 & 대장간', activePage: 'mining' });
@@ -183,17 +133,16 @@ class PageController {
   }
 
   static async renderRanking(req, res) {
-    const discordUser = session.getSessionUser(req);
-    if (!discordUser || !discordUser.id) {
-      return res.redirect(302, '/');
-    }
-
     try {
       const common = await PageController.getCommonData(req, res);
+      const { wherePublicPlayer } = require('../../utils/economyCohort');
+      const filter = wherePublicPlayer('discord_id');
       const [leaderboard] = await pool.query(`
         SELECT discord_id, username, cash, bank, (cash + bank) AS net_worth
-        FROM users ORDER BY net_worth DESC LIMIT 50
-      `);
+        FROM users
+        WHERE ${filter.sql}
+        ORDER BY net_worth DESC LIMIT 50
+      `, filter.params);
       res.render('ranking', { ...common, leaderboard, pageTitle: '자산 순위', activePage: 'ranking' });
     } catch (e) {
       res.status(500).send('서버 오류: ' + e.message);
@@ -201,11 +150,6 @@ class PageController {
   }
 
   static async renderShop(req, res) {
-    const discordUser = session.getSessionUser(req);
-    if (!discordUser || !discordUser.id) {
-      return res.redirect(302, '/');
-    }
-
     try {
       const common = await PageController.getCommonData(req, res);
       const PrestigeShopService = require('../../core/economy/PrestigeShopService');
@@ -213,7 +157,7 @@ class PageController {
       const DuckHouseService = require('../../core/economy/DuckHouseService');
       const InventoryModel = require('../../models/InventoryModel');
 
-      const userId = common.user.id;
+      const userId = common.user ? common.user.id : null;
       const catalog = await PrestigeShopService.listCatalog({ userId });
       const recipes = await WorkshopService.listRecipes();
       
@@ -222,22 +166,24 @@ class PageController {
       let inventory = [];
       let shards = 0;
 
-      try {
-        const houseState = await DuckHouseService.getDuckHouse(userId);
-        if (houseState) {
-          house = houseState.house;
-          pedestals = houseState.slots;
-        }
-      } catch (e) {}
+      if (userId) {
+        try {
+          const houseState = await DuckHouseService.getDuckHouse(userId);
+          if (houseState) {
+            house = houseState.house;
+            pedestals = houseState.slots;
+          }
+        } catch (e) {}
 
-      try {
-        inventory = await InventoryModel.getUserInventory(userId);
-      } catch (e) {}
+        try {
+          inventory = await InventoryModel.getUserInventory(userId);
+        } catch (e) {}
 
-      try {
-        const materials = await WorkshopService.getUserMaterials(userId);
-        shards = Number(materials.goldenFeatherShards || 0);
-      } catch (e) {}
+        try {
+          const materials = await WorkshopService.getUserMaterials(userId);
+          shards = Number(materials.goldenFeatherShards || 0);
+        } catch (e) {}
+      }
 
       res.render('shop', {
         ...common,

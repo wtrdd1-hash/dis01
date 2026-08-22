@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 
 $BuildTag = "prod-" + (Get-Date -Format "yyyyMMddHHmmss")
-$SshTarget = "wtrdd@211.43.20.189"
+$SshTarget = "wtrdd@192.168.100.1"
 $SshKey = "C:\Users\sds\.ssh\id_ed25519"
 $SshPort = 34567
 
@@ -14,7 +14,7 @@ if ($LASTEXITCODE -ne 0) { throw "Local test suite failed." }
 
 Write-Host "[2/5] Creating and transferring immutable source archive..." -ForegroundColor Yellow
 $TempTar = Join-Path $env:TEMP "discord_bot_prod_deploy.tar.gz"
-tar --exclude='node_modules' --exclude='.git' --exclude='logs' --exclude='backups' --exclude='uploads' --exclude='.env*' --exclude='scratch' --exclude='*.docx' --exclude='~$*' --exclude='~WRL*' -czf $TempTar -C (Get-Location) .
+tar --exclude='node_modules' --exclude='.git' --exclude='logs' --exclude='backups' --exclude='uploads' --exclude='.env*' --exclude='scratch' --exclude='*.docx' --exclude='~$*' --exclude='~WRL*' --exclude='handoff' --exclude='.user_uploaded' -czf $TempTar -C (Get-Location) .
 if ($LASTEXITCODE -ne 0) { throw "Could not create production archive." }
 
 try {
@@ -71,6 +71,7 @@ docker tag "$current_image" "$rollback_tag"
 echo '[4/5] Building and validating isolated production candidate...'
 cd "$RELEASE_DIR"
 docker build -t "discord-bot-app:$BUILD_TAG" .
+docker run --rm "discord-bot-app:$BUILD_TAG" npm test
 PROD_DATA_ROOT="$DATA_ROOT" docker compose --env-file "$DATA_ROOT/.env" -f docker-compose.yml --project-name discord-bot config -q
 
 docker rm -f "$CANDIDATE" >/dev/null 2>&1 || true

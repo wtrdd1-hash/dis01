@@ -16,14 +16,15 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "✅ 모든 테스트 통과!" -ForegroundColor Green
 
 # 2. 아카이브 생성 및 전송
-Write-Host "`n📦 [2/4] 소스 아카이브 생성 및 테스트 서버 전송 중..." -ForegroundColor Yellow
+$TARGET_HOST = if ($env:TEST_HOST) { $env:TEST_HOST } else { "192.168.100.1" }
+Write-Host "`n📦 [2/4] 소스 아카이브 생성 및 테스트 서버($TARGET_HOST) 전송 중..." -ForegroundColor Yellow
 $tempTar = "$env:TEMP\discord_bot_test_deploy.tar.gz"
-tar --exclude='node_modules' --exclude='.git' --exclude='logs' --exclude='backups' --exclude='uploads' --exclude='.env*' --exclude='scratch' --exclude='*.docx' --exclude='~$*' --exclude='~WRL*' -czf $tempTar -C (Get-Location) .
+tar --exclude='node_modules' --exclude='.git' --exclude='logs' --exclude='backups' --exclude='uploads' --exclude='.env*' --exclude='scratch' --exclude='handoff' --exclude='.user_uploaded' --exclude='*.docx' --exclude='~$*' --exclude='~WRL*' -czf $tempTar -C (Get-Location) .
 if ($LASTEXITCODE -ne 0) {
     throw "배포 아카이브 생성에 실패했습니다."
 }
 
-scp -P 34567 -i C:\Users\sds\.ssh\id_ed25519 $tempTar wtrdd@211.43.20.189:/tmp/test_deploy.tar.gz
+scp -P 34567 -i C:\Users\sds\.ssh\id_ed25519 $tempTar wtrdd@${TARGET_HOST}:/tmp/test_deploy.tar.gz
 if ($LASTEXITCODE -ne 0) {
     throw "테스트 서버로 배포 아카이브를 전송하지 못했습니다."
 }
@@ -45,36 +46,16 @@ mv /home/wtrdd/discord-bot-test/.env.runtime.tmp /home/wtrdd/discord-bot-test/.e
 mkdir -p /home/wtrdd/discord-bot-test/backups /home/wtrdd/discord-bot-test/uploads /home/wtrdd/discord-bot-test/logs
 cd /home/wtrdd/discord-bot-test/releases/$BUILD_TAG
 docker build -t discord-bot-app:$BUILD_TAG -t discord-bot-app:test-latest .
+docker run --rm discord-bot-app:$BUILD_TAG npm test
 TEST_DATA_ROOT=/home/wtrdd/discord-bot-test docker compose -f docker-compose.test.yml --project-name wtrdd-test config -q
 
-# 현재 테스트 서비스를 내리기 전에 동일 이미지/제한값으로 임시 포트에서 기동 검증한다.
-docker rm -f wtrdd-test-candidate >/dev/null 2>&1 || true
-TEST_DATA_ROOT=/home/wtrdd/discord-bot-test docker compose \
-  -f docker-compose.test.yml --project-name wtrdd-test \
-  run -d --name wtrdd-test-candidate --no-deps -e PORT=18085 test-app >/dev/null
-trap 'docker rm -f wtrdd-test-candidate >/dev/null 2>&1 || true' 0
-rm -f /tmp/wtrdd-test-candidate-ready
-set +e
-for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-  if echo $candidateProbeBase64 | base64 -d | docker exec -i wtrdd-test-candidate node; then
-    touch /tmp/wtrdd-test-candidate-ready
-    break
-  fi
-  sleep 2
-done
-set -e
-test -f /tmp/wtrdd-test-candidate-ready
-rm -f /tmp/wtrdd-test-candidate-ready
-docker rm -f wtrdd-test-candidate >/dev/null
-trap - 0
-
-# 과거 Compose 프로젝트가 소유한 동일 이름 컨테이너를 정확히 교체한다.
+# Compose 프로젝트 컨테이너를 새 불변 이미지로 교체한다.
 docker rm -f wtrdd-test-app >/dev/null 2>&1 || true
 TEST_DATA_ROOT=/home/wtrdd/discord-bot-test docker compose -f docker-compose.test.yml --project-name wtrdd-test up -d --force-recreate --remove-orphans
 ln -sfn /home/wtrdd/discord-bot-test/releases/$BUILD_TAG /home/wtrdd/discord-bot-test/current
 "@
 
-ssh -p 34567 -i C:\Users\sds\.ssh\id_ed25519 wtrdd@211.43.20.189 "$remoteCmd"
+ssh -p 34567 -i C:\Users\sds\.ssh\id_ed25519 wtrdd@${TARGET_HOST} "$remoteCmd"
 if ($LASTEXITCODE -ne 0) {
     throw "원격 테스트 이미지 빌드 또는 컨테이너 기동에 실패했습니다."
 }
@@ -86,7 +67,7 @@ $success = $false
 for ($i = 1; $i -le $maxRetries; $i++) {
     Start-Sleep -Seconds 2
     try {
-        $resp = ssh -p 34567 -i C:\Users\sds\.ssh\id_ed25519 wtrdd@211.43.20.189 "curl -s -f http://127.0.0.1:8085/readyz"
+        $resp = ssh -p 34567 -i C:\Users\sds\.ssh\id_ed25519 wtrdd@${TARGET_HOST} "curl -s -f http://127.0.0.1:8085/readyz"
         if (($LASTEXITCODE -eq 0) -and ($resp -match '"ok":\s*true') -and ($resp -match '"botRequired":\s*false')) {
             Write-Host "✅ 헬스체크 통과! ($resp)" -ForegroundColor Green
             $success = $true
@@ -102,7 +83,7 @@ if (-not $success) {
     exit 1
 }
 
-$health = ssh -p 34567 -i C:\Users\sds\.ssh\id_ed25519 wtrdd@211.43.20.189 "curl -s -f http://127.0.0.1:8085/healthz"
+$health = ssh -p 34567 -i C:\Users\sds\.ssh\id_ed25519 wtrdd@${TARGET_HOST} "curl -s -f http://127.0.0.1:8085/healthz"
 if (($LASTEXITCODE -ne 0) -or ($health -notmatch '"bot":\s*false')) {
     Write-Host "❌ 테스트 컨테이너에서 Discord 봇이 실행 중입니다. 격리 검증 실패." -ForegroundColor Red
     exit 1

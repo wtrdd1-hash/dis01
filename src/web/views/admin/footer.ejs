@@ -185,6 +185,14 @@
       const reason = String((document.getElementById('qm-reason') || {}).value || '').trim();
       if (!userId || !amount) return alert('금액을 입력하세요.');
 
+      const isRecover = (type === 'recover' || type === 'take');
+      const actionName = isRecover ? '회수 (차감)' : '지급 (충전)';
+      const warnMsg = isRecover 
+        ? `⚠️ [주의] @${userId} 유저에게서 ${Number(amount).toLocaleString()}원을 ${actionName}하시겠습니까?\n(잔액 부족 시 음수 채무 상태가 될 수 있습니다.)`
+        : `정말로 @${userId} 유저에게 ${Number(amount).toLocaleString()}원을 ${actionName}하시겠습니까?`;
+
+      if (!confirm(warnMsg)) return;
+
       const res = await adminFetch('/api/admin/action/' + type, {
         method: 'POST',
         body: { userId, amount, reason, confirm: true }

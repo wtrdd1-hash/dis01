@@ -36,7 +36,7 @@ services:
         max-size: 10m
         max-file: "5"
     labels:
-      autoheal: "true"
+      autoheal: "4rue"
     healthcheck:
       test:
         [
@@ -101,6 +101,29 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - edge
+
+  ddns:
+    image: node:20-alpine
+    container_name: wtrdd-ddns
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ${PROD_DATA_ROOT:-.}/deploy/ddns/ddns_updater.js:/app/ddns_updater.js:ro
+      - ${PROD_DATA_ROOT:-.}/logs:/app/logs
+    environment:
+      CF_ZONE_ID: ${CF_ZONE_ID:-cb1ef3b544bf2e403ff5e483215abe9e}
+      CF_GLOBAL_API_KEY: ${CF_GLOBAL_API_KEY:-cfk_bpFG69e7XN1phfAIYe59QwqbqLdsr4dQnyvNxU0L1962aec3}
+      CF_EMAIL: ${CF_EMAIL:-jungchwimisaenghwal63@gmail.com}
+      DDNS_DOMAINS: "ssh.easy-scraping.com,mini.easy-scraping.com,direct.easy-scraping.com"
+      DDNS_INTERVAL_MS: "10000"
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      ADMIN_IDS: ${ADMIN_IDS:-886478189520637992,889085646768078850}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+    command: ["node", "ddns_updater.js"]
+    networks:
+      - edge
+    labels:
+      autoheal: "true"
 
 networks:
   edge:

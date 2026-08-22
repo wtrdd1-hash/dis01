@@ -36,16 +36,16 @@ const LOAN = {
 };
 
 const CLICKER = {
-  POWER_PER_LEVEL: 6,
-  CRIT_CHANCE: 0.08,
-  CRIT_MULT: 2,
+  POWER_PER_LEVEL: 15, // 클릭당 기본 15원 (밸런스 너프)
+  CRIT_CHANCE: 0.05,  // 크리티컬 확률 5%
+  CRIT_MULT: 2.0,     // 크리티컬 배율 2배
   MAX_CLICKS_PER_REQUEST: 100,
   MIN_MS_PER_CLICK: 40,
-  POWER_COST_PER_LEVEL: 8500,
-  AUTO_PER_LEVEL_PER_SEC: 2,
+  POWER_COST_PER_LEVEL: 10000,
+  AUTO_PER_LEVEL_PER_SEC: 1, // 자동채굴 초당 1원
   AUTO_COST_BASE: 20000,
   OFFLINE_CAP_MIN: 6 * 60, // 최대 6시간(360분) 오프라인 채굴 누적
-  BONUS_TURN_CHANCE: 0.08
+  BONUS_TURN_CHANCE: 0.05
 };
 
 const SUBSIDY = {

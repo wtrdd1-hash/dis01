@@ -186,14 +186,152 @@
 
   </div>
 
+  <!-- 🤖 2. 오리 자동 채굴 드론 & 오버클럭 센터 -->
+  <div style="background:linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.85)); border:1px solid rgba(56,189,248,0.25); border-radius:20px; padding:20px 24px; margin-bottom:24px; box-shadow:0 10px 30px rgba(0,0,0,0.5); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+    <div style="display:flex; align-items:center; gap:16px;">
+      <div style="width:52px; height:52px; border-radius:16px; background:radial-gradient(circle,#0284c7,#0369a1); display:flex; align-items:center; justify-content:center; font-size:28px; box-shadow:0 0 20px rgba(56,189,248,0.4);">
+        🤖
+      </div>
+      <div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <h3 style="font-size:16.5px; font-weight:900; color:#fff; margin:0;">AI 오리 자동 채굴 드론</h3>
+          <span id="drone-status-badge" style="font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px; background:rgba(148,163,184,0.2); color:#94a3b8;">대기 중</span>
+        </div>
+        <p style="font-size:12.5px; color:#94a3b8; margin:2px 0 0 0;">
+          드론을 가동하면 손을 쓰지 않아도 1.5초마다 자동으로 광석을 채굴하여 수익을 축적합니다.
+        </p>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px; align-items:center;">
+      <button id="btn-toggle-drone" onclick="toggleAutoDrone()" style="padding:10px 20px; font-weight:900; font-size:14px; border-radius:12px; border:none; cursor:pointer; background:linear-gradient(135deg,#059669,#10b981); color:#fff; box-shadow:0 0 15px rgba(16,185,129,0.3); transition:all 0.2s ease;">
+        ▶️ 드론 가동하기
+      </button>
+    </div>
+  </div>
+
+  <!-- 🗺️ 3. 8대 특수 광산 탐사 구역 (장르별 보상 배율 & 해금) -->
+  <div style="margin-bottom:28px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <div>
+        <h2 style="font-size:18px; font-weight:900; color:#fff; margin:0; display:flex; align-items:center; gap:8px;">
+          <span>🗺️</span> <span>특수 광산 탐사 구역 (보상 배율 극대화)</span>
+        </h2>
+        <p style="font-size:12.5px; color:#94a3b8; margin:2px 0 0 0;">탐사 구역을 해금하고 진입하면 클릭당 채굴 보너스 배율이 대폭 상승합니다.</p>
+      </div>
+    </div>
+
+    <div id="mine-zones-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:14px;">
+      <!-- 동적 광산 장르 카드 렌더링 -->
+    </div>
+  </div>
+
+  <!-- 🏆 4. 실시간 채굴왕 명예의 전당 & 채굴 활동 로그 -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:20px;">
+    
+    <!-- 명예의 전당 -->
+    <div class="mining-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h3 style="font-size:16px; font-weight:900; color:#fbbf24; margin:0; display:flex; align-items:center; gap:6px;">
+          <span>🏆</span> <span>실시간 채굴왕 TOP 5</span>
+        </h3>
+        <span style="font-size:11.5px; color:#94a3b8;">실시간 집계</span>
+      </div>
+
+      <div id="mining-leaderboard-box" style="display:flex; flex-direction:column; gap:8px;">
+        <div style="text-align:center; padding:20px; color:#64748b; font-size:13px;">순위를 불러오는 중...</div>
+      </div>
+    </div>
+
+    <!-- 실시간 채굴 로그 -->
+    <div class="mining-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h3 style="font-size:16px; font-weight:900; color:#38bdf8; margin:0; display:flex; align-items:center; gap:6px;">
+          <span>⚡</span> <span>실시간 채굴 & 잭팟 피드</span>
+        </h3>
+        <span style="font-size:11.5px; color:#34d399;">● LIVE</span>
+      </div>
+
+      <div id="mining-live-log" style="display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto;">
+        <div style="background:rgba(30,41,59,0.4); border-radius:10px; padding:10px 12px; font-size:12.5px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="color:#cbd5e1;">⛏️ 광산 탐사 엔진 가동 완료</span>
+          <span style="color:#38bdf8; font-family:'JetBrains Mono',monospace; font-weight:700;">준비 완료</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
 </main>
 
 <script>
   let totalClicks = 0;
+  let autoDroneTimer = null;
+  let isDroneRunning = false;
+
+  // 🆔 안정적인 채굴 창 식별자 (wid) 생성 및 보관
+  let minerWid = sessionStorage.getItem('wolduck_miner_wid');
+  if (!minerWid || !/^[A-Za-z0-9_-]{16,64}$/.test(minerWid)) {
+    minerWid = 'miner_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    sessionStorage.setItem('wolduck_miner_wid', minerWid);
+  }
+  window.__minerWid = minerWid;
+
+  // 🤖 자동 채굴 드론 토글
+  function toggleAutoDrone() {
+    const btn = document.getElementById('btn-toggle-drone');
+    const badge = document.getElementById('drone-status-badge');
+    
+    if (isDroneRunning) {
+      clearInterval(autoDroneTimer);
+      autoDroneTimer = null;
+      isDroneRunning = false;
+      btn.innerHTML = '▶️ 드론 가동하기';
+      btn.style.background = 'linear-gradient(135deg,#059669,#10b981)';
+      badge.innerText = '정지됨';
+      badge.style.background = 'rgba(148,163,184,0.2)';
+      badge.style.color = '#94a3b8';
+    } else {
+      isDroneRunning = true;
+      btn.innerHTML = '⏹️ 드론 정지하기';
+      btn.style.background = 'linear-gradient(135deg,#dc2626,#ef4444)';
+      badge.innerText = '⚡ 자동 채굴 중';
+      badge.style.background = 'rgba(16,185,129,0.2)';
+      badge.style.color = '#34d399';
+      
+      triggerMineClick();
+      autoDroneTimer = setInterval(() => {
+        triggerMineClick();
+      }, 1500);
+    }
+  }
+
+  function addMiningLiveLog(text, highlight) {
+    const logBox = document.getElementById('mining-live-log');
+    if (!logBox) return;
+    const item = document.createElement('div');
+    item.style.background = 'rgba(30,41,59,0.5)';
+    item.style.borderRadius = '10px';
+    item.style.padding = '8px 12px';
+    item.style.fontSize = '12.5px';
+    item.style.display = 'flex';
+    item.style.justifyContent = 'space-between';
+    item.style.alignItems = 'center';
+    item.style.borderLeft = highlight ? '3px solid #fbbf24' : '3px solid #38bdf8';
+    item.innerHTML = `
+      <span style="color:#e2e8f0;">${text}</span>
+      <span style="color:#64748b; font-size:11px; font-family:'JetBrains Mono',monospace;">${new Date().toLocaleTimeString()}</span>
+    `;
+    logBox.prepend(item);
+    if (logBox.children.length > 20) {
+      logBox.removeChild(logBox.lastChild);
+    }
+  }
 
   // ⛏️ 광석 채굴 클릭 (No blocking alert!)
   async function triggerMineClick(e) {
     const rock = document.getElementById('oreRock');
+    if (!rock) return;
     
     // 시각적 떠오르는 보상 효과 (Floating Text)
     const rect = rock.getBoundingClientRect();
@@ -205,17 +343,21 @@
     document.body.appendChild(floatEl);
 
     try {
+      const clickX = (e && e.clientX) ? Math.floor(e.clientX) : (Math.floor(Math.random() * 500) + 100);
+      const clickY = (e && e.clientY) ? Math.floor(e.clientY) : (Math.floor(Math.random() * 500) + 100);
+
       const res = await fetch('/api/clicker/click', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          hits: [{ x: Math.floor(Math.random() * 500) + 1, y: Math.floor(Math.random() * 500) + 1 }],
+          wid: window.__minerWid,
+          hits: [{ x: clickX, y: clickY }],
           clicks: 1
         })
       });
       const data = await res.json();
-      if (data.success) {
-        const earned = Number(data.earned || data.earnedCash || 1500);
+      if (data.success && (data.earnedCash > 0 || Number(data.earned) > 0)) {
+        const earned = Number(data.earned || data.earnedCash);
         floatEl.innerText = `+${earned.toLocaleString()}원! 💎`;
         floatEl.style.color = data.critCount > 0 ? '#fbbf24' : '#34d399';
         
@@ -223,13 +365,28 @@
         totalClicks++;
         document.getElementById('click-counter-badge').innerText = `총 ${totalClicks}회 채굴`;
 
+        if (data.critCount > 0) {
+          addMiningLiveLog(`🎉 <b>크리티컬 대박!</b> +${earned.toLocaleString()}원 채굴 성공`, true);
+        } else if (totalClicks % 5 === 0) {
+          addMiningLiveLog(`⛏️ 광석 채굴 완료: +${earned.toLocaleString()}원`, false);
+        }
+
         // 상단 헤더 자산 실시간 갱신
         if (data.newCash) {
-          const cashEl = document.querySelector('.asset-val');
+          const cashEl = document.getElementById('user-cash-display');
           if (cashEl) cashEl.innerText = Number(data.newCash).toLocaleString() + '원';
         }
+      } else if (data.blocked === 'busy') {
+        floatEl.innerText = '⚠️ 다른 탭/창에서 채굴 중입니다.';
+        floatEl.style.color = '#f59e0b';
+      } else if (data.blocked === 'invalid') {
+        floatEl.innerText = '⚠️ 채굴 세션 갱신 중... 새로고침해 주세요.';
+        floatEl.style.color = '#f59e0b';
+      } else if (data.blocked) {
+        floatEl.innerText = '⚠️ 연타 제한: 0.1초 후 클릭';
+        floatEl.style.color = '#f59e0b';
       } else {
-        floatEl.innerText = data.error || '쿨다운 중';
+        floatEl.innerText = data.error || '잠시 후 다시 시도';
         floatEl.style.color = '#ef4444';
       }
     } catch (err) {
@@ -264,6 +421,7 @@
           document.getElementById('live-drill-level').innerText = `Lv.${lv} (+${lv - 1}강)`;
           document.getElementById('drill-name-txt').innerText = `강화된 드릴 (+${lv - 1}강)`;
           document.getElementById('drill-bonus-txt').innerText = `+${(lv - 1) * 20}%`;
+          addMiningLiveLog(`🔨 <b>드릴 대장간 강화 성공!</b> [Lv.${lv} 드릴 달성]`, true);
         } else {
           msgEl.innerText = `💥 ${data.error || '강화에 실패했습니다.'}`;
           msgEl.style.color = '#ef4444';
@@ -275,6 +433,134 @@
       msgEl.style.color = '#ef4444';
     }
   }
+
+  // 🗺️ 광산 탐사 구역 로드 & 렌더링
+  async function loadMineZones() {
+    const grid = document.getElementById('mine-zones-grid');
+    if (!grid) return;
+    try {
+      const res = await fetch('/api/mine/state');
+      const data = await res.json();
+      if (!data.success || !data.genres) return;
+
+      grid.innerHTML = '';
+      data.genres.forEach(g => {
+        const isSelected = (g.id === data.selected);
+        const card = document.createElement('div');
+        card.style.background = isSelected ? 'rgba(56,189,248,0.12)' : 'rgba(15,23,42,0.85)';
+        card.style.border = isSelected ? '1.5px solid #38bdf8' : '1px solid rgba(255,255,255,0.08)';
+        card.style.borderRadius = '16px';
+        card.style.padding = '16px';
+        card.style.display = 'flex';
+        card.style.flexDirection = 'column';
+        card.style.justifyContent = 'space-between';
+        card.style.boxShadow = isSelected ? '0 0 20px rgba(56,189,248,0.25)' : 'none';
+
+        card.innerHTML = `
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+              <div style="font-size:26px;">${g.emoji || '💎'}</div>
+              <span style="font-size:11px; font-weight:800; padding:2px 8px; border-radius:6px; background:rgba(255,255,255,0.08); color:#38bdf8;">
+                ${g.rewardPercent}% 배율
+              </span>
+            </div>
+            <h4 style="font-size:15px; font-weight:800; color:#fff; margin:0 0 4px 0;">${g.name}</h4>
+            <p style="font-size:12px; color:#94a3b8; margin:0 0 12px 0; line-height:1.4;">${g.desc || ''}</p>
+          </div>
+          <div>
+            ${isSelected ? `
+              <button disabled style="width:100%; padding:8px; border-radius:10px; background:#0284c7; color:#fff; border:none; font-size:12.5px; font-weight:800; cursor:default;">
+                ✅ 현재 탐사 중
+              </button>
+            ` : g.unlocked ? `
+              <button onclick="selectMineZone('${g.id}')" style="width:100%; padding:8px; border-radius:10px; background:rgba(56,189,248,0.15); border:1px solid #38bdf8; color:#38bdf8; font-size:12.5px; font-weight:800; cursor:pointer; transition:all 0.2s;">
+                탐사지로 변경
+              </button>
+            ` : `
+              <button onclick="unlockMineZone('${g.id}', ${g.unlockCost})" style="width:100%; padding:8px; border-radius:10px; background:linear-gradient(135deg,#f59e0b,#fbbf24); color:#000; border:none; font-size:12.5px; font-weight:800; cursor:pointer;">
+                🔓 해금 (${Number(g.unlockCost).toLocaleString()}원)
+              </button>
+            `}
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    } catch(e) {}
+  }
+
+  async function selectMineZone(genreId) {
+    try {
+      const res = await fetch('/api/mine/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ genre: genreId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        loadMineZones();
+        addMiningLiveLog(`🗺️ 탐사지가 변경되었습니다!`, true);
+      }
+    } catch(e) {}
+  }
+
+  async function unlockMineZone(genreId, cost) {
+    if (!confirm(`${Number(cost).toLocaleString()}원을 소모하여 이 광산 구역을 해금하시겠습니까?`)) return;
+    try {
+      const res = await fetch('/api/mine/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ genre: genreId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('🎉 광산 구역 해금 성공!');
+        loadMineZones();
+      } else {
+        alert(data.error || '해금에 실패했습니다.');
+      }
+    } catch(e) {}
+  }
+
+  // 🏆 리더보드 로드
+  async function loadMiningLeaderboard() {
+    const box = document.getElementById('mining-leaderboard-box');
+    if (!box) return;
+    try {
+      const res = await fetch('/api/mine/leaderboard');
+      const data = await res.json();
+      if (data.success && data.rows && data.rows.length > 0) {
+        box.innerHTML = '';
+        data.rows.slice(0, 5).forEach((r, idx) => {
+          const rankEmoji = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}위`;
+          const row = document.createElement('div');
+          row.style.background = 'rgba(30,41,59,0.5)';
+          row.style.borderRadius = '10px';
+          row.style.padding = '8px 12px';
+          row.style.display = 'flex';
+          row.style.justifyContent = 'space-between';
+          row.style.alignItems = 'center';
+          row.style.fontSize = '13px';
+          row.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="font-weight:900; color:#fbbf24; min-width:24px;">${rankEmoji}</span>
+              <strong style="color:#fff;">${r.username || '익명 광부'}</strong>
+            </div>
+            <div style="color:#38bdf8; font-family:'JetBrains Mono',monospace; font-weight:700;">
+              ${Number(r.clicks || 0).toLocaleString()}회
+            </div>
+          `;
+          box.appendChild(row);
+        });
+      } else {
+        box.innerHTML = '<div style="text-align:center; padding:16px; color:#64748b; font-size:12.5px;">아직 채굴 기록이 없습니다. 첫 번째 광부가 되어보세요!</div>';
+      }
+    } catch(e) {}
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    loadMineZones();
+    loadMiningLeaderboard();
+  });
 </script>
 
 <%- include('layout/footer', { activePage: 'mining' }) %>

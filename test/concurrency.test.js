@@ -6,12 +6,6 @@ const EconomyCore = require('../src/core/economy/EconomyCore');
 const { pool, getOrCreateUser } = require('../src/config/database');
 
 test('동시성(Race Condition) 및 트랜잭션 안전성 테스트', async (t) => {
-  t.after(async () => {
-    try {
-      await pool.end();
-    } catch (e) {}
-  });
-
   let dbAvailable = false;
   try {
     const conn = await pool.getConnection();

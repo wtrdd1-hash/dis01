@@ -550,10 +550,20 @@
     } catch (e) {}
   }
 
-  // 초기 로드 시 백업 및 공지사항 목록 갱신
+  // 초기 로드 시 백업 및 공지사항 목록 갱신 & 해시 이동 지원
   document.addEventListener('DOMContentLoaded', () => {
     loadBackups();
     loadAnnouncements();
+    if (window.location.hash) {
+      setTimeout(() => {
+        const target = document.querySelector(window.location.hash);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          target.style.outline = '2px solid #f59e0b';
+          target.style.borderRadius = '14px';
+        }
+      }, 200);
+    }
   });
   setTimeout(() => {
     loadBackups();

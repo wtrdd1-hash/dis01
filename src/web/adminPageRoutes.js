@@ -174,9 +174,8 @@ function createAdminPageRoutes(deps) {
     // ───────────────────────────────────────────
     app.get('/admin/economy', requireAdminWeb, async (req, res) => {
       try {
-        const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+        const requestedPage = Math.max(parseInt(req.query.page, 10) || 1, 1);
         const limit = Math.min(Math.max(parseInt(req.query.lines || req.query.limit, 10) || 50, 10), 200);
-        const offset = (page - 1) * limit;
         const typeFilter = String(req.query.type || '').trim();
         const search = String(req.query.search || '').trim();
 
@@ -197,6 +196,8 @@ function createAdminPageRoutes(deps) {
         const [[filteredCountRow]] = await pool.query(`SELECT COUNT(*) as cnt FROM economy_logs ${whereSql}`, params);
         const totalFiltered = filteredCountRow ? filteredCountRow.cnt : 0;
         const totalPages = Math.max(Math.ceil(totalFiltered / limit), 1);
+        const page = Math.min(requestedPage, totalPages);
+        const offset = (page - 1) * limit;
 
         const queryParams = [...params, limit, offset];
         const [logs] = await pool.query(`SELECT * FROM economy_logs ${whereSql} ORDER BY id DESC LIMIT ? OFFSET ?`, queryParams);

@@ -29,6 +29,15 @@ function rememberRemainder(userId, remainder) {
  */
 function getCurrentInterestRate() {
   try {
+    const dyn = getDynamicSettings();
+    if (dyn && (dyn.autoMode === 'manual' || dyn.taxPolicyLocked)) {
+      if (typeof dyn.bankInterestRate === 'number' && dyn.bankInterestRate > 0) {
+        return dyn.bankInterestRate;
+      }
+    }
+  } catch (e) {}
+
+  try {
     const { macroState } = require('./macroEconomics');
     if (macroState && typeof macroState.baseInterestRate === 'number' && macroState.baseInterestRate > 0) {
       // 중앙은행 기준금리 + 우대금리 20% -> 1분 분할 금리
@@ -36,12 +45,14 @@ function getCurrentInterestRate() {
       return annual / (365 * 24 * 60);
     }
   } catch (e) {}
+
   try {
     const dyn = getDynamicSettings();
     if (dyn && typeof dyn.bankInterestRate === 'number' && dyn.bankInterestRate > 0) {
       return dyn.bankInterestRate;
     }
   } catch (e) {}
+
   return DEFAULT_1MIN_RATE;
 }
 

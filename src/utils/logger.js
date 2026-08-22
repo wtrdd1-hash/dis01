@@ -10,10 +10,12 @@ const COMMANDS_JSONL_FILE = path.join(LOG_DIR, 'commands.jsonl');
 const ALL_JSONL_FILE = path.join(LOG_DIR, 'all.jsonl');
 const LEGACY_LOG_FILE = path.join(LOG_DIR, 'commands.log');
 
-// logs 디렉토리 생성
-if (!fs.existsSync(LOG_DIR)) {
-  fs.mkdirSync(LOG_DIR, { recursive: true });
-}
+// logs 디렉토리 생성 (권한 오류 시 안전 무시)
+try {
+  if (!fs.existsSync(LOG_DIR)) {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+  }
+} catch (e) {}
 
 function getFormattedTimestamp() {
   const now = new Date();

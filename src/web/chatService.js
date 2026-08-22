@@ -264,8 +264,9 @@ async function sendMessage(session, rawMessage, roomId) {
 
   const userId = session.id;
   const now = Date.now();
+  const isAdmin = config.isAdmin(userId) ? 1 : 0;
   const lastChatTime = chatCooldownMap.get(userId) || 0;
-  if (now - lastChatTime < 1500) {
+  if (!isAdmin && now - lastChatTime < 200) {
     return {
       status: 429,
       success: false,
@@ -275,7 +276,6 @@ async function sendMessage(session, rawMessage, roomId) {
 
   const sanitized = sanitizeText(message);
   chatCooldownMap.set(userId, now);
-  const isAdmin = config.isAdmin(userId) ? 1 : 0;
 
   try {
     const [result] = await pool.query(

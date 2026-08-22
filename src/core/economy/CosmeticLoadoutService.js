@@ -103,7 +103,7 @@ class CosmeticLoadoutService {
 
     return {
       success: true,
-      message: `✨ [${inv.name}] 아이템을 ${upperSlot} 슬롯에 장착했습니다!`,
+      message: `✨ [${inv.item_name || inv.name || itemKey}] 아이템을 ${upperSlot} 슬롯에 장착했습니다!`,
       slot: upperSlot,
       itemKey
     };

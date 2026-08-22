@@ -1,55 +1,102 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <meta name="theme-color" content="#1e1f22">
-  <title>월덕 상태 · 관리자</title>
+  <title>미니 PC 관제 · 관리자 콘솔</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
   <style>
     :root {
-      --bg-tertiary: #1e1f22; --bg-secondary: #2b2d31; --bg-frame: #111214;
-      --border-subtle: rgba(255,255,255,.06); --text: #dbdee1; --text-header: #f2f3f5;
-      --text-muted: #949ba4; --brand: #5865f2; --danger: #f23f42; --online: #23a559;
-      --font: "Pretendard", "Noto Sans KR", sans-serif; --radius: 8px;
+      --bg-tertiary: #111216; --bg-secondary: #1a1c23; --bg-frame: #0b0c0e;
+      --border-subtle: rgba(255,255,255,.08); --text: #dbdee1; --text-header: #f2f3f5;
+      --text-muted: #949ba4; --brand: #6366f1; --brand-hover: #4f46e5; --danger: #f23f42; --online: #23a559;
+      --neon-cyan: #06b6d4; --font: "Pretendard", -apple-system, BlinkMacSystemFont, sans-serif; --radius: 10px;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: var(--font); background: var(--bg-tertiary); color: var(--text); }
-    .topbar { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; background: var(--bg-frame); }
-    .topbar a, .topbar button { color: #949ba4; background: none; border: 0; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; }
-    .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 20px 64px; }
-    h1 { font-size: 22px; color: var(--text-header); margin: 0 0 14px; }
-    .card { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
-    label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
-    input { width: 100%; max-width: 420px; background: #383a40; border: 1px solid transparent; color: #fff; border-radius: 8px; padding: 10px 12px; }
-    button.primary { background: var(--brand); color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+    body { margin: 0; font-family: var(--font); background: var(--bg-tertiary); color: var(--text); line-height: 1.5; }
+    .topbar { height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: var(--bg-frame); border-bottom: 1px solid var(--border-subtle); }
+    .topbar a, .topbar button { color: #949ba4; background: none; border: 0; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; transition: color .2s; }
+    .topbar a:hover, .topbar button:hover { color: #fff; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 80px; }
+    h1 { font-size: 24px; color: var(--text-header); margin: 0 0 16px; font-weight: 800; }
+    h2 { font-size: 16px; color: #fff; margin: 0 0 12px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+    .card { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(0,0,0,0.3); }
+    label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; font-weight: 600; }
+    input[type="text"], input[type="password"] { width: 100%; max-width: 420px; background: #252830; border: 1px solid var(--border-subtle); color: #fff; border-radius: 8px; padding: 10px 14px; font-size: 14px; outline: none; transition: border-color .2s; }
+    input[type="text"]:focus, input[type="password"]:focus { border-color: var(--brand); }
+    button.primary { background: var(--brand); color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 700; cursor: pointer; font-size: 13px; transition: background .2s; }
+    button.primary:hover { background: var(--brand-hover); }
+    button.success { background: #10b981; color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 700; cursor: pointer; font-size: 13px; }
+    button.success:hover { background: #059669; }
+    button.danger-sm { background: rgba(242, 63, 66, 0.15); color: #f87171; border: 1px solid rgba(242, 63, 66, 0.3); border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
+    button.danger-sm:hover { background: rgba(242, 63, 66, 0.3); color: #fff; }
     .err { color: var(--danger); font-size: 13px; margin-top: 8px; }
-    .row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
-    .logbox { background: #111214; color: #dbdee1; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; max-height: 420px; overflow: auto; padding: 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; }
-    select { background: #383a40; color: #fff; border: 0; border-radius: 8px; padding: 8px 10px; }
+    .msg { color: var(--online); font-size: 13px; margin-top: 8px; }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
+    .row:last-child { border-bottom: 0; }
+    .logbox { background: #0c0d10; color: #dbdee1; font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; max-height: 420px; overflow: auto; padding: 14px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; border: 1px solid var(--border-subtle); }
+    select { background: #252830; color: #fff; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none; }
+    .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; }
+    .badge.ok { color: var(--online); background: rgba(35, 165, 89, 0.15); }
+    .badge.warn { color: #f59e0b; background: rgba(245, 158, 11, 0.15); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 800px) { .grid-2 { grid-template-columns: 1fr; } }
+    .tag { font-family: ui-monospace, monospace; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; color: #93c5fd; }
     .hidden { display: none; }
   </style>
 </head>
 <body>
   <header class="topbar">
-    <a href="/">← 공개 상태</a>
+    <a href="/">← 공개 상태 대시보드</a>
     <button type="button" id="logoutBtn" class="hidden">로그아웃</button>
   </header>
   <div class="wrap">
-    <h1>관리자 콘솔</h1>
+    <h1>미니 PC 관리자 관제 콘솔</h1>
     <div class="card" id="loginCard">
-      <p style="color:#949ba4;font-size:13px;margin-top:0">메인 앱이 내려가도 여기로 들어올 수 있게, 상태 페이지 전용 키로 막혀 있습니다. 키는 서버 `.env`의 `STATUS_OPS_KEY` 입니다.</p>
-      <label for="key">운영 키</label>
-      <input id="key" type="password" autocomplete="current-password">
-      <div style="margin-top:12px"><button class="primary" type="button" id="loginBtn">로그인</button></div>
+      <p style="color:#949ba4;font-size:13px;margin-top:0">메인 앱이 내려가도 독립적으로 접속 가능하도록 상태 페이지 전용 키로 보호되어 있습니다. 키는 서버 <code>.env</code>의 <code>STATUS_OPS_KEY</code> 또는 <code>COOKIE_SECRET</code> 입니다.</p>
+      <label for="key">운영 키 (Admin Key)</label>
+      <input id="key" type="password" autocomplete="current-password" placeholder="운영 키를 입력하세요">
+      <div style="margin-top:14px"><button class="primary" type="button" id="loginBtn">관리자 로그인</button></div>
       <div class="err" id="loginErr"></div>
     </div>
     <div id="dash" class="hidden">
-      <div class="card" id="overview"></div>
+      <!-- 🛡️ SSH IP 화이트리스트 보안 제어 센터 -->
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px">
-          <strong>컨테이너 로그</strong>
+        <h2>🛡️ SSH 접근 제어 (IP 화이트리스트 관리)</h2>
+        <p style="color:#949ba4;font-size:13px;margin-top:0">미니 PC SSH 포트(<code>34567</code>)에 접근할 수 있는 허용 IP 목록을 실시간으로 제어합니다. UFW 방화벽에 즉시 반영됩니다.</p>
+        
+        <div style="background:rgba(255,255,255,0.03);padding:14px;border-radius:8px;border:1px solid var(--border-subtle);margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div>
+            <div style="font-size:12px;color:var(--text-muted)">현재 접속 중인 내 공인 IP:</div>
+            <div style="font-size:16px;font-weight:800;color:#fff;font-family:ui-monospace,monospace" id="myIpText">확인 중…</div>
+          </div>
+          <button class="success" type="button" id="addMyIpBtn">⚡ 현재 내 IP 원클릭 허용 추가</button>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+          <input type="text" id="customIp" placeholder="추가할 IP 주소 (예: 211.43.18.200)" style="max-width:260px">
+          <input type="text" id="customComment" placeholder="설명 / 메모 (예: 집 작업실)" style="max-width:200px">
+          <button class="primary" type="button" id="addCustomIpBtn">IP 규칙 추가</button>
+        </div>
+        <div class="err" id="wlErr"></div>
+        <div class="msg" id="wlMsg"></div>
+
+        <div style="margin-top:16px">
+          <strong style="font-size:13px;color:var(--text-muted)">현재 방화벽(UFW) 허용 IP 규칙 목록</strong>
+          <div id="whitelistList" style="margin-top:8px">불러오는 중…</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card" id="overview"></div>
+        <div class="card" id="dnsOverview"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px">
+          <h2 style="margin:0">🐳 도커 컨테이너 실시간 로그</h2>
           <select id="logName"></select>
         </div>
         <div class="logbox" id="logs">불러오는 중…</div>
@@ -57,10 +104,13 @@
       <div class="card" id="events"></div>
     </div>
   </div>
+
   <script>
     const loginCard = document.getElementById('loginCard');
     const dash = document.getElementById('dash');
     const logoutBtn = document.getElementById('logoutBtn');
+    let clientIp = '';
+
     async function login() {
       document.getElementById('loginErr').textContent = '';
       const res = await fetch('/ops/login', {
@@ -75,12 +125,90 @@
       }
       showDash();
     }
+
     async function showDash() {
       loginCard.classList.add('hidden');
       dash.classList.remove('hidden');
       logoutBtn.classList.remove('hidden');
       await refresh();
+      await loadWhitelist();
     }
+
+    async function loadWhitelist() {
+      const res = await fetch('/ops/api/whitelist', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      clientIp = data.clientIp || '-';
+      document.getElementById('myIpText').textContent = clientIp;
+
+      const rules = data.ufwRules || [];
+      if (!rules.length) {
+        document.getElementById('whitelistList').innerHTML = '<div class="row">등록된 개별 IP 규칙이 없습니다 (기본 전체 허용 또는 대역 허용).</div>';
+        return;
+      }
+
+      document.getElementById('whitelistList').innerHTML = rules.map(r => `
+        <div class="row">
+          <div>
+            <span class="tag">${r.from}</span>
+            <span style="color:var(--text-muted);font-size:12px;margin-left:6px">${r.to} (${r.action}) ${r.comment ? '· ' + r.comment : ''}</span>
+          </div>
+          <button class="danger-sm" onclick="removeIp('${r.from}')">규칙 삭제</button>
+        </div>
+      `).join('');
+    }
+
+    async function removeIp(ip) {
+      if (!confirm(ip + ' 규칙을 방화벽에서 삭제하시겠습니까?')) return;
+      const res = await fetch('/ops/api/whitelist/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        document.getElementById('wlMsg').textContent = data.message || '삭제되었습니다.';
+        await loadWhitelist();
+      } else {
+        document.getElementById('wlErr').textContent = data.error || '삭제 실패';
+      }
+    }
+
+    document.getElementById('addMyIpBtn').addEventListener('click', async () => {
+      document.getElementById('wlErr').textContent = '';
+      document.getElementById('wlMsg').textContent = '';
+      const res = await fetch('/ops/api/whitelist/add-my-ip', { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+        document.getElementById('wlMsg').textContent = data.message || '내 IP가 화이트리스트에 추가되었습니다!';
+        await loadWhitelist();
+      } else {
+        document.getElementById('wlErr').textContent = data.error || '추가 실패';
+      }
+    });
+
+    document.getElementById('addCustomIpBtn').addEventListener('click', async () => {
+      const ip = document.getElementById('customIp').value.trim();
+      const comment = document.getElementById('customComment').value.trim();
+      if (!ip) return alert('추가할 IP를 입력하세요.');
+      document.getElementById('wlErr').textContent = '';
+      document.getElementById('wlMsg').textContent = '';
+      const res = await fetch('/ops/api/whitelist/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip, comment })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        document.getElementById('wlMsg').textContent = data.message || 'IP가 추가되었습니다!';
+        document.getElementById('customIp').value = '';
+        document.getElementById('customComment').value = '';
+        await loadWhitelist();
+      } else {
+        document.getElementById('wlErr').textContent = data.error || '추가 실패';
+      }
+    });
+
     async function refresh() {
       const res = await fetch('/ops/api/overview', { cache: 'no-store' });
       if (res.status === 401) {
@@ -91,10 +219,29 @@
       }
       const data = await res.json();
       const health = data.health || {};
+      const host = health.host || {};
       const boxes = Object.values(data.containers || {});
+
       document.getElementById('overview').innerHTML =
-        '<div class="row"><span>전체</span><b>' + (health.overall || '-') + '</b></div>' +
-        boxes.map((c) => '<div class="row"><span>' + c.name + ' <code>' + c.container + '</code></span><b>' + (c.status || '-') + ' / ' + (c.health || '-') + ' / rst ' + (c.restartCount || 0) + '</b></div>').join('');
+        '<h2>📊 서비스 상태 요약</h2>' +
+        '<div class="row"><span>전체 상태</span><b class="badge ' + (health.overall === 'ok' ? 'ok' : 'warn') + '">' + (health.overall || '-') + '</b></div>' +
+        '<div class="row"><span>미니 PC 호스트</span><b>' + (host.platform || '-') + '</b></div>' +
+        '<div class="row"><span>CPU / RAM</span><b>' + (host.cpu ? host.cpu.usagePercent + '%' : '-') + ' / ' + (host.memory ? host.memory.usedPercent + '%' : '-') + '</b></div>' +
+        boxes.map((c) => '<div class="row"><span>' + c.name + ' <code style="font-size:11px">' + c.container + '</code></span><b>' + (c.status || '-') + '</b></div>').join('');
+
+      const dnsList = host.dns || [];
+      document.getElementById('dnsOverview').innerHTML =
+        '<h2>🌐 도메인 & Cloudflare DNS</h2>' +
+        dnsList.map(d => `
+          <div class="row">
+            <div>
+              <b style="color:#fff">${d.domain}</b>
+              <div style="font-size:11px;color:var(--text-muted)">${d.purpose} · 포트 ${d.port}</div>
+            </div>
+            <span class="tag">${d.target || d.ip}</span>
+          </div>
+        `).join('') || '<div class="row">DNS 정보 없음</div>';
+
       const sel = document.getElementById('logName');
       if (!sel.options.length) {
         (data.logTargets || []).forEach((name) => {
@@ -103,22 +250,24 @@
         });
         sel.addEventListener('change', loadLogs);
       }
-      document.getElementById('events').innerHTML = (health.events || []).slice(0, 20).map((ev) =>
+      document.getElementById('events').innerHTML = '<h2>📝 실시간 복구 & 이벤트 로그</h2>' + ((health.events || []).slice(0, 20).map((ev) =>
         '<div class="row"><span>' + (ev.ts || '') + '</span><b>' + (ev.action || '') + ' · ' + (ev.reason || '') + '</b></div>'
-      ).join('') || '<div class="row">이벤트 없음</div>';
+      ).join('') || '<div class="row">이벤트 없음</div>');
       await loadLogs();
     }
+
     async function loadLogs() {
       const name = document.getElementById('logName').value || 'wtrdd-discord-app';
       const res = await fetch('/ops/api/logs?name=' + encodeURIComponent(name), { cache: 'no-store' });
       const data = await res.json();
       document.getElementById('logs').textContent = (data.lines || []).join('\n') || (data.error || '로그 없음');
     }
+
     document.getElementById('loginBtn').addEventListener('click', login);
     document.getElementById('key').addEventListener('keydown', (e) => { if (e.key === 'Enter') login(); });
     logoutBtn.addEventListener('click', async () => { await fetch('/ops/logout', { method: 'POST' }); location.reload(); });
     fetch('/ops/api/overview').then((r) => { if (r.ok) showDash(); });
-    setInterval(() => { if (!dash.classList.contains('hidden')) refresh(); }, 8000);
+    setInterval(() => { if (!dash.classList.contains('hidden')) { refresh(); loadWhitelist(); } }, 8000);
   </script>
 </body>
 </html>

@@ -84,11 +84,23 @@ async function setAutoMode(mode, changedBy = 'admin') {
     return { success: false, error: 'autoMode는 auto|manual|paused 중 하나여야 합니다.' };
   }
   manualState.autoMode = mode;
+  if (mode === 'manual') {
+    manualState.taxPolicyLocked = true;
+  } else if (mode === 'auto') {
+    manualState.taxPolicyLocked = false;
+  }
   manualState.lastChangedAt = Date.now();
   manualState.lastChangedBy = changedBy;
+
+  try {
+    const { updateDynamicSetting } = require('./economyBalancer');
+    updateDynamicSetting('autoMode', mode);
+    updateDynamicSetting('taxPolicyLocked', manualState.taxPolicyLocked);
+  } catch (e) {}
+
   pushHistory({ ts: manualState.lastChangedAt, key: 'autoMode', value: mode, by: changedBy });
   await persistManualState();
-  return { success: true, autoMode: manualState.autoMode };
+  return { success: true, autoMode: manualState.autoMode, taxPolicyLocked: manualState.taxPolicyLocked };
 }
 
 /**
@@ -98,6 +110,12 @@ async function lockTaxPolicy(locked, changedBy = 'admin') {
   manualState.taxPolicyLocked = !!locked;
   manualState.lastChangedAt = Date.now();
   manualState.lastChangedBy = changedBy;
+
+  try {
+    const { updateDynamicSetting } = require('./economyBalancer');
+    updateDynamicSetting('taxPolicyLocked', manualState.taxPolicyLocked);
+  } catch (e) {}
+
   pushHistory({ ts: manualState.lastChangedAt, key: 'taxPolicyLocked', value: locked ? '1' : '0', by: changedBy });
   await persistManualState();
   return { success: true, locked: manualState.taxPolicyLocked };
@@ -117,6 +135,8 @@ async function bulkUpdate(updates, changedBy = 'admin') {
   ]);
   const applied = [];
   const skipped = [];
+
+  const { getDynamicSettings, updateDynamicSetting } = require('./economyBalancer');
 
   for (const [k, v] of Object.entries(updates)) {
     if (!allowedKeys.has(k)) { skipped.push({ key: k, reason: '허용된 키 아님' }); continue; }
@@ -143,12 +163,22 @@ async function bulkUpdate(updates, changedBy = 'admin') {
       }
       normalized = n;
     } else if (k === 'forcedRegimeIndex') {
-      const n = Number(v);
-      if (n !== null && (!Number.isInteger(n) || n < 0 || n > 9)) {
-        skipped.push({ key: k, reason: '국면 인덱스는 null 또는 0~9' });
-        continue;
+      if (v === null || v === '' || v === 'null' || v === undefined) {
+        normalized = null;
+      } else {
+        const n = Number(v);
+        const { MARKET_REGIMES } = require('./stockEngine');
+        const maxRegime = (Array.isArray(MARKET_REGIMES) ? MARKET_REGIMES.length : 9) - 1;
+        if (!Number.isInteger(n) || n < 0 || n > maxRegime) {
+          skipped.push({ key: k, reason: `국면 인덱스는 null 또는 0~${maxRegime}` });
+          continue;
+        }
+        normalized = n;
       }
-      normalized = n;
+      try {
+        const { setMarketRegime } = require('./stockEngine');
+        setMarketRegime(normalized);
+      } catch (e) {}
     } else if (k === 'wealthThresholdForTax') {
       const n = Number(v);
       if (!Number.isFinite(n) || n < 100000 || n > 10000000000) {
@@ -172,17 +202,24 @@ async function bulkUpdate(updates, changedBy = 'admin') {
       normalized = v === '1' || v === true || v === 'true';
     }
 
-    const { getDynamicSettings } = require('./economyBalancer');
-    const dyn = getDynamicSettings();
-    const oldVal = dyn[k];
-    dyn[k] = normalized;
+    const oldVal = getDynamicSettings()[k];
+    updateDynamicSetting(k, normalized);
+
     try {
-      await pool.query(
-        `INSERT INTO economy_settings (key_name, value) VALUES (?, ?)
-         ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = NOW()`,
-        [k, String(normalized)]
-      );
-    } catch (e) {}
+      if (normalized === null) {
+        await pool.query('DELETE FROM economy_settings WHERE key_name = ?', [k]);
+      } else {
+        await pool.query(
+          `INSERT INTO economy_settings (key_name, value) VALUES (?, ?)
+           ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = NOW()`,
+          [k, String(normalized)]
+        );
+      }
+    } catch (e) {
+      // DB 오류 시 롤백 및 에러 노출
+      updateDynamicSetting(k, oldVal);
+      return { success: false, error: `DB 저장 실패: ${e.message}`, applied, skipped };
+    }
 
     manualState.lastChangedAt = Date.now();
     manualState.lastChangedBy = changedBy;
@@ -190,16 +227,19 @@ async function bulkUpdate(updates, changedBy = 'admin') {
     applied.push({ key: k, value: normalized });
   }
 
-  if (applied.length === 0 && skipped.length > 0) {
+  if (applied.length === 0) {
     return { success: false, error: '모든 변경이 거부됨', applied, skipped };
   }
+
   // 자동모드가 manual로 전환되면 잠금도 함께 ON
   if (applied.some(a => a.key === 'autoMode' && a.value === 'manual')) {
     manualState.taxPolicyLocked = true;
     manualState.autoMode = 'manual';
+    updateDynamicSetting('taxPolicyLocked', true);
   } else if (applied.some(a => a.key === 'autoMode' && a.value === 'auto')) {
     manualState.taxPolicyLocked = false;
     manualState.autoMode = 'auto';
+    updateDynamicSetting('taxPolicyLocked', false);
   }
   await persistManualState();
   return { success: true, applied, skipped, autoMode: manualState.autoMode, taxPolicyLocked: manualState.taxPolicyLocked };
@@ -252,7 +292,7 @@ function summarizeCurrentSettings() {
     taxRatePercent: (Number(dyn.taxRate || 0) * 100).toFixed(2) + '%',
     wealthTaxMultiplier: dyn.wealthTaxMultiplier,
     bankInterestRate: dyn.bankInterestRate,
-    bankInterestRateAnnualPercent: (Number(dyn.bankInterestRate || 0) * 60 * 60 * 24 * 365 * 100).toFixed(2) + '%',
+    bankInterestRateAnnualPercent: (Number(dyn.bankInterestRate || 0) * 60 * 24 * 365 * 100).toFixed(2) + '%',
     wealthThresholdForTax: dyn.wealthThresholdForTax,
     forcedRegimeIndex: dyn.forcedRegimeIndex,
     subsidyMultiplier: dyn.subsidyMultiplier,

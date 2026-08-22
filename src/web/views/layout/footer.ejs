@@ -1,4 +1,34 @@
-  <!-- 📱 모바일 전용 반응형 하단 네비게이션 바 -->
+  <!-- 📱 모바일 전용 반응형 하단 네비게이션 바 (PC에서는 100% 완전 은닉) -->
+  <style>
+    .mobile-bottom-nav {
+      display: none !important;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid rgba(99, 102, 241, 0.25);
+      z-index: 1000;
+      justify-content: space-around;
+      align-items: center;
+      padding: 0 4px;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+    }
+    @media (max-width: 768px) {
+      .mobile-bottom-nav {
+        display: flex !important;
+      }
+    }
+    @media (min-width: 769px) {
+      .mobile-bottom-nav {
+        display: none !important;
+      }
+    }
+  </style>
   <nav class="mobile-bottom-nav">
     <a href="/stocks" class="mob-nav-btn <%= (typeof activePage !== 'undefined' && activePage === 'stocks') ? 'active' : '' %>">
       <span class="mob-icon">📈</span>
@@ -24,26 +54,237 @@
       <span class="mob-icon">👑</span>
       <span class="mob-label">VIP광장</span>
     </a>
+    <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
+      <a href="/admin" class="mob-nav-btn <%= (typeof activePage !== 'undefined' && activePage === 'admin') ? 'active' : '' %>" style="color:#38bdf8;">
+        <span class="mob-icon">🛡️</span>
+        <span class="mob-label">관리자</span>
+      </a>
+    <% } %>
   </nav>
 
-  <!-- 📢 실시간 소켓 토스트 알림 컨테이너 -->
-  <div id="socket-toast-container" style="position:fixed; bottom:80px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px; pointer-events:none;"></div>
+  <!-- 💬 실시간 광장 채팅 플로팅 위젯 -->
+  <div id="floating-chat-widget" style="position:fixed; bottom:24px; right:24px; z-index:9000; font-family:'Pretendard',sans-serif;">
+    
+    <!-- 채팅 토글 버튼 -->
+    <button id="chat-toggle-btn" onclick="togglePlazaChat()" style="display:flex; align-items:center; gap:8px; background:linear-gradient(135deg, #6366f1, #4f46e5); color:#fff; border:none; border-radius:30px; padding:10px 18px; font-weight:800; font-size:13.5px; box-shadow:0 8px 25px rgba(99,102,241,0.5); cursor:pointer; transition:all 0.2s ease;">
+      <span style="font-size:16px;">💬</span>
+      <span>광장 채팅</span>
+      <span id="chat-unread-dot" style="display:none; width:8px; height:8px; background:#ef4444; border-radius:50%; box-shadow:0 0 6px #ef4444;"></span>
+    </button>
 
-  <footer style="margin-top:auto; padding:24px 16px; text-align:center; color:#64748b; font-size:12px; border-top:1px solid rgba(255,255,255,0.05); display:flex; flex-direction:column; align-items:center; gap:6px;">
-    <div style="display:flex; align-items:center; gap:6px; font-size:11px; color:#34d399;">
-      <span style="width:8px; height:8px; border-radius:50%; background:#34d399; display:inline-block; box-shadow:0 0 8px #34d399;"></span>
-      <span>Socket.IO 실시간 가상 경제 네트워크 연결됨</span>
+    <!-- 채팅 본체 패널 -->
+    <div id="plaza-chat-panel" style="display:none; position:absolute; bottom:55px; right:0; width:360px; height:480px; max-height:80vh; background:rgba(15,23,42,0.95); backdrop-filter:blur(16px); border:1px solid rgba(99,102,241,0.3); border-radius:20px; box-shadow:0 20px 60px rgba(0,0,0,0.8), 0 0 30px rgba(99,102,241,0.2); flex-direction:column; overflow:hidden;">
+      
+      <!-- 채팅 헤더 -->
+      <div style="padding:14px 16px; background:rgba(30,41,59,0.9); border-bottom:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:16px;">💬</span>
+          <span style="font-weight:900; font-size:14px; color:#f8fafc;">실시간 월덕 광장</span>
+          <span style="display:inline-block; width:6px; height:6px; background:#34d399; border-radius:50%; box-shadow:0 0 6px #34d399;"></span>
+        </div>
+        <button onclick="togglePlazaChat()" style="background:transparent; border:none; color:#94a3b8; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+
+      <!-- 메시지 스크롤 영역 -->
+      <div id="plaza-chat-messages" style="flex:1; padding:14px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; font-size:13px;">
+        <div style="text-align:center; color:#64748b; font-size:11.5px; padding:10px;">
+          🦆 월덕 실시간 광장에 오신 것을 환영합니다!
+        </div>
+      </div>
+
+      <!-- 메시지 입력 영역 -->
+      <div style="padding:12px; background:rgba(30,41,59,0.8); border-top:1px solid rgba(255,255,255,0.08);">
+        <% if (typeof user !== 'undefined' && user && user.id) { %>
+          <form id="plaza-chat-form" onsubmit="sendPlazaChatMessage(event)" style="display:flex; gap:8px;">
+            <input type="text" id="plaza-chat-input" placeholder="광장에 메시지 남기기..." maxlength="150" autocomplete="off" style="flex:1; background:rgba(15,23,42,0.9); border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:9px 12px; color:#fff; font-size:12.5px; outline:none;" onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'">
+            <button type="submit" style="background:#6366f1; border:none; color:#fff; border-radius:10px; padding:0 14px; font-weight:800; font-size:12px; cursor:pointer; transition:background 0.2s;">
+              전송
+            </button>
+          </form>
+        <% } else { %>
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 6px;">
+            <span style="font-size:11.5px; color:#94a3b8;">로그인 후 채팅할 수 있습니다.</span>
+            <a href="/auth/discord" class="btn-login-discord" style="padding:5px 10px; font-size:11px;">
+              Discord 로그인
+            </a>
+          </div>
+        <% } %>
+      </div>
+
     </div>
-    <p>© 2026 월덕 (WTRD) · 실시간 디스코드 가상 경제 플랫폼</p>
-  </footer>
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
     window.__currentUser = {
       id: '<%= (typeof user !== "undefined" && user && user.id) ? user.id : "guest" %>',
       username: '<%= (typeof user !== "undefined" && user && user.username) ? user.username : "여행자" %>',
-      avatar: '<%= (typeof user !== "undefined" && user && user.avatar) ? user.avatar : "https://cdn.discordapp.com/embed/avatars/0.png" %>'
+      avatar: '<%= (typeof user !== "undefined" && user && user.avatar) ? user.avatar : "https://cdn.discordapp.com/embed/avatars/0.png" %>',
+      title: '<%= (typeof userLoadout !== "undefined" && userLoadout && userLoadout.TITLE) ? userLoadout.TITLE.name : "" %>'
     };
+
+    let isChatOpen = false;
+
+    function togglePlazaChat() {
+      const panel = document.getElementById('plaza-chat-panel');
+      if (!panel) return;
+      isChatOpen = !isChatOpen;
+      panel.style.display = isChatOpen ? 'flex' : 'none';
+      if (isChatOpen) {
+        document.getElementById('chat-unread-dot').style.display = 'none';
+        const inp = document.getElementById('plaza-chat-input');
+        if (inp) inp.focus();
+        loadRecentChatHistory();
+      }
+    }
+
+    async function loadRecentChatHistory() {
+      try {
+        const res = await fetch('/api/chat/messages?roomId=1&limit=30');
+        const data = await res.json();
+        const list = data.messages || data.data || [];
+        const box = document.getElementById('plaza-chat-messages');
+        if (!box) return;
+        
+        if (list.length > 0) {
+          box.innerHTML = '';
+          list.forEach(msg => appendChatMessage(msg));
+          box.scrollTop = box.scrollHeight;
+        }
+      } catch (e) {}
+    }
+
+    function formatChatDateTime(raw) {
+      if (!raw) raw = Date.now();
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) return '';
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const mins = String(d.getMinutes()).padStart(2, '0');
+      return `${year}.${month}.${day} ${hours}:${mins}`;
+    }
+
+    const __renderedChatMsgIds = new Set();
+    function appendChatMessage(msg) {
+      const box = document.getElementById('plaza-chat-messages');
+      if (!box || !msg) return;
+
+      const msgKey = msg.id ? ('id_' + msg.id) : ('tmp_' + (msg.created_at || msg.timestamp || '') + '_' + Math.random());
+      if (__renderedChatMsgIds.has(msgKey)) return;
+      __renderedChatMsgIds.add(msgKey);
+      if (__renderedChatMsgIds.size > 300) {
+        const first = __renderedChatMsgIds.values().next().value;
+        __renderedChatMsgIds.delete(first);
+      }
+
+      const myId = (window.__currentUser && window.__currentUser.id) ? String(window.__currentUser.id) : '';
+      const isMe = myId && myId !== 'guest' && (String(msg.user_id) === myId || String(msg.userId) === myId);
+      const username = msg.username || msg.author || '익명';
+      const avatar = msg.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+      const content = msg.message || msg.content || '';
+      const title = msg.title || msg.user_title || (isMe ? window.__currentUser.title : '');
+      const timeStr = formatChatDateTime(msg.created_at || msg.timestamp);
+
+      const isMegaphone = content.startsWith('📢') || username.includes('확성기');
+
+      const msgDiv = document.createElement('div');
+      msgDiv.style.marginBottom = '12px';
+
+      if (isMegaphone) {
+        // 📢 [전체 확성기] 골드 그라데이션 방송 버블
+        msgDiv.style.display = 'flex';
+        msgDiv.style.justifyContent = 'center';
+        msgDiv.style.width = '100%';
+        msgDiv.innerHTML = `
+          <div style="width:100%; background:linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(217,119,6,0.25) 100%); border:1.5px solid rgba(245,158,11,0.6); border-radius:12px; padding:10px 14px; color:#fef3c7; font-size:13px; font-weight:700; box-shadow:0 4px 15px rgba(245,158,11,0.25); text-align:center;">
+            <div style="font-size:11px; font-weight:900; color:#fbbf24; margin-bottom:4px; display:flex; align-items:center; justify-content:center; gap:4px;">
+              <span>📢</span> <span>${escapeHtml(username)}</span> <span style="color:#fde68a; font-size:10px; font-family:'JetBrains Mono',monospace;">${timeStr}</span>
+            </div>
+            <div style="font-size:13.5px; color:#ffffff; font-weight:800; word-break:break-word;">
+              ${escapeHtml(content.replace(/^📢\s*(\[전체 확성기\])?\s*/, ''))}
+            </div>
+          </div>
+        `;
+        box.appendChild(msgDiv);
+        box.scrollTop = box.scrollHeight;
+        return;
+      }
+
+      if (isMe) {
+        // 💬 내가 보낸 메시지 (우측 정렬 + 보라/인디고 그라데이션)
+        msgDiv.style.display = 'flex';
+        msgDiv.style.justifyContent = 'flex-end';
+        msgDiv.style.alignItems = 'flex-end';
+        msgDiv.style.gap = '6px';
+
+        msgDiv.innerHTML = `
+          <span style="font-size:10px; color:#64748b; font-family:'JetBrains Mono',monospace; white-space:nowrap; margin-bottom:2px;">${timeStr}</span>
+          <div style="max-width:75%; display:flex; flex-direction:column; align-items:flex-end;">
+            <div style="background:linear-gradient(135deg,#4f46e5 0%,#6366f1 100%); border:1px solid rgba(165,180,252,0.4); border-radius:14px 14px 2px 14px; padding:8px 12px; color:#ffffff; font-size:13px; line-height:1.45; word-break:break-word; box-shadow:0 4px 12px rgba(79,70,229,0.3);">
+              ${escapeHtml(content)}
+            </div>
+          </div>
+        `;
+      } else {
+        // 💬 상대방이 보낸 메시지 (좌측 정렬 + 프로필 아바타 + 다크 글래스)
+        let titleBadge = '';
+        if (title) {
+          titleBadge = `<span style="background:linear-gradient(135deg,#38bdf8,#818cf8); color:#fff; font-size:9.5px; font-weight:800; padding:1px 5px; border-radius:4px;">${title}</span>`;
+        }
+
+        msgDiv.style.display = 'flex';
+        msgDiv.style.alignItems = 'flex-start';
+        msgDiv.style.gap = '8px';
+
+        msgDiv.innerHTML = `
+          <img src="${avatar}" style="width:32px; height:32px; border-radius:50%; border:1.5px solid rgba(255,255,255,0.15); flex-shrink:0; margin-top:2px;">
+          <div style="flex:1; min-width:0;">
+            <div style="display:flex; align-items:center; gap:6px; font-size:11.5px; margin-bottom:3px;">
+              <span style="font-weight:700; color:#f1f5f9;">${escapeHtml(username)}</span>
+              ${titleBadge}
+            </div>
+            <div style="display:flex; align-items:flex-end; gap:6px; max-width:100%;">
+              <div style="background:rgba(30,41,59,0.85); border:1px solid rgba(255,255,255,0.12); border-radius:2px 14px 14px 14px; padding:8px 12px; color:#f8fafc; font-size:13px; line-height:1.45; word-break:break-word; box-shadow:0 2px 8px rgba(0,0,0,0.3); max-width:80%;">
+                ${escapeHtml(content)}
+              </div>
+              <span style="font-size:10px; color:#64748b; font-family:'JetBrains Mono',monospace; white-space:nowrap; margin-bottom:2px;">${timeStr}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      box.appendChild(msgDiv);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+
+    async function sendPlazaChatMessage(e) {
+      e.preventDefault();
+      const inp = document.getElementById('plaza-chat-input');
+      if (!inp) return;
+      const text = inp.value.trim();
+      if (!text) return;
+      inp.value = '';
+
+      try {
+        const res = await fetch('/api/chat/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomId: 1, message: text })
+        });
+        const data = await res.json();
+        if (!data.success && data.error) {
+          showSocketToast('⚠️ ' + data.error);
+        }
+      } catch (err) {
+        console.error('채팅 전송 에러:', err);
+      }
+    }
 
     // ⚡ Socket.IO 실시간 연동 클라이언트
     (function initSocketIO() {
@@ -53,37 +294,72 @@
 
       socket.on('connect', () => {
         console.log('⚡ [Socket.IO] Connected to Wolduck Realtime Network (ID: ' + socket.id + ')');
+        socket.emit('chat:join', { roomId: 1 });
       });
 
-      // 1. 실시간 주식 시세 업데이트
-      socket.on('market:update', (data) => {
-        if (data && data.stocks && Array.isArray(data.stocks)) {
-          data.stocks.forEach(stock => {
-            const priceEl = document.querySelector(`[data-stock-price="${stock.stock_id}"]`);
-            if (priceEl) {
-              const oldPrice = parseInt(priceEl.innerText.replace(/[^0-9]/g, '')) || 0;
-              const newPrice = Number(stock.price);
-              priceEl.innerText = newPrice.toLocaleString() + '원';
-              priceEl.style.color = newPrice >= oldPrice ? '#34d399' : '#f87171';
-              setTimeout(() => { priceEl.style.color = '#38bdf8'; }, 2000);
-            }
-          });
+      // 실시간 채팅 수신
+      socket.on('chat:message', (msg) => {
+        appendChatMessage(msg);
+        if (!isChatOpen) {
+          const dot = document.getElementById('chat-unread-dot');
+          if (dot) dot.style.display = 'inline-block';
         }
       });
 
-      // 2. 실시간 잔액 동기화
-      socket.on('user:balance_update', (data) => {
-        if (data && data.userId === window.__currentUser.id) {
+      // 1. 실시간 주식 시세 업데이트 (market:update & stock:tick)
+      function updateLiveStockPrices(stocks) {
+        if (!Array.isArray(stocks)) return;
+        stocks.forEach(stock => {
+          const priceEls = document.querySelectorAll(`[data-stock-price="${stock.stock_id}"]`);
+          priceEls.forEach(priceEl => {
+            const oldPrice = parseInt(priceEl.innerText.replace(/[^0-9]/g, '')) || 0;
+            const newPrice = Number(stock.price);
+            priceEl.innerText = newPrice.toLocaleString() + '원';
+            priceEl.style.color = newPrice >= oldPrice ? '#34d399' : '#f87171';
+            setTimeout(() => { priceEl.style.color = '#38bdf8'; }, 2000);
+          });
+        });
+      }
+      socket.on('market:update', (data) => {
+        if (data && data.stocks) updateLiveStockPrices(data.stocks);
+      });
+      socket.on('stock:tick', (data) => {
+        if (data && data.stocks) updateLiveStockPrices(data.stocks);
+      });
+
+      // 2. 실시간 잔액 동기화 (user:balance & user:balance_update)
+      function updateLiveBalances(cash, bank) {
+        if (cash !== undefined && cash !== null) {
+          const cashStr = Number(cash).toLocaleString() + '원';
           const cashEl = document.getElementById('user-cash-display');
+          if (cashEl) cashEl.innerText = cashStr;
+          const modalCashEl = document.getElementById('modal-profile-cash');
+          if (modalCashEl) modalCashEl.innerText = cashStr;
+        }
+        if (bank !== undefined && bank !== null) {
+          const bankStr = Number(bank).toLocaleString() + '원';
           const bankEl = document.getElementById('user-bank-display');
-          if (cashEl && data.cash !== undefined) cashEl.innerText = Number(data.cash).toLocaleString() + '원';
-          if (bankEl && data.bank !== undefined) bankEl.innerText = Number(data.bank).toLocaleString() + '원';
+          if (bankEl) bankEl.innerText = bankStr;
+          const modalBankEl = document.getElementById('modal-profile-bank');
+          if (modalBankEl) modalBankEl.innerText = bankStr;
+        }
+      }
+
+      socket.on('user:balance', (data) => {
+        if (data) updateLiveBalances(data.cash, data.bank);
+      });
+      socket.on('user:balance_update', (data) => {
+        if (data && (!data.userId || data.userId === window.__currentUser.id)) {
+          updateLiveBalances(data.cash, data.bank);
         }
       });
 
       // 3. 글로벌 잭팟 및 공지 토스트 알림
       socket.on('broadcast:jackpot', (data) => {
         showSocketToast('🎰 ' + (data.message || `${data.username}님이 ${Number(data.prize).toLocaleString()}원 잭팟에 당첨되었습니다!`));
+      });
+      socket.on('broadcast:megaphone', (data) => {
+        showSocketToast('📢 ' + (data.message || `${data.username}: ${data.text}`));
       });
 
       function showSocketToast(msg) {

@@ -5,7 +5,7 @@
 - [SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md) — 전체 시스템 설계
 
 ## 🔧 운영
-- [OPERATIONS.md](./OPERATIONS.md) — 로컬 개발 + VPS 배포
+- [OPERATIONS.md](./OPERATIONS.md) — 로컬 개발 + 미니 PC 배포
 - [SQL_LOCKDOWN_POLICY.md](./SQL_LOCKDOWN_POLICY.md) — DB 백업 정책
 
 ## 🤖 봇 기능

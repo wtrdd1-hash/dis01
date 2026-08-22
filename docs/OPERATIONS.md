@@ -12,27 +12,39 @@ node src/index.js
 
 `.env.example`에는 플레이스홀더만 유지합니다. 실제 토큰·비밀번호·키는 `.env`에만 저장하고 Git에 추가하지 않습니다.
 
-## 2. VPS 배포
+## 2. 미니 PC 접속 및 배포
 
+### 2.1 SSH 접속
 ```bash
-ssh vps-wtrdd
-mkdir -p /tmp/dis01-update
-chmod 777 /tmp/dis01-update
+# 도메인 기반 접속 (IP 변경 시 자동 반영)
+ssh minipc
+# 또는
+ssh -p 34567 -i C:\Users\sds\.ssh\id_ed25519 wtrdd@ssh.easy-scraping.com
+```
 
-# 로컬 PowerShell에서:
-scp <files> vps-wtrdd:/tmp/dis01-update/
+### 2.2 자동 배포 (PowerShell)
+```powershell
+# 테스트 환경 배포 (불변 빌드 & 검증)
+.\scripts\deploy_test.ps1
 
-# VPS에서:
-sudo -n docker cp /tmp/dis01-update/<file> wtrdd-discord-app:/app/<path>
-sudo -n docker exec wtrdd-discord-app chmod 666 /app/<file>
-sudo -n docker restart wtrdd-discord-app
+# 운영 환경 배포 (백업 & 카나리 & 롤백 게이트)
+.\scripts\deploy_prod.ps1
+```
+
+### 2.3 Docker 컨테이너 전체 재시작 및 관리
+```bash
+# 미니 PC 접속 후 Docker 재시작
+ssh minipc "cd /home/wtrdd/discord-bot && docker compose restart"
+
+# 또는 전체 다운 후 재기동
+ssh minipc "cd /home/wtrdd/discord-bot && docker compose down && docker compose --profile app up -d"
 ```
 
 ## 3. 데이터 초기화
 
 ```bash
-# VPS 컨테이너 안에서 실행
-sudo -n docker exec wtrdd-discord-app node /app/scripts/reset_user_data.js
+# 미니 PC 컨테이너 안에서 실행
+ssh minipc "docker exec wtrdd-discord-app node /app/scripts/reset_user_data.js"
 ```
 
 ## 4. 백업
@@ -43,7 +55,7 @@ sudo -n docker exec wtrdd-discord-app node /app/scripts/reset_user_data.js
 ```
 zip 생성 위치: `\.bak\full_YYYYMMDD_HHMMSS\full_backup_*.zip`
 
-### 4.2 VPS
+### 4.2 미니 PC 서버
 - 도커 mysql → `/home/wtrdd/backups/`
 - 자동 6시간 주기 (`backup_engine.js`)
 - 컨테이너 안 `backups/` 디렉토리 (`/app/backups/`)

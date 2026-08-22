@@ -55,7 +55,15 @@ module.exports = {
         }
       }
 
-      const reward = SUBSIDY.AMOUNT;
+      let subsidyMult = 1.0;
+      try {
+        const { getDynamicSettings } = require('../../utils/economyBalancer');
+        const dyn = getDynamicSettings();
+        if (dyn && Number.isFinite(Number(dyn.subsidyMultiplier)) && Number(dyn.subsidyMultiplier) > 0) {
+          subsidyMult = Number(dyn.subsidyMultiplier);
+        }
+      } catch (e) {}
+      const reward = Math.max(1, Math.floor(SUBSIDY.AMOUNT * subsidyMult));
       const claimed = await tryClaimCooldown(userId, 'last_subsidy', cooldownMs);
       if (!claimed) {
         const embed = createWarningEmbed(

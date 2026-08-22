@@ -287,10 +287,18 @@ async function sendMegaphone(userId, username, message, theme = 'gold') {
       activeUntil: activeUntil.toISOString()
     };
 
-    // Socket.IO 실시간 브로드캐스트
+    // Socket.IO 실시간 브로드캐스트 & 광장 채팅 실시간 전파
     if (global.__io) {
       global.__io.emit('megaphone:shout', broadcastPayload);
     }
+    try {
+      const chat = require('../web/chatService');
+      await chat.postSystemNotice(`📢 [전체 확성기] ${cleanMsg}`, {
+        userId,
+        username: `📢 ${username}`,
+        avatar: ''
+      });
+    } catch (e) {}
 
     return {
       success: true,
