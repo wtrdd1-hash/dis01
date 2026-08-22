@@ -118,16 +118,32 @@ function computePayout(betAmount, multiplier) {
   return assertMoneyRange(payout);
 }
 
-function withUserLock(userId, fn) {
+async function withUserLock(userId, fn) {
+  if (Array.isArray(userId)) {
+    const keys = [...new Set(userId.map(String))].sort();
+    let currentFn = fn;
+    for (let i = keys.length - 1; i >= 0; i--) {
+      const k = keys[i];
+      const nextFn = currentFn;
+      currentFn = () => withUserLock(k, nextFn);
+    }
+    return currentFn();
+  }
   const key = String(userId);
+  let release;
+  const lockPromise = new Promise(resolve => { release = resolve; });
   const prev = userLocks.get(key) || Promise.resolve();
-  const next = prev.then(() => fn(), () => fn());
-  const tail = next.catch(() => {});
-  userLocks.set(key, tail);
-  tail.finally(() => {
-    if (userLocks.get(key) === tail) userLocks.delete(key);
-  });
-  return next;
+  userLocks.set(key, lockPromise);
+
+  await prev.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (userLocks.get(key) === lockPromise) {
+      userLocks.delete(key);
+    }
+  }
 }
 
 const COOLDOWN_COLUMNS = new Set(['last_daily', 'last_subsidy', 'last_work']);

@@ -11,8 +11,7 @@ const CONTAINERS = [
   { id: 'test-app', name: '테스트 환경', container: 'wtrdd-test-app' },
   { id: 'proxy', name: '엣지 프록시', container: 'wtrdd-edge-proxy' },
   { id: 'tunnel', name: 'Cloudflare 터널', container: 'wtrdd-cloudflared' },
-  { id: 'autoheal', name: '컨테이너 자동복구', container: 'wtrdd-autoheal' },
-  { id: 'modelrelay', name: 'AI 모델 릴레이', container: 'modelrelay' }
+  { id: 'autoheal', name: '컨테이너 자동복구', container: 'wtrdd-autoheal' }
 ];
 
 let lastCpuSample = null;

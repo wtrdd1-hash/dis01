@@ -60,6 +60,23 @@ class EconomyCore {
       applyCashDelta: money.applyCashDelta,
       applyBankTransfer: money.applyBankTransfer,
       
+      transfer: async (fromUserId, toUserId, amount, reason = '') => {
+        const amt = moneyValue.safeBigInt(amount);
+        if (amt <= 0n) throw new Error('송금액은 0보다 커야 합니다.');
+        const u1 = String(fromUserId);
+        const u2 = String(toUserId);
+
+        return money.withUserLock([u1, u2], async () => {
+          const [sender] = await pool.query('SELECT cash FROM users WHERE discord_id = ?', [u1]);
+          if (!sender.length || moneyValue.safeBigInt(sender[0].cash) < amt) {
+            throw new Error('잔액이 부족합니다.');
+          }
+          await pool.query('UPDATE users SET cash = cash - ? WHERE discord_id = ?', [amt.toString(), u1]);
+          await pool.query('UPDATE users SET cash = cash + ? WHERE discord_id = ?', [amt.toString(), u2]);
+          return { success: true, amount: amt };
+        });
+      },
+      
       getUserBalance: async (userId) => {
         const [rows] = await pool.query(
           'SELECT cash, bank, clicker_level, total_clicks FROM users WHERE discord_id = ? LIMIT 1',
@@ -183,7 +200,7 @@ class EconomyCore {
             String(toUserId),
             (fromCash - amt).toString(),
             desc
-          ]);
+          ]).catch(() => {});
 
           return {
             success: true,

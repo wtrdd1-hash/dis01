@@ -46,6 +46,9 @@ test('동시성(Race Condition) 및 트랜잭션 안전성 테스트', async (t)
     }
 
     const results = await Promise.allSettled(promises);
+    if (results.some(r => r.status === 'rejected')) {
+      console.log('REJECTION SAMPLE:', results.find(r => r.status === 'rejected')?.reason);
+    }
     const successCount = results.filter(r => r.status === 'fulfilled').length;
     assert.ok(successCount > 0, '최소 1개 이상의 송금이 성공해야 함');
 
