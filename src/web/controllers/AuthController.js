@@ -76,18 +76,29 @@ class AuthController {
         return res.redirect('/stocks?error=user_fetch_failed');
       }
 
-      // Format avatar URL
+      // Format avatar URL and latest display name
+      const username = discordUser.global_name || discordUser.username || discordUser.tag || '사용자';
+      const isGif = discordUser.avatar && discordUser.avatar.startsWith('a_');
       let avatarUrl = 'https://cdn.discordapp.com/embed/avatars/0.png';
       if (discordUser.avatar) {
-        avatarUrl = `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png?size=128`;
+        avatarUrl = `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.${isGif ? 'gif' : 'png'}?size=256`;
+      } else {
+        const defaultIndex = (BigInt(discordUser.id) >> 22n) % 6n;
+        avatarUrl = `https://cdn.discordapp.com/embed/avatars/${defaultIndex}.png`;
       }
 
-      // Ensure user exists in DB
-      await UserModel.findOrCreate(discordUser.id, discordUser.username || '사용자', avatarUrl);
+      // Ensure user exists and auto-update freshest username & avatar in DB
+      const { pool } = require('../../config/database');
+      await pool.query(
+        `INSERT INTO users (discord_id, username, avatar, cash, bank)
+         VALUES (?, ?, ?, 50000, 0)
+         ON DUPLICATE KEY UPDATE username = VALUES(username), avatar = VALUES(avatar)`,
+        [discordUser.id, username, avatarUrl]
+      );
 
       const sessionUser = {
         id: discordUser.id,
-        username: discordUser.username,
+        username,
         avatar: avatarUrl,
         isDiscordUser: true
       };
