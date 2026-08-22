@@ -1384,6 +1384,125 @@ function createAdminRoutes(getSessionUser) {
     }
   });
 
+  // 🗑️ 특정 유저 개별 삭제 / 초기화 API (관리자 전용)
+  router.post(['/action/delete-single-user', '/action/delete-user'], async (req, res) => {
+    const session = req.adminSession;
+    const { userId, deleteMode, tables } = req.body;
+    if (!userId) return res.status(400).json({ success: false, error: '삭제/초기화할 유저 ID를 입력하세요.' });
+
+    try {
+      const resolved = await resolveTargetUser(userId, { createIfMissing: false });
+      if (!resolved.user) return res.status(resolved.status || 404).json({ success: false, error: resolved.error });
+
+      const targetId = String(resolved.user.discord_id);
+      const targetName = resolved.user.username || `유저_${targetId.slice(-4)}`;
+
+      // 👑 관리자 계정 보호 가드
+      if (config.isAdmin(targetId)) {
+        return res.status(403).json({
+          success: false,
+          error: '👑 봇 관리자 계정은 삭제하거나 초기화할 수 없습니다.'
+        });
+      }
+
+      const mode = deleteMode === 'complete' ? 'complete' : 'reset';
+      const selectedTables = Array.isArray(tables) ? tables : ['users', 'user_stocks', 'user_businesses', 'user_loan_credit', 'gambling_logs', 'stock_transactions', 'economy_logs', 'items', 'titles'];
+
+      await withUserLock(targetId, async () => {
+        await withTransaction(async (cn) => {
+          // 1. 주식
+          if (selectedTables.includes('user_stocks') || mode === 'complete') {
+            await cn.query('DELETE FROM user_stocks WHERE user_id = ?', [targetId]);
+          }
+          // 2. 사업체
+          if (selectedTables.includes('user_businesses') || mode === 'complete') {
+            await cn.query('DELETE FROM user_businesses WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM user_business_meta WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM business_hq WHERE user_id = ?', [targetId]).catch(() => {});
+          }
+          // 3. 대출/신용
+          if (selectedTables.includes('user_loan_credit') || mode === 'complete') {
+            await cn.query('DELETE FROM user_loan_credit WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM loan_contracts WHERE user_id = ?', [targetId]).catch(() => {});
+          }
+          // 4. 도박 로그
+          if (selectedTables.includes('gambling_logs') || mode === 'complete') {
+            await cn.query('DELETE FROM gambling_logs WHERE user_id = ?', [targetId]).catch(() => {});
+          }
+          // 5. 주식 거래 로그
+          if (selectedTables.includes('stock_transactions') || mode === 'complete') {
+            await cn.query('DELETE FROM stock_transactions WHERE user_id = ?', [targetId]).catch(() => {});
+          }
+          // 6. 경제 로그
+          if (selectedTables.includes('economy_logs') || mode === 'complete') {
+            await cn.query('DELETE FROM economy_logs WHERE user_id = ?', [targetId]).catch(() => {});
+          }
+          // 7. 인벤토리/아이템/칭호/치장
+          if (selectedTables.includes('items') || mode === 'complete') {
+            await cn.query('DELETE FROM user_items WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM user_titles WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM user_cosmetics WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM user_drill WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM drill_equipment WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM duck_house WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM user_ducks WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM lotto_tickets WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM toto_tickets WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM daily_attendance WHERE user_id = ?', [targetId]).catch(() => {});
+            await cn.query('DELETE FROM work_stats WHERE user_id = ?', [targetId]).catch(() => {});
+          }
+
+          // 8. Users 메인 테이블 처리
+          if (mode === 'complete') {
+            await cn.query('DELETE FROM users WHERE discord_id = ?', [targetId]);
+          } else {
+            await cn.query(`
+              UPDATE users
+              SET cash = 10000, bank = 0, stock_val = 0,
+                  clicker_level = 1, auto_miner_level = 0, total_clicks = 0,
+                  daily_streak = 0, last_daily = NULL, last_work = NULL, last_subsidy = NULL,
+                  gamble_turns = 50, last_turn_update = NOW(),
+                  mine_genre = 'classic',
+                  is_banned = 0, banned_until = NULL, ban_reason = NULL, banned_at = NULL, banned_by = NULL,
+                  title_equipped = NULL, theme_equipped = NULL
+              WHERE discord_id = ?
+            `, [targetId]);
+          }
+        });
+      });
+
+      try {
+        await logAdminAction(session.id, session.username || '관리자', mode === 'complete' ? 'DELETE_USER' : 'RESET_USER', targetId, {
+          targetName,
+          deleteMode: mode,
+          tables: selectedTables
+        }, req);
+      } catch (e) {}
+
+      if (global.__io) {
+        global.__io.emit('admin:event', {
+          type: 'USER_DELETED',
+          userId: targetId,
+          deleteMode: mode,
+          timestamp: Date.now()
+        });
+      }
+
+      return res.json({
+        success: true,
+        targetId,
+        targetName,
+        deleteMode: mode,
+        message: mode === 'complete'
+          ? `🗑️ [@${targetName}] 님의 계정 및 모든 데이터가 완전히 영구 삭제되었습니다.`
+          : `🧹 [@${targetName}] 님의 선택 데이터가 초기화되었습니다. (현금 1만 기본값)`
+      });
+    } catch (e) {
+      console.error('[/action/delete-single-user]', e);
+      return res.status(500).json({ success: false, error: '유저 삭제/초기화 처리 중 오류가 발생했습니다.' });
+    }
+  });
+
   // 🚫 유저 로그인 차단 (시간 단위 또는 영구) API
   router.post('/action/user-ban', async (req, res) => {
     const session = req.adminSession;

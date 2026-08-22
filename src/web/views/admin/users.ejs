@@ -19,6 +19,10 @@
         <span style="color:#94a3b8;font-size:16px;">🔍</span>
         <input type="text" id="admin-user-search" placeholder="닉네임 / Discord ID 실시간 검색..." oninput="filterAdminUsers()" aria-label="유저 검색">
       </div>
+      <button type="button" onclick="openDirectUserDeletePrompt()" class="dx-btn dx-btn--danger" style="background:#b91c1c; border-color:#ef4444;" title="특정 유저의 Discord ID를 직접 입력하여 삭제/초기화">
+        <span style="font-size:14px;">🗑️</span>
+        <span>특정 유저 삭제</span>
+      </button>
       <button type="button" onclick="refreshUserWealthTable()" class="dx-btn dx-btn--primary">
         <span style="font-size:14px;">↻</span>
         <span>자산 갱신</span>
@@ -450,7 +454,188 @@
       adminNotice(false, '차단 해제 통신 오류');
     }
   }
+
+  // 🗑️ 특정 유저 개별 삭제/초기화 모달 컨트롤
+  function openDirectUserDeletePrompt() {
+    const input = prompt('삭제/초기화할 대상 유저의 Discord ID (숫자) 또는 닉네임을 입력하세요:');
+    if (!input || !input.trim()) return;
+    openSingleUserDeleteModal(input.trim(), input.trim());
+  }
+
+  function openSingleUserDeleteModal(userId, username) {
+    document.getElementById('delete-target-id').value = userId;
+    document.getElementById('delete-target-name').textContent = '@' + username + ' (' + userId + ')';
+    document.getElementById('delete-mode-complete').checked = true;
+    toggleDeleteModeUI();
+    document.getElementById('user-delete-modal').style.display = 'flex';
+  }
+
+  function closeSingleUserDeleteModal() {
+    document.getElementById('user-delete-modal').style.display = 'none';
+  }
+
+  function toggleDeleteModeUI() {
+    const isComplete = document.getElementById('delete-mode-complete').checked;
+    const tableOptions = document.getElementById('delete-table-options-container');
+    const warningText = document.getElementById('delete-mode-warning-text');
+    const submitBtn = document.getElementById('btn-submit-user-delete');
+    
+    if (isComplete) {
+      tableOptions.style.opacity = '0.4';
+      tableOptions.style.pointerEvents = 'none';
+      warningText.innerHTML = '⚠️ <b>[완전 삭제 모드]</b> 유저 계정과 모든 보유 자산(현금/예금/주식/사업/로그/인벤토리)이 DB에서 <b>영구히 완전히 삭제(DELETE)</b>됩니다.';
+      submitBtn.textContent = '🔥 계정 및 전 데이터 영구 삭제 실행';
+      submitBtn.style.background = 'linear-gradient(135deg, #991b1b, #dc2626)';
+    } else {
+      tableOptions.style.opacity = '1';
+      tableOptions.style.pointerEvents = 'auto';
+      warningText.innerHTML = '🧹 <b>[데이터 초기화 모드]</b> 유저 계정은 보존되며, 아래 체크된 항목만 삭제되고 <b>현금 10,000원 기본값</b>으로 리셋됩니다.';
+      submitBtn.textContent = '🧹 선택 데이터 초기화 실행';
+      submitBtn.style.background = 'linear-gradient(135deg, #d97706, #f59e0b)';
+    }
+  }
+
+  function toggleAllDeleteTables(selectAll) {
+    document.querySelectorAll('.single-delete-table-checkbox').forEach(cb => {
+      cb.checked = selectAll;
+    });
+  }
+
+  async function submitSingleUserDelete() {
+    const userId = document.getElementById('delete-target-id').value;
+    if (!userId) return;
+
+    const isComplete = document.getElementById('delete-mode-complete').checked;
+    const mode = isComplete ? 'complete' : 'reset';
+    const checkedTables = Array.from(document.querySelectorAll('.single-delete-table-checkbox:checked')).map(cb => cb.value);
+
+    if (!isComplete && checkedTables.length === 0) {
+      return dx.showToast('초기화할 테이블을 최소 1개 이상 선택하세요.', 'warning');
+    }
+
+    const confirmMsg = isComplete
+      ? `🚨 정말로 유저 [${userId}]의 계정과 모든 데이터를 완전히 영구 삭제하시겠습니까?\n이 작업은 절대 되돌릴 수 없습니다!`
+      : `⚠️ 유저 [${userId}]의 선택된 데이터를 초기화하시겠습니까? (현금 1만 기본값으로 리셋)`;
+
+    if (!confirm(confirmMsg)) return;
+
+    const btn = document.getElementById('btn-submit-user-delete');
+    btn.disabled = true;
+    btn.textContent = '⏳ 처리 중...';
+
+    try {
+      const res = await adminFetch('/api/admin/action/delete-single-user', {
+        method: 'POST',
+        body: {
+          userId,
+          deleteMode: mode,
+          tables: checkedTables
+        }
+      });
+
+      if (res.success) {
+        alert(res.message || '삭제/초기화 처리가 완료되었습니다.');
+        closeSingleUserDeleteModal();
+        location.reload();
+      } else {
+        alert('삭제 실패: ' + (res.error || '오류가 발생했습니다.'));
+      }
+    } catch (e) {
+      alert('서버 통신 오류가 발생했습니다.');
+    } finally {
+      btn.disabled = false;
+      toggleDeleteModeUI();
+    }
+  }
 </script>
+
+<!-- 🗑️ 특정 유저 개별 삭제 / 초기화 모달 -->
+<div id="user-delete-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.88); backdrop-filter:blur(8px); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#0f172a; border:2px solid rgba(239,68,68,0.5); border-radius:20px; padding:28px; width:100%; max-width:540px; box-shadow:0 25px 60px rgba(0,0,0,0.9); max-height:90vh; overflow-y:auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:14px; margin-bottom:18px;">
+      <h3 style="margin:0; font-size:1.25rem; color:#f87171; font-weight:900; display:flex; align-items:center; gap:8px;">
+        <span>🗑️</span> 특정 유저 데이터 삭제 및 초기화
+      </h3>
+      <button type="button" onclick="closeSingleUserDeleteModal()" style="background:none; border:none; color:#94a3b8; font-size:1.6rem; cursor:pointer;">&times;</button>
+    </div>
+
+    <input type="hidden" id="delete-target-id">
+
+    <div style="background:rgba(30,41,59,0.7); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px; margin-bottom:16px;">
+      <div style="font-size:0.8rem; color:#94a3b8; font-weight:700;">대상 유저</div>
+      <div id="delete-target-name" style="font-size:1.15rem; font-weight:900; color:#38bdf8; margin-top:2px;">@유저</div>
+    </div>
+
+    <!-- 삭제 모드 선택 -->
+    <div style="margin-bottom:16px;">
+      <label style="font-size:0.85rem; color:#cbd5e1; font-weight:800; display:block; margin-bottom:8px;">삭제/초기화 모드 선택</label>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <label style="display:flex; align-items:center; gap:8px; padding:12px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.4); border-radius:10px; cursor:pointer;">
+          <input type="radio" name="deleteModeRadio" id="delete-mode-complete" value="complete" checked onchange="toggleDeleteModeUI()">
+          <div>
+            <div style="font-weight:900; color:#f87171; font-size:0.88rem;">🔥 완전 영구 삭제</div>
+            <div style="font-size:0.75rem; color:#94a3b8;">계정 자체를 완전히 제거</div>
+          </div>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; padding:12px; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.4); border-radius:10px; cursor:pointer;">
+          <input type="radio" name="deleteModeRadio" id="delete-mode-reset" value="reset" onchange="toggleDeleteModeUI()">
+          <div>
+            <div style="font-weight:900; color:#fbbf24; font-size:0.88rem;">🧹 데이터 초기화</div>
+            <div style="font-size:0.75rem; color:#94a3b8;">계정 유지 + 1만 리셋</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div id="delete-mode-warning-text" style="font-size:0.82rem; color:#fbbf24; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:10px; padding:10px 14px; margin-bottom:16px; line-height:1.4;">
+      <!-- 동적 경고 문구 -->
+    </div>
+
+    <!-- 테이블 선택 (초기화 모드일 때 선택 가능) -->
+    <div id="delete-table-options-container" style="margin-bottom:20px; transition:opacity 0.2s ease;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span style="font-size:0.82rem; color:#94a3b8; font-weight:700;">초기화 대상 테이블 선택</span>
+        <div style="display:flex; gap:6px;">
+          <button type="button" onclick="toggleAllDeleteTables(true)" style="background:none; border:none; color:#38bdf8; font-size:0.75rem; font-weight:700; cursor:pointer;">전체선택</button>
+          <span style="color:#64748b;">|</span>
+          <button type="button" onclick="toggleAllDeleteTables(false)" style="background:none; border:none; color:#94a3b8; font-size:0.75rem; font-weight:700; cursor:pointer;">선택해제</button>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; color:#cbd5e1; background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); cursor:pointer;">
+          <input type="checkbox" class="single-delete-table-checkbox" value="user_stocks" checked> 📊 보유 주식 전량
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; color:#cbd5e1; background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); cursor:pointer;">
+          <input type="checkbox" class="single-delete-table-checkbox" value="user_businesses" checked> 🏢 사업체 및 메타
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; color:#cbd5e1; background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); cursor:pointer;">
+          <input type="checkbox" class="single-delete-table-checkbox" value="user_loan_credit" checked> 💳 대출 및 신용도
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; color:#cbd5e1; background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); cursor:pointer;">
+          <input type="checkbox" class="single-delete-table-checkbox" value="gambling_logs" checked> 🎰 도박 기록 로그
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; color:#cbd5e1; background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); cursor:pointer;">
+          <input type="checkbox" class="single-delete-table-checkbox" value="stock_transactions" checked> 📈 주식 체결 내역
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; color:#cbd5e1; background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); cursor:pointer;">
+          <input type="checkbox" class="single-delete-table-checkbox" value="economy_logs" checked> 📜 자금 이동 기록
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:0.82rem; color:#cbd5e1; background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); cursor:pointer; grid-column:span 2;">
+          <input type="checkbox" class="single-delete-table-checkbox" value="items" checked> ⛏️ 드릴/아이템/칭호/로또/경마/출석 기록 전량
+        </label>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px;">
+      <button type="button" id="btn-submit-user-delete" onclick="submitSingleUserDelete()" style="flex:1; background:linear-gradient(135deg, #991b1b, #dc2626); border:none; color:#fff; padding:14px; border-radius:10px; font-weight:900; font-size:0.95rem; cursor:pointer; box-shadow:0 4px 15px rgba(239,68,68,0.4);">
+        🔥 계정 및 전 데이터 영구 삭제 실행
+      </button>
+      <button type="button" onclick="closeSingleUserDeleteModal()" style="background:#334155; border:1px solid rgba(255,255,255,0.15); color:#cbd5e1; padding:14px 20px; border-radius:10px; font-weight:700; cursor:pointer;">
+        취소
+      </button>
+    </div>
+  </div>
+</div>
 </div>
 
 <%- include('footer') %>
