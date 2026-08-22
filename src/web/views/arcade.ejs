@@ -5,16 +5,22 @@
   <div style="width:100%; display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
     <div>
       <h1 style="font-size:24px; font-weight:900; color:#f8fafc; margin:0; display:flex; align-items:center; gap:10px;">
-        <span>💎</span> 월덕 보석 맞추기 (Gem Match-3 Arcade)
+        <span>💎</span> 월덕 3블록 보석 맞추기 (Match-3 Puzzle)
       </h1>
       <p style="font-size:14px; color:#94a3b8; margin:4px 0 0 0;">
-        같은 색상의 보석을 3개 이상 맞춰 콤보를 터뜨리고 골드 보상을 획득하세요!
+        같은 색상의 보석을 3개 이상 가로/세로로 연결하여 콤보를 터뜨리고 골드 보상을 획득하세요!
       </p>
     </div>
     
-    <div style="background:rgba(30,41,59,0.8); border:1px solid rgba(255,255,255,0.1); padding:8px 16px; border-radius:12px; font-size:14px; font-family:'JetBrains Mono',monospace;">
-      <span style="color:#94a3b8;">스코어:</span>
-      <strong id="arcade-score" style="color:#38bdf8; font-size:18px;">0</strong>
+    <div style="display:flex; gap:12px; align-items:center;">
+      <div style="background:rgba(30,41,59,0.8); border:1px solid rgba(255,255,255,0.1); padding:8px 16px; border-radius:12px; font-size:14px; font-family:'JetBrains Mono',monospace;">
+        <span style="color:#94a3b8;">스코어:</span>
+        <strong id="arcade-score" style="color:#38bdf8; font-size:18px;">0</strong>
+      </div>
+      <div style="background:rgba(30,41,59,0.8); border:1px solid rgba(245,158,11,0.3); padding:8px 16px; border-radius:12px; font-size:14px; font-family:'JetBrains Mono',monospace;">
+        <span style="color:#94a3b8;">예상 보상:</span>
+        <strong id="arcade-reward-preview" style="color:#fbbf24; font-size:18px;">0원</strong>
+      </div>
     </div>
   </div>
 
@@ -25,82 +31,281 @@
     </div>
   </div>
 
-  <div style="margin-top:20px; display:flex; gap:12px;">
-    <button onclick="claimArcadeReward()" style="padding:14px 28px; font-weight:900; background:linear-gradient(135deg,#06b6d4,#3b82f6); border:none; border-radius:14px; color:#fff; cursor:pointer; font-size:16px; box-shadow:0 0 20px rgba(6,182,212,0.4);">
-      🎁 점수 정산 및 골드 수령
+  <div id="combo-banner" style="min-height:24px; margin-top:14px; font-size:15px; font-weight:900; color:#34d399; text-align:center;"></div>
+
+  <div style="margin-top:14px; display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+    <button id="btn-claim-reward" onclick="claimArcadeReward()" style="padding:14px 28px; font-weight:900; background:linear-gradient(135deg,#06b6d4,#3b82f6); border:none; border-radius:14px; color:#fff; cursor:pointer; font-size:16px; box-shadow:0 0 20px rgba(6,182,212,0.4); transition:all 0.2s ease;">
+      🎁 점수 정산 및 골드 수령 (<span id="btn-reward-txt">0원</span>)
+    </button>
+    <button onclick="resetBoard()" style="padding:14px 20px; font-weight:800; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:14px; color:#cbd5e1; cursor:pointer; font-size:15px;">
+      🔄 판 새로고침
     </button>
   </div>
 
 </main>
 
+<style>
+  .gem-tile {
+    background: rgba(30,41,59,0.85);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 30px;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .gem-tile:hover {
+    background: rgba(51,65,85,0.9);
+    transform: scale(1.05);
+  }
+  .gem-tile.selected {
+    border: 2px solid #38bdf8 !important;
+    background: rgba(56,189,248,0.2) !important;
+    transform: scale(1.12);
+    box-shadow: 0 0 15px rgba(56,189,248,0.5);
+  }
+  .gem-tile.matched {
+    animation: match-pop 0.3s ease-out forwards;
+  }
+  @keyframes match-pop {
+    0% { transform: scale(1); filter: brightness(1); }
+    50% { transform: scale(1.3); filter: brightness(2); }
+    100% { transform: scale(0); opacity: 0; }
+  }
+</style>
+
 <script>
-  const GEMS = ['💎', ' ruby 🔴', ' emerald 🟢', ' sapphire 🔵', ' gold 🟡', ' amethyst 🟣'];
   const ICONS = ['💎', '🔴', '🟢', '🔵', '🟡', '🟣'];
+  const GRID_SIZE = 6;
+  let board = [];
   let currentScore = 0;
   let selectedTile = null;
+  let isProcessing = false;
 
-  function initGrid() {
-    const grid = document.getElementById('gem-grid');
-    if (!grid) return;
-    grid.innerHTML = '';
-    for (let i = 0; i < 36; i++) {
-      const tile = document.createElement('div');
-      const gemIdx = Math.floor(Math.random() * ICONS.length);
-      tile.dataset.gem = gemIdx;
-      tile.dataset.index = i;
-      tile.style.background = 'rgba(30,41,59,0.85)';
-      tile.style.border = '1px solid rgba(255,255,255,0.1)';
-      tile.style.borderRadius = '12px';
-      tile.style.display = 'flex';
-      tile.style.alignItems = 'center';
-      tile.style.justifyContent = 'center';
-      tile.style.fontSize = '28px';
-      tile.style.cursor = 'pointer';
-      tile.style.transition = 'all 0.2s ease';
-      tile.innerText = ICONS[gemIdx];
-
-      tile.onclick = () => onTileClick(tile);
-      grid.appendChild(tile);
+  function createBoard() {
+    board = [];
+    for (let r = 0; r < GRID_SIZE; r++) {
+      const row = [];
+      for (let c = 0; c < GRID_SIZE; c++) {
+        row.push(Math.floor(Math.random() * ICONS.length));
+      }
+      board.push(row);
+    }
+    while (findMatches().length > 0) {
+      for (let r = 0; r < GRID_SIZE; r++) {
+        for (let c = 0; c < GRID_SIZE; c++) {
+          board[r][c] = Math.floor(Math.random() * ICONS.length);
+        }
+      }
     }
   }
 
-  function onTileClick(tile) {
+  function renderGrid() {
+    const gridEl = document.getElementById('gem-grid');
+    if (!gridEl) return;
+    gridEl.innerHTML = '';
+
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        const gemIdx = board[r][c];
+        const tile = document.createElement('div');
+        tile.className = 'gem-tile';
+        tile.dataset.r = r;
+        tile.dataset.c = c;
+        tile.innerText = ICONS[gemIdx] || '💎';
+        tile.onclick = () => onTileClick(r, c, tile);
+        gridEl.appendChild(tile);
+      }
+    }
+  }
+
+  function findMatches() {
+    const matched = new Set();
+
+    // 가로 검사
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE - 2; c++) {
+        const val = board[r][c];
+        if (val !== null && val === board[r][c+1] && val === board[r][c+2]) {
+          matched.add(`${r},${c}`);
+          matched.add(`${r},${c+1}`);
+          matched.add(`${r},${c+2}`);
+        }
+      }
+    }
+
+    // 세로 검사
+    for (let c = 0; c < GRID_SIZE; c++) {
+      for (let r = 0; r < GRID_SIZE - 2; r++) {
+        const val = board[r][c];
+        if (val !== null && val === board[r+1][c] && val === board[r+2][c]) {
+          matched.add(`${r},${c}`);
+          matched.add(`${r+1},${c}`);
+          matched.add(`${r+2},${c}`);
+        }
+      }
+    }
+
+    return Array.from(matched).map(str => {
+      const [r, c] = str.split(',').map(Number);
+      return { r, c };
+    });
+  }
+
+  async function onTileClick(r, c, tileEl) {
+    if (isProcessing) return;
+
     if (!selectedTile) {
-      selectedTile = tile;
-      tile.style.borderColor = '#38bdf8';
-      tile.style.transform = 'scale(1.1)';
-    } else {
-      const idx1 = Number(selectedTile.dataset.index);
-      const idx2 = Number(tile.dataset.index);
-      
-      // Swap gems
-      const tempGem = selectedTile.dataset.gem;
-      selectedTile.dataset.gem = tile.dataset.gem;
-      selectedTile.innerText = ICONS[tile.dataset.gem];
-
-      tile.dataset.gem = tempGem;
-      tile.innerText = ICONS[tempGem];
-
-      selectedTile.style.borderColor = 'rgba(255,255,255,0.1)';
-      selectedTile.style.transform = 'scale(1)';
-      selectedTile = null;
-
-      currentScore += 150;
-      document.getElementById('arcade-score').innerText = currentScore.toLocaleString();
-    }
-  }
-
-  async function claimArcadeReward() {
-    if (currentScore <= 0) {
-      alert('퍼즐을 맞춰 점수를 먼저 획득하세요!');
+      selectedTile = { r, c, el: tileEl };
+      tileEl.classList.add('selected');
       return;
     }
-    const earned = currentScore * 10;
-    alert(`🎉 퍼즐 클리어! 스코어: ${currentScore}\n보상: +${earned.toLocaleString()}원 획득!`);
-    window.location.href = '/stocks';
+
+    const r1 = selectedTile.r;
+    const c1 = selectedTile.c;
+    const isAdjacent = (Math.abs(r1 - r) === 1 && c1 === c) || (Math.abs(c1 - c) === 1 && r1 === r);
+
+    selectedTile.el.classList.remove('selected');
+
+    if (!isAdjacent) {
+      selectedTile = { r, c, el: tileEl };
+      tileEl.classList.add('selected');
+      return;
+    }
+
+    selectedTile = null;
+    isProcessing = true;
+
+    // Swap
+    const temp = board[r1][c1];
+    board[r1][c1] = board[r][c];
+    board[r][c] = temp;
+    renderGrid();
+
+    const matches = findMatches();
+    if (matches.length === 0) {
+      // 매칭 없으면 원복
+      setTimeout(() => {
+        const back = board[r1][c1];
+        board[r1][c1] = board[r][c];
+        board[r][c] = back;
+        renderGrid();
+        isProcessing = false;
+      }, 250);
+      return;
+    }
+
+    // 매치 처리 및 연쇄 콤보 루프
+    await processCascades(1);
+    isProcessing = false;
   }
 
-  window.addEventListener('DOMContentLoaded', initGrid);
+  async function processCascades(combo = 1) {
+    const matches = findMatches();
+    if (matches.length === 0) return;
+
+    const gained = matches.length * 150 * combo;
+    currentScore += gained;
+    updateScoreDisplay();
+
+    const comboEl = document.getElementById('combo-banner');
+    if (comboEl) {
+      comboEl.innerText = combo > 1 ? `🔥 ${combo}연속 콤보 폭발! (+${gained.toLocaleString()}점)` : `✨ ${matches.length}개 보석 폭파! (+${gained.toLocaleString()}점)`;
+    }
+
+    // 터뜨리기 애니메이션
+    const gridEl = document.getElementById('gem-grid');
+    matches.forEach(m => {
+      const idx = m.r * GRID_SIZE + m.c;
+      const el = gridEl.children[idx];
+      if (el) el.classList.add('matched');
+      board[m.r][m.c] = null;
+    });
+
+    await new Promise(res => setTimeout(res, 300));
+
+    // 중력 적용 (아래로 떨어뜨리기)
+    for (let c = 0; c < GRID_SIZE; c++) {
+      let emptyRow = GRID_SIZE - 1;
+      for (let r = GRID_SIZE - 1; r >= 0; r--) {
+        if (board[r][c] !== null) {
+          if (emptyRow !== r) {
+            board[emptyRow][c] = board[r][c];
+            board[r][c] = null;
+          }
+          emptyRow--;
+        }
+      }
+      // 위에서 새로 채우기
+      for (let r = emptyRow; r >= 0; r--) {
+        board[r][c] = Math.floor(Math.random() * ICONS.length);
+      }
+    }
+
+    renderGrid();
+    await new Promise(res => setTimeout(res, 200));
+
+    // 연쇄 반응 검사
+    await processCascades(combo + 1);
+  }
+
+  function updateScoreDisplay() {
+    const scoreEl = document.getElementById('arcade-score');
+    if (scoreEl) scoreEl.innerText = currentScore.toLocaleString();
+    const prevEl = document.getElementById('arcade-reward-preview');
+    const rewardAmt = currentScore * 10;
+    if (prevEl) prevEl.innerText = rewardAmt.toLocaleString() + '원';
+    const btnReward = document.getElementById('btn-reward-txt');
+    if (btnReward) btnReward.innerText = rewardAmt.toLocaleString() + '원';
+  }
+
+  function resetBoard() {
+    if (isProcessing) return;
+    createBoard();
+    renderGrid();
+  }
+
+  // 🎁 점수 정산 및 골드 수령
+  async function claimArcadeReward() {
+    if (currentScore <= 0) {
+      alert('보석을 3개 이상 맞춰 점수를 먼저 획득하세요!');
+      return;
+    }
+    const btn = document.getElementById('btn-claim-reward');
+    if (btn) btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/casino/arcade/match-reward', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ score: currentScore })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`🎉 ${data.message}\n(내 잔액: ${Number(data.afterCash).toLocaleString()}원)`);
+        if (window.updateUserCashDisplay) window.updateUserCashDisplay(data.afterCash);
+        currentScore = 0;
+        updateScoreDisplay();
+        const comboEl = document.getElementById('combo-banner');
+        if (comboEl) comboEl.innerText = '✅ 보상 수령 완료! 새 게임을 시작하세요.';
+        resetBoard();
+      } else {
+        alert('정산 실패: ' + (data.error || '오류가 발생했습니다.'));
+      }
+    } catch (e) {
+      alert('서버 통신 오류가 발생했습니다.');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    createBoard();
+    renderGrid();
+  });
 </script>
 
 <%- include('layout/footer', { activePage: 'casino' }) %>

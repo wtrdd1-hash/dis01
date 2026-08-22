@@ -152,6 +152,40 @@ function createCasinoLoopRoutes(getSessionUser) {
     }
   });
 
+  // 🎮 보석 맞추기 퍼즐 (3블록 매치) 점수 정산 및 골드 지급
+  router.post('/arcade/match-reward', async (req, res) => {
+    const session = getSessionUser(req);
+    if (!session) return res.status(401).json({ success: false, error: '로그인이 필요합니다.' });
+
+    const rawScore = parseInt(req.body?.score, 10) || 0;
+    if (rawScore <= 0) {
+      return res.status(400).json({ success: false, error: '정산할 퍼즐 점수가 없습니다.' });
+    }
+
+    const validScore = Math.min(100000, rawScore);
+    const rewardAmt = BigInt(validScore * 10);
+
+    try {
+      const { applyCashDelta } = require('../../utils/money');
+      const { formatMoney } = require('../../utils/formatters');
+      const afterCash = await applyCashDelta(session.id, rewardAmt, {
+        logType: 'ARCADE_MATCH3_REWARD',
+        description: `💎 3블록 보석 맞추기 퍼즐 (${validScore.toLocaleString()}점) 골드 보상 지급`
+      });
+
+      return res.json({
+        success: true,
+        score: validScore,
+        reward: rewardAmt.toString(),
+        rewardFormatted: formatMoney(rewardAmt),
+        afterCash: afterCash.toString(),
+        message: `🎉 3블록 보석 퍼즐 정산 완료! (+${formatMoney(rewardAmt)} 입금)`
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   router.get('/toto', async (req, res) => {
     try {
       const matches = await listOpenMatches();
