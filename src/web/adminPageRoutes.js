@@ -233,15 +233,19 @@ function createAdminPageRoutes(deps) {
         const getTypeBadge = (type) => {
           const t = String(type || '').toUpperCase();
           if (t.includes('ADMIN')) return '<span class="eco-badge eco-badge-admin">👑 ' + escapeHtml(type) + '</span>';
+          if (t.includes('DRILL')) return '<span class="eco-badge" style="background:rgba(245,158,11,0.2); color:#fbbf24; border:1px solid rgba(245,158,11,0.4);">🔨 ' + escapeHtml(type) + '</span>';
+          if (t.includes('SHOP')) return '<span class="eco-badge" style="background:rgba(168,85,247,0.2); color:#c084fc; border:1px solid rgba(168,85,247,0.4);">🛍️ ' + escapeHtml(type) + '</span>';
+          if (t.includes('LOTTO')) return '<span class="eco-badge" style="background:rgba(236,72,153,0.2); color:#f472b6; border:1px solid rgba(236,72,153,0.4);">🎫 ' + escapeHtml(type) + '</span>';
+          if (t.includes('MINE')) return '<span class="eco-badge" style="background:rgba(14,165,233,0.2); color:#38bdf8; border:1px solid rgba(14,165,233,0.4);">⛏️ ' + escapeHtml(type) + '</span>';
           if (t.includes('BUSINESS')) return '<span class="eco-badge eco-badge-biz">🏢 ' + escapeHtml(type) + '</span>';
-          if (t.includes('INFLOW')) return '<span class="eco-badge eco-badge-in">📥 ' + escapeHtml(type) + '</span>';
-          if (t.includes('OUTFLOW')) return '<span class="eco-badge eco-badge-out">📤 ' + escapeHtml(type) + '</span>';
-          if (t.includes('GAMBLE') || t.includes('CASINO')) return '<span class="eco-badge eco-badge-gamble">🎰 ' + escapeHtml(type) + '</span>';
+          if (t.includes('GAMBLE') || t.includes('CASINO') || t.includes('CRASH')) return '<span class="eco-badge eco-badge-gamble">🎰 ' + escapeHtml(type) + '</span>';
           if (t.includes('STOCK')) return '<span class="eco-badge eco-badge-stock">📈 ' + escapeHtml(type) + '</span>';
           if (t.includes('TAX')) return '<span class="eco-badge eco-badge-tax">🏛️ ' + escapeHtml(type) + '</span>';
           if (t.includes('LOAN')) return '<span class="eco-badge eco-badge-loan">💳 ' + escapeHtml(type) + '</span>';
-          if (t.includes('TRANSFER')) return '<span class="eco-badge eco-badge-transfer">💸 ' + escapeHtml(type) + '</span>';
-          if (t.includes('DAILY') || t.includes('WORK')) return '<span class="eco-badge eco-badge-daily">💼 ' + escapeHtml(type) + '</span>';
+          if (t.includes('PAY') || t.includes('TRANSFER')) return '<span class="eco-badge eco-badge-transfer">💸 ' + escapeHtml(type) + '</span>';
+          if (t.includes('DAILY') || t.includes('WORK')) return '<span class="eco-badge eco-badge-daily">🎁 ' + escapeHtml(type) + '</span>';
+          if (t.includes('INFLOW')) return '<span class="eco-badge eco-badge-in">📥 ' + escapeHtml(type) + '</span>';
+          if (t.includes('OUTFLOW')) return '<span class="eco-badge eco-badge-out">📤 ' + escapeHtml(type) + '</span>';
           return '<span class="eco-badge eco-badge-default">' + escapeHtml(type || '-') + '</span>';
         };
 

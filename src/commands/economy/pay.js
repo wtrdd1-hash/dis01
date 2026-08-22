@@ -96,7 +96,10 @@ module.exports = {
           'TAX_TRANSFER',
           `유저 송금세 → ${recipient.id}`
         );
-        await applyCashDelta(recipient.id, payAmount);
+        await applyCashDelta(recipient.id, payAmount, {
+          logType: 'PAY_RECEIVE',
+          description: `💸 ${sender.username} 님으로부터 유저 송금 수령 (+${formatMoney(payAmount)})`
+        });
         return paid.after;
       });
     } catch (err) {

@@ -67,7 +67,11 @@ module.exports = {
 
     const payout = computePayout(betAmount, multiplier);
     const profit = payout - betAmount;
-    const newCash = await applyCashDelta(userId, profit);
+    const isWin = multiplier > 0;
+    const newCash = await applyCashDelta(userId, profit, {
+      logType: isWin ? 'GAMBLE_WIN_DICE' : 'GAMBLE_BET_DICE',
+      description: `🎲 주사위 도박 (눈금: ${roll}) ${isWin ? `승리 (+${formatMoney(profit)})` : `패배 (-${formatMoney(betAmount)})`}`
+    });
     await pool.query(
       'INSERT INTO gambling_logs (user_id, game, bet, payout, profit) VALUES (?, "dice", ?, ?, ?)',
       [userId, betAmount.toString(), payout.toString(), profit.toString()]

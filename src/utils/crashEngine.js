@@ -163,7 +163,10 @@ async function placeCrashBet(session, rawBet, autoAt) {
       err.status = 400;
       throw err;
     }
-    const newCash = await applyCashDelta(session.id, -bet);
+    const newCash = await applyCashDelta(session.id, -bet, {
+      logType: 'GAMBLE_BET_CRASH',
+      description: `🚀 크래시 로켓 배팅 투입 (-${formatMoney(bet)})`
+    });
     state.bets.set(session.id, {
       amount: bet,
       cashed: false,
@@ -195,7 +198,10 @@ async function cashoutCrash(session) {
   b.cashed = true;
   b.cashout = m;
   b.payout = payout;
-  const newCash = await applyCashDelta(session.id, payout);
+  const newCash = await applyCashDelta(session.id, payout, {
+    logType: 'GAMBLE_WIN_CRASH',
+    description: `🚀 크래시 탈출 성공 (+${formatMoney(profit)}) [x${m}배]`
+  });
   try {
     const before = newCash - payout;
     await pool.query(`

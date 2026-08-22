@@ -343,10 +343,61 @@ async function applyCashDelta(userId, delta, opts) {
     global.__io.emit('user:balance_update', payload);
   }
 
-  // 📝 100% 무조건 전수 자동 로깅
+  // 📝 100% 무조건 전수 상세 자동 로깅
   if (!opts || opts.skipLog !== true) {
-    const logType = opts && opts.logType ? opts.logType : (d > 0n ? 'CASH_INFLOW' : 'CASH_OUTFLOW');
-    const logDesc = opts && opts.description ? opts.description : `현금 잔고 변동 (${d > 0n ? '+' : ''}${d.toString()}원)`;
+    let logType = opts && opts.logType ? opts.logType : null;
+    let logDesc = null;
+
+    if (typeof opts === 'string') {
+      logDesc = opts;
+    } else if (opts && typeof opts === 'object') {
+      logDesc = opts.description || opts.reason || opts.desc || null;
+    }
+
+    if (!logDesc || !logType) {
+      const stack = new Error().stack || '';
+      if (stack.includes('enhancementEngine')) {
+        logType = logType || 'DRILL_ENHANCE';
+        logDesc = logDesc || `🔨 드릴 대장간 강화 시도 (${d > 0n ? '+' : ''}${formatMoney(d < 0n ? -d : d)} 소각)`;
+      } else if (stack.includes('businessEngine')) {
+        logType = logType || (d > 0n ? 'BUSINESS_REVENUE' : 'BUSINESS_INVEST');
+        logDesc = logDesc || `🏢 사업체 운영 자금 변동 (${d > 0n ? '수익금 수령' : '투자/업그레이드'}) (${d > 0n ? '+' : ''}${formatMoney(d < 0n ? -d : d)})`;
+      } else if (stack.includes('StockModel') || stack.includes('stockRoutes') || stack.includes('stockBuy') || stack.includes('stockSell')) {
+        logType = logType || (d < 0n ? 'STOCK_BUY' : 'STOCK_SELL');
+        logDesc = logDesc || `📈 주식 거래 (${d > 0n ? '매도 정산' : '매수 체결'}) (${d > 0n ? '+' : ''}${formatMoney(d < 0n ? -d : d)})`;
+      } else if (stack.includes('crashEngine')) {
+        logType = logType || (d > 0n ? 'GAMBLE_WIN_CRASH' : 'GAMBLE_BET_CRASH');
+        logDesc = logDesc || `🚀 크래시 로켓 (${d > 0n ? '탈출 성공 배당금' : '배팅금 투입'}) (${d > 0n ? '+' : ''}${formatMoney(d < 0n ? -d : d)})`;
+      } else if (stack.includes('gambling') || stack.includes('GameFacade') || stack.includes('casinoLoop')) {
+        logType = logType || (d > 0n ? 'GAMBLE_WIN' : 'GAMBLE_BET');
+        logDesc = logDesc || `🎰 카지노/도박 게임 (${d > 0n ? '승리 당첨금' : '배팅금'}) (${d > 0n ? '+' : ''}${formatMoney(d < 0n ? -d : d)})`;
+      } else if (stack.includes('lottoEngine') || stack.includes('lotto')) {
+        logType = logType || (d > 0n ? 'LOTTO_JACKPOT' : 'LOTTO_BUY');
+        logDesc = logDesc || `🎫 로또 6/45 (${d > 0n ? '당첨금 수령' : '티켓 구매 소각'}) (${d > 0n ? '+' : ''}${formatMoney(d < 0n ? -d : d)})`;
+      } else if (stack.includes('shopEngine') || stack.includes('shopRoutes')) {
+        logType = logType || 'SHOP_BUY';
+        logDesc = logDesc || `🛍️ 상점 아이템 구매 소각 (${d > 0n ? '+' : ''}${formatMoney(d < 0n ? -d : d)})`;
+      } else if (stack.includes('mineService') || stack.includes('mine')) {
+        logType = logType || (d > 0n ? 'MINE_EARN' : 'MINE_FEE');
+        logDesc = logDesc || `⛏️ 심해 광산 (${d > 0n ? '채굴 수익' : '장르 해금/이용료'}) (${d > 0n ? '+' : ''}${formatMoney(d < 0n ? -d : d)})`;
+      } else if (stack.includes('daily') || stack.includes('attendance')) {
+        logType = logType || 'DAILY_REWARD';
+        logDesc = logDesc || `🎁 일일 출석체크 지원금 (+${formatMoney(d < 0n ? -d : d)})`;
+      } else if (stack.includes('pay.js')) {
+        logType = logType || (d > 0n ? 'PAY_RECEIVE' : 'PAY_SEND');
+        logDesc = logDesc || `💸 유저 간 송금 (${d > 0n ? '수령' : '송금'}) (${d > 0n ? '+' : ''}${formatMoney(d < 0n ? -d : d)})`;
+      } else if (stack.includes('loanEngine') || stack.includes('p2pLoanEngine')) {
+        logType = logType || (d > 0n ? 'LOAN_DISBURSE' : 'LOAN_REPAY');
+        logDesc = logDesc || `🏦 대출 관련 자금 (${d > 0n ? '지급' : '상환'}) (${d > 0n ? '+' : ''}${formatMoney(d < 0n ? -d : d)})`;
+      } else if (stack.includes('admin') || stack.includes('PageController')) {
+        logType = logType || (d > 0n ? 'ADMIN_GIVE' : 'ADMIN_TAKE');
+        logDesc = logDesc || `👑 관리자 수동 잔액 조정 (${d > 0n ? '+' : ''}${formatMoney(d < 0n ? -d : d)})`;
+      }
+    }
+
+    if (!logType) logType = (d > 0n ? 'CASH_INFLOW' : 'CASH_OUTFLOW');
+    if (!logDesc) logDesc = `[자금 변동] ${d > 0n ? '현금 지급/입금' : '현금 지출/차감'} (${d > 0n ? '+' : ''}${formatMoney(d < 0n ? -d : d)})`;
+
     const moveAmt = d < 0n ? -d : d;
     recordEconomyLog(userId, logType, moveAmt, beforeCash, afterCash, logDesc).catch(() => {});
   }

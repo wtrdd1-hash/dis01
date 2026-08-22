@@ -130,7 +130,10 @@ module.exports = {
       const newCash = await withUserLock(userId, async () => {
         const claimed = await claimSession(userId, 'settled');
         if (!claimed) return applyCashDelta(userId, 0n);
-        return applyCashDelta(userId, payout);
+        return applyCashDelta(userId, payout, {
+          logType: 'GAMBLE_WIN_BLACKJACK',
+          description: `🃏 블랙잭 내츄럴 21점 승리 배당금 (+${formatMoney(payout - betAmount)})`
+        });
       });
 
       const embed = createGambleEmbed(
@@ -258,7 +261,10 @@ module.exports = {
       const newCash = await withUserLock(userId, async () => {
         claimed = await claimSession(userId, 'settled');
         if (!claimed) return applyCashDelta(userId, 0n);
-        return applyCashDelta(userId, payout);
+        return applyCashDelta(userId, payout, {
+          logType: multiplier > 1 ? 'GAMBLE_WIN_BLACKJACK' : (multiplier === 1 ? 'GAMBLE_PUSH_BLACKJACK' : 'GAMBLE_LOSS_BLACKJACK'),
+          description: `🃏 블랙잭 게임 ${multiplier > 1 ? `승리 (+${formatMoney(profit)})` : (multiplier === 1 ? '무승부 환불' : `패배 (-${formatMoney(betAmount)})`)}`
+        });
       });
       if (!claimed) {
         outcomeMsg = '♻️ **봇 재시작으로 배팅금이 이미 환불되었습니다.**';

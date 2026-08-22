@@ -65,7 +65,11 @@ module.exports = {
 
     const payout = computePayout(betAmount, multiplier);
     const profit = payout - betAmount;
-    const newCash = await applyCashDelta(userId, profit);
+    const isWin = multiplier > 0;
+    const newCash = await applyCashDelta(userId, profit, {
+      logType: isWin ? 'GAMBLE_WIN_SLOT' : 'GAMBLE_BET_SLOT',
+      description: `🎰 슬롯머신 [${reel1}${reel2}${reel3}] ${isWin ? `당첨/잭팟 (+${formatMoney(profit)})` : `패배 (-${formatMoney(betAmount)})`}`
+    });
     await pool.query(
       'INSERT INTO gambling_logs (user_id, game, bet, payout, profit) VALUES (?, "slot", ?, ?, ?)',
       [userId, betAmount.toString(), payout.toString(), profit.toString()]

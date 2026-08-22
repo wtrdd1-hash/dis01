@@ -97,7 +97,10 @@ async function enhanceDrill(userId, username, useProtection = false) {
     }
 
     // 1. 강화 비용 현금 차감 (소각)
-    const afterCash = await applyCashDelta(userId, -cost);
+    const afterCash = await applyCashDelta(userId, -cost, {
+      logType: 'DRILL_ENHANCE',
+      description: `🔨 드릴 대장간 강화 시도 (+${currentLevel}강 ➔ +${nextLevel}강) 비용 100% 완전 소각`
+    });
 
     // 2. 주사위 굴리기
     const roll = Math.random() * 100;

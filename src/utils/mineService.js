@@ -136,7 +136,11 @@ async function unlockGenre(userId, genreId) {
   }
 
   const cost = safeBigInt(genre.unlockCost);
-  const newCash = await applyCashDelta(userId, -cost);
+  const { formatMoney } = require('./formatters');
+  const newCash = await applyCashDelta(userId, -cost, {
+    logType: 'MINE_GENRE_UNLOCK',
+    description: `⛏️ 심해 광산 [${genre.name}] 장르 해금 비용 (${formatMoney(cost)})`
+  });
   await pool.query(
     `INSERT INTO mine_genre_stats (user_id, genre_id, unlocked, unlocked_at)
      VALUES (?, ?, 1, NOW())

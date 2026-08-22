@@ -198,7 +198,10 @@ async function buyBusiness(userId, username, key) {
     }
     const cost = safeBigInt(def.cost);
     const before = await getUserCash(userId);
-    const after = await applyCashDelta(userId, -cost);
+    const after = await applyCashDelta(userId, -cost, {
+      logType: 'BUSINESS_BUY',
+      description: `${def.emoji} ${def.name} 사업체 신규 개업 (${formatMoney(cost)})`
+    });
     await pool.query(
       `INSERT INTO user_businesses (user_id, business_key, level, staff, invested, last_collect_at)
        VALUES (?, ?, 1, 0, ?, NOW())`,
@@ -234,7 +237,10 @@ async function upgradeBusiness(userId, username, key) {
     }
     const cost = safeBigInt(businessUpgradeCost(def, level));
     const before = await getUserCash(userId);
-    const after = await applyCashDelta(userId, -cost);
+    const after = await applyCashDelta(userId, -cost, {
+      logType: 'BUSINESS_UPGRADE',
+      description: `${def.emoji} ${def.name} Lv.${level}→${level + 1} 업그레이드 (${formatMoney(cost)})`
+    });
     await pool.query(
       'UPDATE user_businesses SET level = level + 1, invested = invested + ? WHERE id = ?',
       [cost.toString(), rows[0].id]
@@ -269,7 +275,10 @@ async function hireStaff(userId, username, key) {
     }
     const cost = safeBigInt(businessStaffHireCost(def, staff));
     const before = await getUserCash(userId);
-    const after = await applyCashDelta(userId, -cost);
+    const after = await applyCashDelta(userId, -cost, {
+      logType: 'BUSINESS_HIRE',
+      description: `${def.emoji} ${def.name} 알바 고용 ${staff + 1}명 (${formatMoney(cost)})`
+    });
     await pool.query(
       'UPDATE user_businesses SET staff = staff + 1, invested = invested + ? WHERE id = ?',
       [cost.toString(), rows[0].id]
@@ -298,7 +307,10 @@ async function upgradeHq(userId, username) {
     }
     const cost = safeBigInt(businessHqCost(meta.hqLevel));
     const before = await getUserCash(userId);
-    const after = await applyCashDelta(userId, -cost);
+    const after = await applyCashDelta(userId, -cost, {
+      logType: 'BUSINESS_HQ',
+      description: `사업 본사 건물 Lv.${meta.hqLevel + 1} 증축 (${formatMoney(cost)})`
+    });
     const next = meta.hqLevel + 1;
     await saveMeta(userId, next >= 1 ? meta.autoCollect : false, next);
     await logEconomy(userId, username, 'BUSINESS_HQ', cost, before, after, `본사 Lv.${next} (${formatMoney(cost)})`);
@@ -440,10 +452,13 @@ async function collectBusiness(userId, username, key, opts) {
     } catch (e) {}
 
     const payout = taxInfo.netIncome;
-    const after = await applyCashDelta(userId, payout);
     const tag = options.auto ? '자동수금' : '수금';
     const ev = event ? ` · ${event.label}` : '';
     const taxNote = taxInfo.tax > 0n ? ` (국고 누진세 -${formatMoney(taxInfo.tax)} 원천징수)` : '';
+    const after = await applyCashDelta(userId, payout, {
+      logType: 'BUSINESS_COLLECT',
+      description: `사업 ${tag} ${names.join(', ')} 수익금 (+${formatMoney(payout)}${ev}${taxNote})`
+    });
 
     await logEconomy(userId, username, 'BUSINESS_COLLECT', payout, before, after, `사업 ${tag} ${names.join(', ')} (+${formatMoney(payout)}${ev}${taxNote})`);
 
@@ -495,7 +510,10 @@ async function sellBusiness(userId, username, key) {
     const total = safeBigInt(pending + refund);
     await pool.query('DELETE FROM user_businesses WHERE id = ?', [rows[0].id]);
     const before = await getUserCash(userId);
-    const after = total > 0n ? await applyCashDelta(userId, total) : before;
+    const after = total > 0n ? await applyCashDelta(userId, total, {
+      logType: 'BUSINESS_SELL',
+      description: `${def.emoji} ${def.name} 매각 환급금 (+${formatMoney(total)})`
+    }) : before;
     await logEconomy(userId, username, 'BUSINESS_SELL', total, before, after, `${def.emoji} ${def.name} 매각 (환급 ${formatMoney(refund)} + 수익 ${formatMoney(pending)})`);
     return {
       cash: after,

@@ -70,13 +70,15 @@ module.exports = {
 
     const payout = computePayout(betAmount, multiplier);
     const profit = payout - betAmount;
-    const newCash = await applyCashDelta(userId, profit);
+    const isWin = multiplier > 0;
+    const newCash = await applyCashDelta(userId, profit, {
+      logType: isWin ? 'GAMBLE_WIN_ROULETTE' : 'GAMBLE_BET_ROULETTE',
+      description: `🎡 룰렛 게임 (${colorChoice} 베팅 ➔ ${outcomeEmoji} ${outcomeColor}) ${isWin ? `당첨 (+${formatMoney(profit)})` : `패배 (-${formatMoney(betAmount)})`}`
+    });
     await pool.query(
       'INSERT INTO gambling_logs (user_id, game, bet, payout, profit) VALUES (?, "roulette", ?, ?, ?)',
       [userId, betAmount.toString(), payout.toString(), profit.toString()]
     );
-
-    const isWin = multiplier > 0;
     const flavor = rouletteFlavor(colorChoice, outcomeColor, outcomeEmoji, isWin);
     const money = moneyTail(betAmount, payout, newCash);
 

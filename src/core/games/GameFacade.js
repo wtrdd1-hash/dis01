@@ -51,7 +51,11 @@ class GameFacade {
       const profit = payout - betAmount;
 
       // 4. 화폐 잔액 정산 (원자적 업데이트)
-      const newCash = await applyCashDelta(session.id, profit);
+      const isWin = profit > 0n;
+      const newCash = await applyCashDelta(session.id, profit, {
+        logType: 'CASINO_' + String(outcome.game || 'GAME').toUpperCase() + (isWin ? '_WIN' : '_BET'),
+        description: `🎰 카지노 [${outcome.game || '게임'}] ${isWin ? `승리 (+${formatMoney(profit)})` : `패배 (-${formatMoney(betAmount)})`}`
+      });
 
       // 5. 감사 로그 저장
       await LedgerModel.logGambling(

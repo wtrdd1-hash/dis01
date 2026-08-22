@@ -58,10 +58,12 @@ module.exports = {
 
     const coinSide = flipCoin().result;
     const isWin = choice === coinSide;
-    const multiplier = isWin ? scaleGambleMultiplier(COIN_WIN_MULT) : 0;
     const payout = computePayout(betAmount, multiplier);
     const profit = payout - betAmount;
-    const newCash = await applyCashDelta(userId, profit);
+    const newCash = await applyCashDelta(userId, profit, {
+      logType: isWin ? 'GAMBLE_WIN_COINFLIP' : 'GAMBLE_BET_COINFLIP',
+      description: `🪙 동전 던지기 (${choice}) ${isWin ? `승리 (+${formatMoney(profit)})` : `패배 (-${formatMoney(betAmount)})`}`
+    });
     await pool.query(
       'INSERT INTO gambling_logs (user_id, game, bet, payout, profit) VALUES (?, "coinflip", ?, ?, ?)',
       [userId, betAmount.toString(), payout.toString(), profit.toString()]
