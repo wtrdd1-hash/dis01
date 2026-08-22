@@ -64,6 +64,35 @@ function installSocketChatHandler() {
         }
       }
     });
+
+    socket.on('chat:edit', async (payload, callback) => {
+      try {
+        const sess = getSocketSessionUser(socket);
+        const msgId = payload && (payload.id || payload.messageId);
+        const text = payload && (payload.message || payload.text || payload.content);
+        const result = await chat.editMessage(sess, msgId, text);
+        const { status, ...response } = result;
+        if (typeof callback === 'function') callback(response);
+      } catch (err) {
+        if (typeof callback === 'function') {
+          callback({ success: false, error: '채팅 수정 중 오류가 발생했습니다.' });
+        }
+      }
+    });
+
+    socket.on('chat:delete', async (payload, callback) => {
+      try {
+        const sess = getSocketSessionUser(socket);
+        const msgId = payload && (payload.id || payload.messageId);
+        const result = await chat.deleteMessage(sess, msgId);
+        const { status, ...response } = result;
+        if (typeof callback === 'function') callback(response);
+      } catch (err) {
+        if (typeof callback === 'function') {
+          callback({ success: false, error: '채팅 삭제 중 오류가 발생했습니다.' });
+        }
+      }
+    });
   });
 }
 
@@ -198,34 +227,25 @@ function createChatRoutes(getSessionUser) {
 
   router.delete('/message/:id', async (req, res) => {
     const sess = getSessionUser(req);
-    if (!sess) return res.status(401).json({ success: false, error: '로그인이 필요합니다.' });
+    const result = await chat.deleteMessage(sess, req.params.id);
+    const { status, ...response } = result;
+    return res.status(status).json(response);
+  });
 
-    const msgId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(msgId) || msgId <= 0) {
-      return res.status(400).json({ success: false, error: '올바르지 않은 메시지 ID입니다.' });
-    }
+  router.patch('/message/:id', async (req, res) => {
+    const sess = getSessionUser(req);
+    const text = req.body && (req.body.message || req.body.text || req.body.content);
+    const result = await chat.editMessage(sess, req.params.id, text);
+    const { status, ...response } = result;
+    return res.status(status).json(response);
+  });
 
-    try {
-      const [rows] = await pool.query('SELECT user_id, room_id FROM chat_messages WHERE id = ?', [msgId]);
-      if (rows.length === 0) return res.status(404).json({ success: false, error: '메시지를 찾을 수 없습니다.' });
-
-      const isMine = String(rows[0].user_id) === String(sess.id);
-      const isAdmin = config.isAdmin(sess.id);
-      if (!isMine && !isAdmin) {
-        return res.status(403).json({ success: false, error: '삭제 권한이 없습니다.' });
-      }
-
-      await pool.query('DELETE FROM chat_messages WHERE id = ?', [msgId]);
-      if (global.__io) {
-        global.__io.to('chat:room:' + rows[0].room_id).emit('chat:deleted', {
-          id: msgId,
-          room_id: Number(rows[0].room_id)
-        });
-      }
-      return res.json({ success: true, message: '메시지가 삭제되었습니다.' });
-    } catch (e) {
-      return res.status(500).json({ success: false, error: '메시지 삭제 중 오류가 발생했습니다.' });
-    }
+  router.post('/message/:id/edit', async (req, res) => {
+    const sess = getSessionUser(req);
+    const text = req.body && (req.body.message || req.body.text || req.body.content);
+    const result = await chat.editMessage(sess, req.params.id, text);
+    const { status, ...response } = result;
+    return res.status(status).json(response);
   });
 
   return router;

@@ -190,6 +190,8 @@
       const isMegaphone = content.startsWith('📢') || username.includes('확성기');
 
       const msgDiv = document.createElement('div');
+      msgDiv.id = 'chat-msg-' + (msg.id || Date.now());
+      msgDiv.setAttribute('data-msg-id', msg.id || '');
       msgDiv.style.marginBottom = '12px';
 
       if (isMegaphone) {
@@ -202,7 +204,7 @@
             <div style="font-size:11px; font-weight:900; color:#fbbf24; margin-bottom:4px; display:flex; align-items:center; justify-content:center; gap:4px;">
               <span>📢</span> <span>${escapeHtml(username)}</span> <span style="color:#fde68a; font-size:10px; font-family:'JetBrains Mono',monospace;">${timeStr}</span>
             </div>
-            <div style="font-size:13.5px; color:#ffffff; font-weight:800; word-break:break-word;">
+            <div id="chat-text-${msg.id}" data-raw-text="${escapeHtml(content)}" style="font-size:13.5px; color:#ffffff; font-weight:800; word-break:break-word;">
               ${escapeHtml(content.replace(/^📢\s*(\[전체 확성기\])?\s*/, ''))}
             </div>
           </div>
@@ -212,12 +214,31 @@
         return;
       }
 
+      const isAdminUser = window.__currentUser && window.__currentUser.isAdmin;
+      let actionBtns = '';
+      if (msg.id) {
+        if (isMe) {
+          actionBtns = `
+            <div style="display:inline-flex; align-items:center; gap:3px; margin-left:4px;">
+              <button onclick="editPlazaMessage(${msg.id})" title="수정" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:10.5px; padding:1px 3px; border-radius:3px;" onmouseover="this.style.color='#38bdf8'" onmouseout="this.style.color='#94a3b8'"><i class="fa-solid fa-pen"></i></button>
+              <button onclick="deletePlazaMessage(${msg.id})" title="삭제" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:10.5px; padding:1px 3px; border-radius:3px;" onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='#94a3b8'"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          `;
+        } else if (isAdminUser) {
+          actionBtns = `
+            <div style="display:inline-flex; align-items:center; gap:3px; margin-left:4px;">
+              <button onclick="deletePlazaMessage(${msg.id})" title="[관리자] 삭제" style="background:none; border:none; color:#f87171; cursor:pointer; font-size:10.5px; padding:1px 3px; border-radius:3px;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.75"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          `;
+        }
+      }
+
       if (isMe) {
         // 💬 내가 보낸 메시지 (우측 정렬 + 보라/인디고 그라데이션)
         let myTitleBadge = '';
-        const myTitle = title || (window.__currentUser && window.__currentUser.isAdmin ? '👑 총괄 관리자' : (window.__currentUser ? window.__currentUser.title : ''));
+        const myTitle = title || (isAdminUser ? '👑 총괄 관리자' : (window.__currentUser ? window.__currentUser.title : ''));
         if (myTitle) {
-          const isAdm = myTitle.includes('관리자') || (window.__currentUser && window.__currentUser.isAdmin);
+          const isAdm = myTitle.includes('관리자') || isAdminUser;
           const bg = isAdm ? 'background:linear-gradient(135deg,#f59e0b,#fbbf24); color:#000; font-weight:900;' : 'background:linear-gradient(135deg,#38bdf8,#818cf8); color:#fff; font-weight:800;';
           myTitleBadge = `<span style="${bg} font-size:9.5px; padding:1px 5px; border-radius:4px; margin-bottom:2px;">${myTitle}</span>`;
         }
@@ -228,11 +249,16 @@
         msgDiv.style.gap = '6px';
 
         msgDiv.innerHTML = `
-          <span style="font-size:10px; color:#64748b; font-family:'JetBrains Mono',monospace; white-space:nowrap; margin-bottom:2px;">${timeStr}</span>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+            <div style="display:flex; align-items:center;">
+              <span style="font-size:10px; color:#64748b; font-family:'JetBrains Mono',monospace; white-space:nowrap;">${timeStr}</span>
+              ${actionBtns}
+            </div>
+          </div>
           <div style="max-width:75%; display:flex; flex-direction:column; align-items:flex-end;">
             ${myTitleBadge}
             <div style="background:linear-gradient(135deg,#4f46e5 0%,#6366f1 100%); border:1px solid rgba(165,180,252,0.4); border-radius:14px 14px 2px 14px; padding:8px 12px; color:#ffffff; font-size:13px; line-height:1.45; word-break:break-word; box-shadow:0 4px 12px rgba(79,70,229,0.3);">
-              ${escapeHtml(content)}
+              <span id="chat-text-${msg.id}" data-raw-text="${escapeHtml(content)}">${escapeHtml(content)}${msg.is_edited ? ' <span style="font-size:10px; opacity:0.75;">(수정됨)</span>' : ''}</span>
             </div>
           </div>
         `;
@@ -259,9 +285,12 @@
             </div>
             <div style="display:flex; align-items:flex-end; gap:6px; max-width:100%;">
               <div style="background:rgba(30,41,59,0.85); border:1px solid rgba(255,255,255,0.12); border-radius:2px 14px 14px 14px; padding:8px 12px; color:#f8fafc; font-size:13px; line-height:1.45; word-break:break-word; box-shadow:0 2px 8px rgba(0,0,0,0.3); max-width:80%;">
-                ${escapeHtml(content)}
+                <span id="chat-text-${msg.id}" data-raw-text="${escapeHtml(content)}">${escapeHtml(content)}${msg.is_edited ? ' <span style="font-size:10px; opacity:0.75;">(수정됨)</span>' : ''}</span>
               </div>
-              <span style="font-size:10px; color:#64748b; font-family:'JetBrains Mono',monospace; white-space:nowrap; margin-bottom:2px;">${timeStr}</span>
+              <div style="display:flex; align-items:center; gap:2px;">
+                <span style="font-size:10px; color:#64748b; font-family:'JetBrains Mono',monospace; white-space:nowrap;">${timeStr}</span>
+                ${actionBtns}
+              </div>
             </div>
           </div>
         `;
@@ -269,6 +298,44 @@
 
       box.appendChild(msgDiv);
       box.scrollTop = box.scrollHeight;
+    }
+
+    async function editPlazaMessage(msgId) {
+      const textEl = document.getElementById('chat-text-' + msgId);
+      if (!textEl) return;
+      const currentText = textEl.getAttribute('data-raw-text') || textEl.innerText.replace(/\(수정됨\)$/, '').trim();
+      const newText = prompt('수정할 메시지를 입력하세요:', currentText);
+      if (newText === null || newText.trim() === '' || newText.trim() === currentText) return;
+
+      try {
+        const res = await fetch('/api/chat/message/' + msgId + '/edit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: newText.trim() })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          showSocketToast('⚠️ ' + (data.error || '메시지 수정 실패'));
+        }
+      } catch (err) {
+        console.error('메시지 수정 에러:', err);
+      }
+    }
+
+    async function deletePlazaMessage(msgId) {
+      if (!confirm('이 메시지를 정말 삭제하시겠습니까?')) return;
+
+      try {
+        const res = await fetch('/api/chat/message/' + msgId, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        if (!data.success) {
+          showSocketToast('⚠️ ' + (data.error || '메시지 삭제 실패'));
+        }
+      } catch (err) {
+        console.error('메시지 삭제 에러:', err);
+      }
     }
 
     function escapeHtml(str) {
@@ -315,6 +382,28 @@
         if (!isChatOpen) {
           const dot = document.getElementById('chat-unread-dot');
           if (dot) dot.style.display = 'inline-block';
+        }
+      });
+
+      // 실시간 채팅 수정 수신
+      socket.on('chat:edited', (data) => {
+        if (!data || !data.id) return;
+        const textEl = document.getElementById('chat-text-' + data.id);
+        if (textEl) {
+          textEl.setAttribute('data-raw-text', data.message);
+          textEl.innerHTML = escapeHtml(data.message) + ' <span style="font-size:10px; opacity:0.75;">(수정됨)</span>';
+        }
+      });
+
+      // 실시간 채팅 삭제 수신
+      socket.on('chat:deleted', (data) => {
+        if (!data || !data.id) return;
+        const msgDiv = document.getElementById('chat-msg-' + data.id);
+        if (msgDiv) {
+          msgDiv.style.transition = 'all 0.3s ease';
+          msgDiv.style.opacity = '0';
+          msgDiv.style.transform = 'scale(0.95)';
+          setTimeout(() => msgDiv.remove(), 300);
         }
       });
 

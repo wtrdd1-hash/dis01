@@ -427,6 +427,76 @@ async function joinSocketRooms(socket, userId) {
   }
 }
 
+async function deleteMessage(session, messageId) {
+  if (!session || !session.id) {
+    return { status: 401, success: false, error: '로그인이 필요합니다.' };
+  }
+  const msgId = parseInt(messageId, 10);
+  if (!Number.isInteger(msgId) || msgId <= 0) {
+    return { status: 400, success: false, error: '올바르지 않은 메시지 ID입니다.' };
+  }
+  try {
+    const [rows] = await pool.query('SELECT user_id, room_id FROM chat_messages WHERE id = ?', [msgId]);
+    if (rows.length === 0) {
+      return { status: 404, success: false, error: '메시지를 찾을 수 없습니다.' };
+    }
+    const isMine = String(rows[0].user_id) === String(session.id);
+    const isAdmin = config.isAdmin(session.id);
+    if (!isMine && !isAdmin) {
+      return { status: 403, success: false, error: '삭제 권한이 없습니다.' };
+    }
+    await pool.query('DELETE FROM chat_messages WHERE id = ?', [msgId]);
+    if (global.__io) {
+      global.__io.to('chat:room:' + rows[0].room_id).emit('chat:deleted', {
+        id: msgId,
+        room_id: Number(rows[0].room_id)
+      });
+    }
+    return { status: 200, success: true, message: '메시지가 삭제되었습니다.' };
+  } catch (err) {
+    logger.error('chat delete error:', err);
+    return { status: 500, success: false, error: '메시지 삭제 중 오류가 발생했습니다.' };
+  }
+}
+
+async function editMessage(session, messageId, newText) {
+  if (!session || !session.id) {
+    return { status: 401, success: false, error: '로그인이 필요합니다.' };
+  }
+  const msgId = parseInt(messageId, 10);
+  if (!Number.isInteger(msgId) || msgId <= 0) {
+    return { status: 400, success: false, error: '올바르지 않은 메시지 ID입니다.' };
+  }
+  if (!newText || typeof newText !== 'string' || !newText.trim()) {
+    return { status: 400, success: false, error: '수정할 내용을 입력해주세요.' };
+  }
+  try {
+    const [rows] = await pool.query('SELECT user_id, room_id, message FROM chat_messages WHERE id = ?', [msgId]);
+    if (rows.length === 0) {
+      return { status: 404, success: false, error: '메시지를 찾을 수 없습니다.' };
+    }
+    const isMine = String(rows[0].user_id) === String(session.id);
+    const isAdmin = config.isAdmin(session.id);
+    if (!isMine && !isAdmin) {
+      return { status: 403, success: false, error: '수정 권한이 없습니다.' };
+    }
+    const sanitized = sanitizeText(newText.trim()).slice(0, MAX_MESSAGE_LEN);
+    await pool.query('UPDATE chat_messages SET message = ? WHERE id = ?', [sanitized, msgId]);
+    if (global.__io) {
+      global.__io.to('chat:room:' + rows[0].room_id).emit('chat:edited', {
+        id: msgId,
+        room_id: Number(rows[0].room_id),
+        message: sanitized,
+        is_edited: true
+      });
+    }
+    return { status: 200, success: true, message: '메시지가 수정되었습니다.', data: { id: msgId, message: sanitized } };
+  } catch (err) {
+    logger.error('chat edit error:', err);
+    return { status: 500, success: false, error: '메시지 수정 중 오류가 발생했습니다.' };
+  }
+}
+
 setInterval(() => {
   const cutoff = Date.now() - 60 * 1000;
   for (const [id, ts] of chatCooldownMap.entries()) {
@@ -444,6 +514,9 @@ module.exports = {
   listMessages,
   markRead,
   sendMessage,
+  editMessage,
+  deleteMessage,
+  sanitizeText,
   postSystemNotice,
   openDm,
   openThread,
