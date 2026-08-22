@@ -71,14 +71,14 @@ module.exports = {
   subsidyAmount: 2000,     // 생활 지원금 2,000원 (순자산 2만원 이하 유저 대상)
   subsidyCooldownMinutes: 1440, // 지원금 쿨타임 24시간 (1일 1회)
   bankInterestRate: (0.001 / 24) / 60, // 분당 분할 복리 지급 (하루 0.1%)
-  port: parseInt(process.env.PORT || '8080', 10),
+  port: parseInt(process.env.PORT || '8070', 10),
 
   getServerEnvBadge() {
     const isTest = 
       process.env.APP_ENV === 'test' || 
       process.env.NODE_ENV === 'test' || 
       (process.env.DB_NAME && process.env.DB_NAME.includes('test')) ||
-      (process.env.WEB_PORT === '8085' || process.env.PORT === '8085');
+      (process.env.WEB_PORT === '8090' || process.env.PORT === '8090' || process.env.WEB_PORT === '8085' || process.env.PORT === '8085');
     return isTest ? '🧪 [테스트 서버]' : '🚀 [본 서버]';
   },
 

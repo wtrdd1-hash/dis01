@@ -26,9 +26,9 @@ try {
 
 $CandidateProbe = @'
 Promise.all([
-  fetch('http://127.0.0.1:18080/readyz').then((response) => response.json()),
-  fetch('http://127.0.0.1:18080/healthz').then((response) => response.json()),
-  fetch('http://127.0.0.1:18080/api/announcements/popup').then((response) => response.json())
+  fetch('http://127.0.0.1:18070/readyz').then((response) => response.json()),
+  fetch('http://127.0.0.1:18070/healthz').then((response) => response.json()),
+  fetch('http://127.0.0.1:18070/api/announcements/popup').then((response) => response.json())
 ]).then(([ready, health, popup]) => {
   const passed = ready.ok === true && ready.db === true && ready.bot === false &&
     ready.botRequired === false && health.ok === true && health.bot === false && popup.success === true;
@@ -52,6 +52,17 @@ rm -f /tmp/prod_deploy.tar.gz
 test -f "$RELEASE_DIR/Dockerfile"
 test -f "$RELEASE_DIR/docker-compose.yml"
 test -f "$DATA_ROOT/.env"
+
+# Ensure PORT=8070 in production .env
+if grep -q '^PORT=' "$DATA_ROOT/.env"; then
+  sed -i 's/^PORT=.*/PORT=8070/' "$DATA_ROOT/.env"
+else
+  echo 'PORT=8070' >> "$DATA_ROOT/.env"
+fi
+
+# Sync nginx proxy configuration
+cp -f "$RELEASE_DIR/deploy/nginx/default.conf" "$DATA_ROOT/deploy/nginx/default.conf" 2>/dev/null || true
+docker exec wtrdd-edge-proxy nginx -s reload 2>/dev/null || true
 
 echo '[3/5] Creating verified production backup...'
 bash "$RELEASE_DIR/scripts/server_full_backup.sh"
@@ -80,7 +91,7 @@ trap cleanup_candidate EXIT
 docker run -d --name "$CANDIDATE" --network host --init \
   --env-file "$DATA_ROOT/.env" \
   --env DB_HOST --env DB_PORT --env DB_USER --env DB_PASSWORD --env DB_NAME \
-  --env NODE_ENV=production --env PROCESS_TYPE=web --env PORT=18080 --env TZ=Asia/Seoul \
+  --env NODE_ENV=production --env PROCESS_TYPE=web --env PORT=18070 --env TZ=Asia/Seoul \
   --env NODE_OPTIONS=--max-old-space-size=768 \
   --user 1001:1001 --read-only \
   --tmpfs /tmp:size=96m,mode=1777,noexec,nosuid,nodev \
@@ -119,7 +130,7 @@ switch_app
 
 production_ready=0
 for attempt in $(seq 1 35); do
-  if ready_json=$(curl -fsS http://127.0.0.1:8080/readyz 2>/dev/null); then
+  if ready_json=$(curl -fsS http://127.0.0.1:8070/readyz 2>/dev/null); then
     if echo "$ready_json" | grep -q '"ok":true' && echo "$ready_json" | grep -q '"bot":true' && echo "$ready_json" | grep -q '"botRequired":true'; then
       production_ready=1
       break
@@ -135,7 +146,7 @@ if [[ "$production_ready" != 1 ]]; then
   switch_app
   rollback_ready=0
   for attempt in $(seq 1 35); do
-    if curl -fsS http://127.0.0.1:8080/readyz 2>/dev/null | grep -q '"ok":true'; then
+    if curl -fsS http://127.0.0.1:8070/readyz 2>/dev/null | grep -q '"ok":true'; then
       rollback_ready=1
       break
     fi

@@ -148,7 +148,14 @@ function startWebServer(client) {
   const server = http.createServer(app);
   const io = new Server(server, {
     cors: {
-      origin: ['https://easy-scraping.com', 'http://localhost:8080', 'http://127.0.0.1:8080'],
+      origin: [
+        'https://easy-scraping.com',
+        'https://test.easy-scraping.com',
+        'http://localhost:8070',
+        'http://127.0.0.1:8070',
+        'http://localhost:8090',
+        'http://127.0.0.1:8090'
+      ],
       methods: ['GET', 'POST'],
       credentials: true
     },
@@ -248,7 +255,7 @@ function startWebServer(client) {
   const allowOauthAttempt = createKeyedRateLimiter({ windowMs: 10 * 60 * 1000, max: 20 });
   const allowInquiryHourly = createKeyedRateLimiter({ windowMs: 60 * 60 * 1000, max: 8 });
 
-  const PORT = config.port || 8080;
+  const PORT = config.port || 8070;
 
   // 🚀 서버 성능 및 보안 최적화
   app.disable('x-powered-by');

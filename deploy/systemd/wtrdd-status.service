@@ -9,9 +9,9 @@ User=wtrdd
 Group=wtrdd
 SupplementaryGroups=docker
 WorkingDirectory=/home/wtrdd/discord-bot/deploy/status
-Environment=STATUS_PORT=8090
+Environment=STATUS_PORT=8095
 Environment=STATUS_HOST=0.0.0.0
-Environment=APP_HEALTH_URL=http://127.0.0.1:8080/healthz
+Environment=APP_HEALTH_URL=http://127.0.0.1:8070/healthz
 Environment=ENV_FILE=/home/wtrdd/discord-bot/.env
 Environment=WATCHDOG_LOG=/home/wtrdd/discord-bot/logs/watchdog.jsonl
 Environment=WATCHDOG_STATE=/home/wtrdd/discord-bot/logs/watchdog

@@ -203,9 +203,9 @@ function hostMetrics() {
       { domain: 'ssh.easy-scraping.com', type: 'A', target: '14.49.239.119', port: '34567', purpose: 'SSH 원격 관리 (Direct)', proxied: false },
       { domain: 'mini.easy-scraping.com', type: 'A', target: '14.49.239.119', port: '34567', purpose: '미니 PC 직접 접속', proxied: false },
       { domain: 'direct.easy-scraping.com', type: 'A', target: '14.49.239.119', port: '80 / 443', purpose: '다이렉트 원격 라우팅', proxied: false },
-      { domain: 'easy-scraping.com', type: 'CNAME', target: 'Cloudflare Tunnel', port: '8080 (HTTPS)', purpose: '월덕 메인 웹 대시보드', proxied: true },
-      { domain: 'status.easy-scraping.com', type: 'CNAME', target: 'Cloudflare Tunnel', port: '8090 (HTTPS)', purpose: '미니 PC 실시간 관제 대시보드', proxied: true },
-      { domain: 'test.easy-scraping.com', type: 'CNAME', target: 'Cloudflare Tunnel', port: '8085 (HTTPS)', purpose: '테스트 & 스테이징 환경', proxied: true }
+      { domain: 'easy-scraping.com', type: 'CNAME', target: 'Cloudflare Tunnel', port: '8070 (HTTPS)', purpose: '월덕 메인 웹 대시보드', proxied: true },
+      { domain: 'status.easy-scraping.com', type: 'CNAME', target: 'Cloudflare Tunnel', port: '8095 (HTTPS)', purpose: '미니 PC 실시간 관제 대시보드', proxied: true },
+      { domain: 'test.easy-scraping.com', type: 'CNAME', target: 'Cloudflare Tunnel', port: '8090 (HTTPS)', purpose: '테스트 & 스테이징 환경', proxied: true }
     ],
     ips,
     nodeVersion: process.version,

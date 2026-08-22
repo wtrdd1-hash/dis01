@@ -32,7 +32,7 @@ Remove-Item -Force $tempTar -ErrorAction SilentlyContinue
 
 # 3. 서버에서 불변 도커 이미지 빌드 및 컨테이너 갱신
 Write-Host "`n🏗️ [3/4] 원격 서버에서 불변 이미지 빌드 (docker build) 및 컨테이너 기동..." -ForegroundColor Yellow
-$candidateProbe = "Promise.all(['readyz','healthz'].map((path)=>fetch('http://127.0.0.1:18085/'+path).then((res)=>res.json()))).then(([ready,health])=>process.exit(ready.ok?0:1)).catch(()=>process.exit(1));"
+$candidateProbe = "Promise.all(['readyz','healthz'].map((path)=>fetch('http://127.0.0.1:18090/'+path).then((res)=>res.json()))).then(([ready,health])=>process.exit(ready.ok?0:1)).catch(()=>process.exit(1));"
 $candidateProbeBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($candidateProbe))
 $remoteCmd = @"
 set -e
@@ -48,6 +48,10 @@ cd /home/wtrdd/discord-bot-test/releases/$BUILD_TAG
 docker build -t discord-bot-app:$BUILD_TAG -t discord-bot-app:test-latest .
 docker run --rm discord-bot-app:$BUILD_TAG npm test
 TEST_DATA_ROOT=/home/wtrdd/discord-bot-test docker compose -f docker-compose.test.yml --project-name wtrdd-test config -q
+
+# Sync nginx proxy configuration
+cp -f /home/wtrdd/discord-bot-test/releases/$BUILD_TAG/deploy/nginx/default.conf /home/wtrdd/discord-bot/deploy/nginx/default.conf 2>/dev/null || true
+docker exec wtrdd-edge-proxy nginx -s reload 2>/dev/null || true
 
 # Compose 프로젝트 컨테이너를 새 불변 이미지로 교체한다.
 docker rm -f wtrdd-test-app >/dev/null 2>&1 || true
@@ -67,7 +71,7 @@ $success = $false
 for ($i = 1; $i -le $maxRetries; $i++) {
     Start-Sleep -Seconds 2
     try {
-        $resp = ssh -p 34567 -i C:\Users\sds\.ssh\id_ed25519 wtrdd@${TARGET_HOST} "curl -s -f http://127.0.0.1:8085/readyz"
+        $resp = ssh -p 34567 -i C:\Users\sds\.ssh\id_ed25519 wtrdd@${TARGET_HOST} "curl -s -f http://127.0.0.1:8090/readyz"
         if (($LASTEXITCODE -eq 0) -and ($resp -match '"ok":\s*true') -and ($resp -match '"botRequired":\s*false')) {
             Write-Host "✅ 헬스체크 통과! ($resp)" -ForegroundColor Green
             $success = $true
@@ -83,7 +87,7 @@ if (-not $success) {
     exit 1
 }
 
-$health = ssh -p 34567 -i C:\Users\sds\.ssh\id_ed25519 wtrdd@${TARGET_HOST} "curl -s -f http://127.0.0.1:8085/healthz"
+$health = ssh -p 34567 -i C:\Users\sds\.ssh\id_ed25519 wtrdd@${TARGET_HOST} "curl -s -f http://127.0.0.1:8090/healthz"
 if (($LASTEXITCODE -ne 0) -or ($health -notmatch '"bot":\s*false')) {
     Write-Host "❌ 테스트 컨테이너에서 Discord 봇이 실행 중입니다. 격리 검증 실패." -ForegroundColor Red
     exit 1
