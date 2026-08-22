@@ -114,162 +114,184 @@
   <% } %>
 </div>
 
-<!-- 🧹 전체 유저 일괄 초기화 패널 (관리자 전용) -->
-<div class="dx-card dx-mt-4" style="border: 1px solid rgba(251, 146, 60, 0.35); background: rgba(120, 53, 15, 0.15);">
-  <div class="dx-page-header" style="border-color: rgba(251, 146, 60, 0.3);">
+<!-- 🧹 유저 데이터 초기화 & 삭제 컨트롤 센터 (관리자 전용) -->
+<div style="margin-top:24px; border:2px solid rgba(251, 146, 60, 0.45); background: #130e0a; border-radius:16px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.6);">
+  
+  <!-- 상단 탭 스위처: [전체 일괄 초기화] vs [특정 유저 개별 삭제] -->
+  <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(251, 146, 60, 0.3); padding-bottom:16px; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
     <div>
-      <h3 class="dx-page-title" style="color:#fdba74;">
-        <span style="font-size:22px;">🧹</span>
-        전체 일반 유저 데이터 일괄 초기화
+      <h3 style="color:#fdba74; margin:0; font-size:20px; font-weight:900; display:flex; align-items:center; gap:8px;">
+        <span style="font-size:24px;">🧹</span> 유저 데이터 초기화 & 삭제 관리 센터
       </h3>
-      <p class="dx-page-subtitle">
-        관리자 <strong style="color:#34d399;"><%= (typeof adminIds !== 'undefined' ? adminIds.length : 3) %></strong>개 계정은 완전히 보존되며,
-        아래 선택한 테이블에 한해 일반 유저의 경제 데이터를 초기화합니다.
+      <p style="color:#94a3b8; font-size:13px; margin:4px 0 0 0;">
+        관리자 <strong style="color:#34d399;"><%= (typeof adminIds !== 'undefined' ? adminIds.length : 3) %></strong>개 계정은 영구 보존되며, 전체 또는 특정 1명의 데이터를 안전하게 초기화/삭제합니다.
       </p>
     </div>
-    <div class="dx-flex dx-gap-2">
-      <span id="reset-all-status" style="font-size:12px; color:#94a3b8; padding:6px 12px; background:rgba(0,0,0,0.3); border-radius:6px; font-weight:700;">
-        ⏳ 대기
-      </span>
+
+    <!-- 모드 전환 탭 버튼 -->
+    <div style="display:flex; gap:8px; background:rgba(0,0,0,0.5); padding:4px; border-radius:10px; border:1px solid rgba(255,255,255,0.1);">
+      <button type="button" id="tab-btn-bulk" onclick="switchResetTab('bulk')" style="padding:8px 16px; border-radius:8px; font-weight:800; font-size:13px; border:none; cursor:pointer; background:#ea580c; color:#fff; transition:all 0.2s ease;">
+        🌐 전체 일반 유저 일괄 초기화
+      </button>
+      <button type="button" id="tab-btn-single" onclick="switchResetTab('single')" style="padding:8px 16px; border-radius:8px; font-weight:800; font-size:13px; border:none; cursor:pointer; background:transparent; color:#94a3b8; transition:all 0.2s ease;">
+        🎯 특정 유저 1명 지정 삭제/초기화
+      </button>
     </div>
   </div>
 
-  <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin-bottom:14px;">
-    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
-      <input type="checkbox" id="reset-table-users" checked>
-      <span style="font-weight:700;">👤 users</span>
-      <span style="font-size:11px; color:#94a3b8;">(현금 1만, 주식 클리커 0)</span>
-    </label>
-    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
-      <input type="checkbox" id="reset-table-user_stocks" checked>
-      <span style="font-weight:700;">📊 user_stocks</span>
-      <span style="font-size:11px; color:#94a3b8;">(보유 주식 0)</span>
-    </label>
-    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
-      <input type="checkbox" id="reset-table-user_businesses" checked>
-      <span style="font-weight:700;">🏢 user_businesses + meta</span>
-      <span style="font-size:11px; color:#94a3b8;">(사업 데이터)</span>
-    </label>
-    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
-      <input type="checkbox" id="reset-table-user_loan_credit" checked>
-      <span style="font-weight:700;">💳 user_loan_credit</span>
-      <span style="font-size:11px; color:#94a3b8;">(대출 신용도)</span>
-    </label>
-    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
-      <input type="checkbox" id="reset-table-gambling_logs" checked>
-      <span style="font-weight:700;">🎰 gambling_logs</span>
-      <span style="font-size:11px; color:#94a3b8;">(도박 로그)</span>
-    </label>
-    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
-      <input type="checkbox" id="reset-table-stock_transactions">
-      <span style="font-weight:700;">📈 stock_transactions</span>
-      <span style="font-size:11px; color:#94a3b8;">(주식 체결 로그)</span>
-    </label>
-    <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; cursor:pointer;">
-      <input type="checkbox" id="reset-table-economy_logs">
-      <span style="font-weight:700;">📜 economy_logs</span>
-      <span style="font-size:11px; color:#94a3b8;">(경제 거래 로그)</span>
-    </label>
-  </div>
+  <!-- [탭 1] 🌐 전체 일반 유저 일괄 초기화 섹션 -->
+  <div id="reset-tab-bulk-content">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin-bottom:16px;">
+      <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:12px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:10px; cursor:pointer;">
+        <input type="checkbox" id="reset-table-users" checked style="width:18px; height:18px; accent-color:#f97316;">
+        <span style="font-weight:800; color:#f8fafc;">👤 users</span>
+        <span style="font-size:11px; color:#94a3b8;">(현금 1만, 주식 0 리셋)</span>
+      </label>
+      <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:12px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:10px; cursor:pointer;">
+        <input type="checkbox" id="reset-table-user_stocks" checked style="width:18px; height:18px; accent-color:#f97316;">
+        <span style="font-weight:800; color:#f8fafc;">📊 user_stocks</span>
+        <span style="font-size:11px; color:#94a3b8;">(보유 주식 전량 삭제)</span>
+      </label>
+      <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:12px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:10px; cursor:pointer;">
+        <input type="checkbox" id="reset-table-user_businesses" checked style="width:18px; height:18px; accent-color:#f97316;">
+        <span style="font-weight:800; color:#f8fafc;">🏢 user_businesses</span>
+        <span style="font-size:11px; color:#94a3b8;">(사업체 전량 초기화)</span>
+      </label>
+      <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:12px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:10px; cursor:pointer;">
+        <input type="checkbox" id="reset-table-user_loan_credit" checked style="width:18px; height:18px; accent-color:#f97316;">
+        <span style="font-weight:800; color:#f8fafc;">💳 user_loan_credit</span>
+        <span style="font-size:11px; color:#94a3b8;">(대출/신용도 리셋)</span>
+      </label>
+      <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:12px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:10px; cursor:pointer;">
+        <input type="checkbox" id="reset-table-gambling_logs" checked style="width:18px; height:18px; accent-color:#f97316;">
+        <span style="font-weight:800; color:#f8fafc;">🎰 gambling_logs</span>
+        <span style="font-size:11px; color:#94a3b8;">(도박 로그 삭제)</span>
+      </label>
+      <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:12px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:10px; cursor:pointer;">
+        <input type="checkbox" id="reset-table-stock_transactions" style="width:18px; height:18px; accent-color:#f97316;">
+        <span style="font-weight:800; color:#f8fafc;">📈 stock_transactions</span>
+        <span style="font-size:11px; color:#94a3b8;">(주식 체결 로그)</span>
+      </label>
+      <label class="reset-table-option" style="display:flex; align-items:center; gap:8px; padding:12px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:10px; cursor:pointer;">
+        <input type="checkbox" id="reset-table-economy_logs" style="width:18px; height:18px; accent-color:#f97316;">
+        <span style="font-weight:800; color:#f8fafc;">📜 economy_logs</span>
+        <span style="font-size:11px; color:#94a3b8;">(경제 이동 로그)</span>
+      </label>
+    </div>
 
-  <div class="dx-banner dx-banner--warning">
-    <span class="dx-banner-icon">⚠️</span>
-    <div class="dx-banner-content">
-      <div class="dx-banner-title">이 작업은 되돌릴 수 없습니다</div>
-      <div class="dx-banner-desc">
-        체크한 테이블의 모든 일반 유저 데이터가 즉시 삭제·초기화됩니다.
-        봇은 단 1초의 다운타임도 없이 정상 작동합니다. 카지노 잔여 세션, 채굴 중 데이터는 그대로 보존됩니다.
+    <div style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); border-radius:12px; padding:14px 18px; margin-bottom:18px; display:flex; gap:12px; align-items:center;">
+      <span style="font-size:24px;">⚠️</span>
+      <div style="font-size:13px; color:#fca5a5; line-height:1.5;">
+        <strong style="color:#fff; font-size:14px; display:block; margin-bottom:2px;">이 작업은 되돌릴 수 없습니다 (전체 일반 유저 대상)</strong>
+        체크한 테이블의 모든 일반 유저 데이터가 즉시 초기화됩니다. 봇은 다운타임 없이 정상 가동되며, 관리자 3개 계정은 완벽히 보존됩니다.
       </div>
     </div>
+
+    <!-- 🔥 크고 선명한 전체 초기화 실행 버튼 -->
+    <div>
+      <button type="button" id="btn-reset-all-confirm" style="width:100%; padding:18px 24px; font-size:17px; font-weight:900; background:linear-gradient(135deg, #dc2626, #991b1b); color:#ffffff; border:2px solid #f87171; border-radius:12px; cursor:pointer; box-shadow:0 6px 25px rgba(220,38,38,0.6); display:flex; align-items:center; justify-content:center; gap:10px; transition:all 0.2s ease;">
+        <span style="font-size:20px;">🧹</span>
+        <span>체크한 테이블 전체 일반 유저 일괄 초기화 실행</span>
+      </button>
+    </div>
   </div>
 
-  <div class="dx-flex dx-gap-2 dx-mt-3">
-    <button type="button" id="btn-reset-all-confirm" class="dx-btn dx-btn--danger dx-btn--lg dx-btn--block">
-      🧹 선택한 테이블 일괄 초기화 실행
-    </button>
+  <!-- [탭 2] 🎯 특정 유저 1명 지정 삭제/초기화 섹션 -->
+  <div id="reset-tab-single-content" style="display:none;">
+    <div style="background:rgba(30,41,59,0.6); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:18px; margin-bottom:16px;">
+      <label style="font-size:14px; color:#38bdf8; font-weight:900; display:block; margin-bottom:8px;">
+        🎯 대상 유저 Discord ID (숫자) 또는 닉네임 입력
+      </label>
+      <div style="display:flex; gap:10px;">
+        <input type="text" id="panel-single-user-id" placeholder="예: 1398148023393058846 또는 닉네임 입력..." style="flex:1; background:#030712; border:1px solid rgba(255,255,255,0.2); padding:12px 16px; border-radius:10px; color:#fff; font-size:15px; font-weight:700;">
+        <button type="button" onclick="openSingleUserModalFromPanel()" style="padding:12px 24px; background:linear-gradient(135deg, #0284c7, #38bdf8); border:none; border-radius:10px; color:#fff; font-weight:900; font-size:14px; cursor:pointer; white-space:nowrap; box-shadow:0 4px 15px rgba(2,132,199,0.4);">
+          🔍 유저 조회 및 삭제 옵션 열기
+        </button>
+      </div>
+      <p style="font-size:12px; color:#94a3b8; margin:8px 0 0 0;">
+        💡 위 테이블 목록 우측의 <span style="background:#b91c1c; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:800;">🗑️ 삭제</span> 버튼을 눌러도 즉시 해당 유저 삭제/초기화 모달을 띄울 수 있습니다.
+      </p>
+    </div>
   </div>
 
-  <div id="reset-all-toast" class="dx-mt-3"></div>
+  <div id="reset-all-toast" style="margin-top:14px;"></div>
 </div>
 
 <script>
+  function switchResetTab(tab) {
+    const bulkContent = document.getElementById('reset-tab-bulk-content');
+    const singleContent = document.getElementById('reset-tab-single-content');
+    const bulkBtn = document.getElementById('tab-btn-bulk');
+    const singleBtn = document.getElementById('tab-btn-single');
+
+    if (tab === 'bulk') {
+      bulkContent.style.display = 'block';
+      singleContent.style.display = 'none';
+      bulkBtn.style.background = '#ea580c';
+      bulkBtn.style.color = '#fff';
+      singleBtn.style.background = 'transparent';
+      singleBtn.style.color = '#94a3b8';
+    } else {
+      bulkContent.style.display = 'none';
+      singleContent.style.display = 'block';
+      bulkBtn.style.background = 'transparent';
+      bulkBtn.style.color = '#94a3b8';
+      singleBtn.style.background = '#0284c7';
+      singleBtn.style.color = '#fff';
+    }
+  }
+
+  function openSingleUserModalFromPanel() {
+    const val = (document.getElementById('panel-single-user-id') || {}).value;
+    if (!val || !val.trim()) {
+      alert('대상 유저의 Discord ID 또는 닉네임을 입력하세요.');
+      return;
+    }
+    openSingleUserDeleteModal(val.trim(), val.trim());
+  }
+
   (function() {
     const btn = document.getElementById('btn-reset-all-confirm');
-    const status = document.getElementById('reset-all-status');
     const toast = document.getElementById('reset-all-toast');
     if (!btn) return;
-
-    function setStatus(text, color) {
-      status.textContent = text;
-      status.style.color = color || '#94a3b8';
-    }
-
-    function showToast(html, type) {
-      toast.innerHTML = '<div class="dx-banner dx-banner--' + (type || 'info') + '">' + html + '</div>';
-    }
 
     btn.addEventListener('click', function() {
       const checked = Array.from(document.querySelectorAll('.reset-table-option input[type="checkbox"]:checked'))
         .map(el => el.id.replace('reset-table-', ''));
       if (checked.length === 0) {
-        return dx.showToast('최소 1개 테이블을 선택하세요', 'warning');
+        alert('최소 1개 테이블을 선택하세요.');
+        return;
       }
-      const summary = checked.map(t => '• ' + t).join('<br>');
-      dx.confirm(
-        '다음 테이블의 일반 유저 데이터를 초기화합니다. 관리자는 보존됩니다.\n\n' + checked.join(', '),
-        {
-          title: '🧹 일괄 초기화 확인',
-          okText: '초기화 실행',
-          danger: true
-        }
-      ).then(ok => {
-        if (!ok) return;
-        btn.disabled = true;
-        setStatus('⏳ 실행 중...', '#fbbf24');
-        showToast('<span class="dx-banner-icon">⏳</span><div class="dx-banner-content"><div class="dx-banner-title">처리 중...</div><div class="dx-banner-desc">데이터베이스 트랜잭션 실행 중. 잠시만 기다려 주세요.</div></div>', 'warning');
-        fetch('/admin/action/reset-all', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tables: checked })
-        })
-        .then(r => r.json())
-        .then(data => {
-          btn.disabled = false;
-          if (!data.success) {
-            setStatus('❌ 실패', '#f87171');
-            showToast('<span class="dx-banner-icon">✕</span><div class="dx-banner-content"><div class="dx-banner-title">실패</div><div class="dx-banner-desc">' + dx.escapeHtml(data.error || '알 수 없는 오류') + '</div></div>', 'danger');
-            return;
-          }
-          const s = data.summary || {};
-          setStatus('✓ 완료 · ' + (s.usersReset || 0) + '명', '#34d399');
-          showToast(
-            '<span class="dx-banner-icon">✓</span>' +
-            '<div class="dx-banner-content">' +
-            '<div class="dx-banner-title">초기화 완료</div>' +
-            '<div class="dx-banner-desc">' +
-            '유저: <b>' + (s.usersReset || 0) + '</b>명 · ' +
-            '주식: <b>' + (s.stocksDeleted || 0) + '</b>건 · ' +
-            '사업: <b>' + (s.businessesDeleted || 0) + '</b>건 · ' +
-            '도박로그: <b>' + (s.gamblingLogsDeleted || 0) + '</b>건' +
-            '</div></div>',
-            'success'
-          );
-          // 페이지 새로고침 후 새 데이터 표시
-          setTimeout(() => location.reload(), 1500);
-        })
-        .catch(e => {
-          btn.disabled = false;
-          setStatus('❌ 통신 실패', '#f87171');
-          showToast('<span class="dx-banner-icon">✕</span><div class="dx-banner-content"><div class="dx-banner-title">통신 실패</div><div class="dx-banner-desc">' + dx.escapeHtml(e.message) + '</div></div>', 'danger');
-        });
-      });
-    });
+      
+      const confirmText = `🚨 [경고] 다음 선택한 테이블의 '전체 일반 유저' 데이터를 초기화합니다.\n(관리자 3계정은 보존됩니다)\n\n• 대상 테이블: ${checked.join(', ')}\n\n정말로 실행하시겠습니까?`;
+      if (!confirm(confirmText)) return;
 
-    // 카드 호버 효과
-    document.querySelectorAll('.reset-table-option').forEach(label => {
-      label.addEventListener('mouseenter', () => label.style.borderColor = 'rgba(251, 146, 60, 0.4)');
-      label.addEventListener('mouseleave', () => label.style.borderColor = 'rgba(255,255,255,0.06)');
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span> <span>전체 초기화 트랜잭션 실행 중... 잠시만 기다려 주세요.</span>';
+      
+      fetch('/admin/action/reset-all', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tables: checked })
+      })
+      .then(r => r.json())
+      .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<span>🧹</span> <span>체크한 테이블 전체 일반 유저 일괄 초기화 실행</span>';
+        if (!data.success) {
+          alert('초기화 실패: ' + (data.error || '알 수 없는 오류'));
+          return;
+        }
+        const s = data.summary || {};
+        alert(`🎉 전체 일반 유저 데이터 초기화 완료!\n- 초기화 유저: ${s.usersReset || 0}명\n- 삭제된 주식: ${s.stocksDeleted || 0}건\n- 삭제된 사업: ${s.businessesDeleted || 0}건\n- 삭제된 도박로그: ${s.gamblingLogsDeleted || 0}건`);
+        location.reload();
+      })
+      .catch(e => {
+        btn.disabled = false;
+        btn.innerHTML = '<span>🧹</span> <span>체크한 테이블 전체 일반 유저 일괄 초기화 실행</span>';
+        alert('서버 통신 실패: ' + e.message);
+      });
     });
   })();
 </script>
