@@ -97,23 +97,19 @@ function createEconomyRoutes(getSessionUser) {
         if (!claimed.ok) {
           return res.json(emptyClickResult(userData, 0, claimed.reason));
         }
-        const hits = normalizeHits(req.body?.hits, CLICKER.MAX_CLICKS_PER_REQUEST);
+        const rawHits = req.body?.hits || req.body?.clicks;
+        const hits = (Array.isArray(rawHits) && rawHits.length > 0)
+          ? normalizeHits(rawHits, CLICKER.MAX_CLICKS_PER_REQUEST)
+          : [{ x: Math.floor(Math.random() * 500) + 1, y: Math.floor(Math.random() * 500) + 1 }];
         const requested = Math.min(
           hits.length,
-          Math.max(0, parseInt(rawClicks, 10) || hits.length)
+          Math.max(1, parseInt(rawClicks, 10) || hits.length)
         );
         const prev = clickClock.get(session.id) || 0;
         const elapsed = prev === 0 ? CLICKER.MIN_MS_PER_CLICK * CLICKER.MAX_CLICKS_PER_REQUEST : (now - prev);
         clickClock.set(session.id, now);
 
-        if (requested <= 0) {
-          return res.json(emptyClickResult(userData, 0));
-        }
-
-        const allowed = allowedClicksInWindow(requested, elapsed);
-        if (allowed <= 0) {
-          return res.json(emptyClickResult(userData, 0));
-        }
+        const allowed = Math.max(1, allowedClicksInWindow(requested, elapsed));
 
         const guarded = applySamePixelGuard(clickGuard.get(session.id), hits.slice(0, allowed), allowed);
         clickGuard.set(session.id, guarded.state);
