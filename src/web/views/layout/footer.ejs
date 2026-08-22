@@ -235,13 +235,10 @@
 
       if (isMe) {
         // 💬 내가 보낸 메시지 (우측 정렬 + 보라/인디고 그라데이션)
-        let myTitleBadge = '';
-        const myTitle = title || (isAdminUser ? '👑 총괄 관리자' : (window.__currentUser ? window.__currentUser.title : ''));
-        if (myTitle) {
-          const isAdm = myTitle.includes('관리자') || isAdminUser;
-          const bg = isAdm ? 'background:linear-gradient(135deg,#f59e0b,#fbbf24); color:#000; font-weight:900;' : 'background:linear-gradient(135deg,#38bdf8,#818cf8); color:#fff; font-weight:800;';
-          myTitleBadge = `<span style="${bg} font-size:9.5px; padding:1px 5px; border-radius:4px; margin-bottom:2px;">${myTitle}</span>`;
-        }
+        const myTitle = title || (isAdminUser ? '👑 총괄 관리자' : (window.__currentUser && window.__currentUser.title ? window.__currentUser.title : '🌱 시민'));
+        const isAdm = myTitle.includes('관리자') || isAdminUser;
+        const bg = isAdm ? 'background:linear-gradient(135deg,#f59e0b,#fbbf24); color:#000; font-weight:900; box-shadow:0 0 10px rgba(245,158,11,0.5);' : 'background:linear-gradient(135deg,#6366f1,#38bdf8); color:#fff; font-weight:800; border:1px solid rgba(255,255,255,0.2); box-shadow:0 0 8px rgba(99,102,241,0.3);';
+        const myTitleBadge = `<span style="${bg} font-size:10px; padding:2px 6px; border-radius:6px; margin-bottom:4px; display:inline-block;">${escapeHtml(myTitle)}</span>`;
 
         msgDiv.style.display = 'flex';
         msgDiv.style.justifyContent = 'flex-end';
@@ -264,13 +261,10 @@
         `;
       } else {
         // 💬 상대방이 보낸 메시지 (좌측 정렬 + 프로필 아바타 + 다크 글래스)
-        let titleBadge = '';
-        const t = title || (msg.is_admin ? '👑 총괄 관리자' : '');
-        if (t) {
-          const isAdm = msg.is_admin || t.includes('관리자');
-          const bg = isAdm ? 'background:linear-gradient(135deg,#f59e0b,#fbbf24); color:#000; font-weight:900; box-shadow:0 0 8px rgba(245,158,11,0.4);' : 'background:linear-gradient(135deg,#38bdf8,#818cf8); color:#fff; font-weight:800;';
-          titleBadge = `<span style="${bg} font-size:9.5px; padding:1px 5px; border-radius:4px;">${t}</span>`;
-        }
+        const t = title || (msg.is_admin ? '👑 총괄 관리자' : '🌱 시민');
+        const isAdm = msg.is_admin || t.includes('관리자');
+        const bg = isAdm ? 'background:linear-gradient(135deg,#f59e0b,#fbbf24); color:#000; font-weight:900; box-shadow:0 0 10px rgba(245,158,11,0.5);' : 'background:linear-gradient(135deg,#6366f1,#38bdf8); color:#fff; font-weight:800; border:1px solid rgba(255,255,255,0.2); box-shadow:0 0 8px rgba(99,102,241,0.3);';
+        const titleBadge = `<span style="${bg} font-size:10px; padding:2px 6px; border-radius:6px; display:inline-block;">${escapeHtml(t)}</span>`;
 
         msgDiv.style.display = 'flex';
         msgDiv.style.alignItems = 'flex-start';
@@ -279,7 +273,7 @@
         msgDiv.innerHTML = `
           <img src="${avatar}" style="width:32px; height:32px; border-radius:50%; border:1.5px solid rgba(255,255,255,0.15); flex-shrink:0; margin-top:2px;">
           <div style="flex:1; min-width:0;">
-            <div style="display:flex; align-items:center; gap:6px; font-size:11.5px; margin-bottom:3px;">
+            <div style="display:flex; align-items:center; gap:6px; font-size:11.5px; margin-bottom:4px;">
               <span style="font-weight:700; color:#f1f5f9;">${escapeHtml(username)}</span>
               ${titleBadge}
             </div>

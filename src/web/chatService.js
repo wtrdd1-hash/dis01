@@ -166,10 +166,13 @@ async function listMessages(userId, roomId) {
 
   const [messages] = await pool.query(
     `
-    SELECT id, room_id, user_id, username, avatar, message, is_admin, created_at
-    FROM chat_messages
-    WHERE room_id = ?
-    ORDER BY id DESC
+    SELECT cm.id, cm.room_id, cm.user_id, cm.username, cm.avatar, cm.message, cm.is_admin, cm.created_at,
+           COALESCE(eci.name, '') AS title
+    FROM chat_messages cm
+    LEFT JOIN user_cosmetic_loadout ucl ON cm.user_id = ucl.user_id AND ucl.slot = 'TITLE'
+    LEFT JOIN economy_catalog_items eci ON ucl.item_key = eci.item_key
+    WHERE cm.room_id = ?
+    ORDER BY cm.id DESC
     LIMIT 80
     `,
     [room.id]
@@ -178,7 +181,7 @@ async function listMessages(userId, roomId) {
     status: 200,
     success: true,
     room: serializeRoom(room),
-    messages: messages.reverse()
+    messages: messages.map(serializeMessage).reverse()
   };
 }
 
@@ -199,6 +202,13 @@ async function markRead(userId, roomId, lastId) {
 }
 
 function serializeMessage(row) {
+  const isAdmin = row.is_admin || config.isAdmin(row.user_id);
+  let title = row.title || '';
+  if (isAdmin) {
+    title = '👑 총괄 관리자';
+  } else if (!title) {
+    title = '🌱 시민';
+  }
   return {
     id: row.id,
     room_id: Number(row.room_id || 1),
@@ -206,7 +216,8 @@ function serializeMessage(row) {
     username: row.username,
     avatar: row.avatar || '',
     message: row.message,
-    is_admin: row.is_admin,
+    title,
+    is_admin: isAdmin ? 1 : 0,
     created_at: row.created_at
   };
 }
@@ -286,7 +297,27 @@ async function sendMessage(session, rawMessage, roomId) {
     await addMember(room.id, userId);
     await markRead(userId, room.id, result.insertId);
 
-    const title = isAdmin ? '👑 총괄 관리자' : (session.title || '');
+    let title = '';
+    if (isAdmin) {
+      title = '👑 총괄 관리자';
+    } else {
+      try {
+        const [tRows] = await pool.query(
+          `SELECT eci.name FROM user_cosmetic_loadout ucl
+           JOIN economy_catalog_items eci ON ucl.item_key = eci.item_key
+           WHERE ucl.user_id = ? AND ucl.slot = 'TITLE' LIMIT 1`,
+          [userId]
+        );
+        if (tRows.length > 0 && tRows[0].name) {
+          title = tRows[0].name;
+        } else {
+          title = session.title || '🌱 시민';
+        }
+      } catch (err) {
+        title = session.title || '🌱 시민';
+      }
+    }
+
     const chatObj = {
       id: result.insertId,
       room_id: Number(room.id),
@@ -295,7 +326,7 @@ async function sendMessage(session, rawMessage, roomId) {
       avatar: session.avatar || '',
       message: sanitized,
       title,
-      is_admin: isAdmin,
+      is_admin: isAdmin ? 1 : 0,
       created_at: new Date().toISOString()
     };
     emitMessage(chatObj);
