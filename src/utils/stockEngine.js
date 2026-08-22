@@ -370,6 +370,9 @@ async function updateStockPrices() {
       }
       noise *= dampenFactor;
 
+      // 📉 단기 급등 시 차익 실현 매물 압력 (저점 대비 2배 이상 급등 시 미세 감쇠)
+      const profitTakingDrag = (prevLow24 > 0n && currentPrice > prevLow24 * 2n) ? -0.003 : 0;
+
       // 🌐 실제 거시경제 경기 사이클 및 금리 효과 연동
       let macroCycleBias = 0;
       try {
