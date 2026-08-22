@@ -231,11 +231,11 @@ function createGameRoutes(getSessionUser) {
     if (!session) return res.status(401).json({ success: false, error: 'Discord 로그인이 필요합니다.' });
     try {
       const risk = String(req.body?.risk || 'medium');
-      const mults = risk === 'high' 
-        ? [100, 25, 10, 3, 1.5, 0.5, 0.2, 0.5, 1.5, 3, 10, 25, 100]
-        : risk === 'low'
-        ? [16, 9, 2, 1.4, 1.2, 1.1, 1.0, 1.1, 1.2, 1.4, 2, 9, 16]
-        : [50, 14, 5, 2, 1.5, 0.8, 0.4, 0.8, 1.5, 2, 5, 14, 50];
+      const mults = (risk === 'high' || risk === 'hi')
+        ? [55.0, 15.0, 6.0, 2.2, 0.7, 0.4, 0.3, 0.4, 0.7, 2.2, 6.0, 15.0, 55.0]
+        : (risk === 'low' || risk === 'lo')
+        ? [8.8, 4.0, 2.5, 1.4, 1.1, 0.8, 0.7, 0.8, 1.1, 1.4, 2.5, 4.0, 8.8]
+        : [24.0, 8.0, 4.5, 1.8, 0.9, 0.6, 0.5, 0.6, 0.9, 1.8, 4.5, 8.0, 24.0];
       const slotIndex = Math.floor(Math.random() * mults.length);
       const mult = mults[slotIndex];
 

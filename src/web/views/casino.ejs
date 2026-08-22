@@ -253,10 +253,10 @@
 
     <div class="bet-control-box">
       <input type="number" id="plinko-bet" class="bet-input" value="1000" min="100" step="500">
-      <select id="plinko-risk" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:0 12px; color:#fff; font-weight:700;">
+      <select id="plinko-risk" onchange="drawPlinkoBoard()" style="background:#1e293b; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:0 12px; color:#fff; font-weight:700;">
         <option value="low">로우 (안정)</option>
         <option value="medium" selected>미디엄 (표준)</option>
-        <option value="high">하이 (대박 100x)</option>
+        <option value="high">하이 (대박 55x)</option>
       </select>
       <button onclick="playPlinkoInteractive()" class="btn-action-glow" style="background:linear-gradient(135deg,#f43f5e,#fb7185);">공 투하!</button>
     </div>
@@ -482,8 +482,14 @@
         ctx.fill();
       }
     }
-    // 하단 슬롯 배율 그리기
-    const mults = ['100x', '25x', '10x', '3x', '1.5x', '0.5x', '0.2x', '0.5x', '1.5x', '3x', '10x', '25x', '100x'];
+    // 하단 슬롯 배율 그리기 (난이도 동적 연동)
+    const riskEl = document.getElementById('plinko-risk');
+    const risk = riskEl ? riskEl.value : 'medium';
+    const mults = (risk === 'high')
+      ? ['55x', '15x', '6x', '2.2x', '0.7x', '0.4x', '0.3x', '0.4x', '0.7x', '2.2x', '6x', '15x', '55x']
+      : (risk === 'low')
+      ? ['8.8x', '4x', '2.5x', '1.4x', '1.1x', '0.8x', '0.7x', '0.8x', '1.1x', '1.4x', '2.5x', '4x', '8.8x']
+      : ['24x', '8x', '4.5x', '1.8x', '0.9x', '0.6x', '0.5x', '0.6x', '0.9x', '1.8x', '4.5x', '8x', '24x'];
     const slotW = 500 / mults.length;
     mults.forEach((m, i) => {
       ctx.fillStyle = (i === 0 || i === mults.length - 1) ? '#ef4444' : (i < 3 || i > mults.length - 4) ? '#f59e0b' : '#3b82f6';

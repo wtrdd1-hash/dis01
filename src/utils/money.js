@@ -3,6 +3,7 @@
  */
 const { pool } = require('../config/database');
 const { safeBigInt } = require('./moneyValue');
+const { formatMoney } = require('./moneyScale');
 
 const ALL_IN_TOKENS = new Set(['all', 'max', '전량', '올인', '최대', '전체', '전액']);
 const userLocks = new Map();
